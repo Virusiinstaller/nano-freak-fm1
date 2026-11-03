@@ -38,10 +38,11 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                         {"OSC 3", FK_NAME, FG_R3, FN_RANGE, ICON_OCTAVE}, {"DET 2", FK_BYTE, FG_F2, 0, ICON_DETUNE},
                         {"OSC 1", FK_NAME, FG_W1, FN_WAVE, ICON_WAVE}, {"OSC 2", FK_NAME, FG_W2, FN_WAVE, ICON_WAVE},
                         {"OSC 3", FK_NAME, FG_W3, FN_WAVE, ICON_WAVE}, {"DET 3", FK_BYTE, FG_F3, 0, ICON_DETUNE}}},
-    {"MIXER", 8, {{"OSC 1", FK_BYTE, FG_L1, 0, ICON_LEVEL}, {"OSC 2", FK_BYTE, FG_L2, 0, ICON_LEVEL},
+    {"MIXER", 9, {{"OSC 1", FK_BYTE, FG_L1, 0, ICON_LEVEL}, {"OSC 2", FK_BYTE, FG_L2, 0, ICON_LEVEL},
                   {"OSC 3", FK_BYTE, FG_L3, 0, ICON_LEVEL}, {"NOISE", FK_BYTE, FG_LN, 0, ICON_NOISE},
                   {"OSC 1", FK_SW, FG_SW1, FS_O1, ICON_LEVEL}, {"OSC 2", FK_SW, FG_SW1, FS_O2, ICON_LEVEL},
-                  {"OSC 3", FK_SW, FG_SW1, FS_O3, ICON_LEVEL}, {"NOISE", FK_SW, FG_SW1, FS_NZ, ICON_NOISE}}},
+                  {"OSC 3", FK_SW, FG_SW1, FS_O3, ICON_LEVEL}, {"NOISE", FK_SW, FG_SW1, FS_NZ, ICON_NOISE},
+                  {"NOISE", FK_SW, FG_SW1, FS_PINK, ICON_NOISE}}},
     {"FILTER", 4, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
                    {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK}}},
     {"FILTER CONTOUR", 4, {{"ATTACK", FK_PAR, P_E3, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_E4, 0, ICON_DECAY},
@@ -372,7 +373,7 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
     case FK_BYP:
     case FK_INS:
         v = vo >= 0 ? vo : (int32_t)fmg_sw_on(f);
-        str_cpy(val, v ? "ON" : "OFF", 12);
+        str_cpy(val, f->a == FS_PINK ? (v ? "PINK" : "WHITE") : (v ? "ON" : "OFF"), 12);   /* the noise colour: PINK or WHITE */
         return;
     case FK_NAME:
         v = clamp(vo >= 0 ? vo : (int32_t)fmg_byte(f->a), 0, 5);
