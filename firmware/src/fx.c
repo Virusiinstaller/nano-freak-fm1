@@ -307,6 +307,15 @@ static uint32_t dly_kind(void)
     uint32_t d = (uint32_t)song.g[G_DTIME];
     return d == 7u ? 0u : d % 7u;
 }
+/* A-SYNC: a note value longer than the delay line (1.48 s) is silent, not cut: the delay does not play (dly_block is skipped) */
+static uint32_t dly_div_fits(uint32_t div)           /* A-SYNC: this note value is shorter than the line (at the tempo now) */
+{
+    return div_samples(div) < DLY_LEN;
+}
+static uint32_t dly_fits(void)
+{
+    return song.g[G_DTIME] != 7 || dly_div_fits((uint32_t)clamp(song.g[G_DRREV], 0, 9));
+}
 static uint32_t delay_samples(void)
 {
     if (song.g[G_DTIME] == 7) {                          /* A-SYNC: the time in N_DIV's note values (G_DRREV, 0..9), the tempo's */
@@ -1221,7 +1230,9 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
         cho_block(cho_in, wet, n, cdepth, cinc);
         fx.ds_on = 1;
     }
-    if (dly_act) {
+    if (dly_act && !dly_fits()) {                        /* A-SYNC past the line: silent */
+        fx.ds_on = 0;
+    } else if (dly_act) {
         uint32_t ty = dly_kind();
         fx.ds_on |= (uint8_t)(ty == 3u || ty == 4u);
         if (ty == 6u && !fx.rv_n[0]) {                   /* REVERSE: two heads half a sweep apart, the newest sample first */

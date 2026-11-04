@@ -112,6 +112,24 @@ static void fmg_write(uint32_t b, uint32_t v)
     fmg_commit(p, b);
 }
 static int32_t fmg_acc(uint32_t role, int32_t s, int32_t range);
+/* A-SYNC's TIME: a turn of `steps` over the ARP RATE's order, skipping the note values that do not fit the delay line now
+ * (dly_div_fits): only those are shown. A value that fits nowhere (a very slow tempo) stays. */
+static int32_t async_turn(int32_t v, int32_t steps)
+{
+    const param_desc_t *d = &TP[P_ARATE];
+    const uint8_t *o = enum_order(d);
+    int32_t top = d->max - d->min, i = enum_rank(d, v) - d->min, dir = steps < 0 ? -1 : 1, left = steps < 0 ? -steps : steps;
+    while (left > 0) {
+        int32_t j = i + dir;
+        while (j >= 0 && j <= top && !dly_div_fits(o[j]))
+            j += dir;
+        if (j < 0 || j > top)
+            break;
+        i = j;
+        left--;
+    }
+    return o[i] + d->min;
+}
 /* TUNE's byte (0..127, 64 = A 440) <-> the dial's tenths (0..100, 50 = 5.0): each tenth its own byte, round trips exact */
 #define FMG_TUNE_D(v) (((uint32_t)(v) * 200u + 127u) / 254u)
 #define FMG_TUNE_B(d) (((uint32_t)(d) * 127u + 50u) / 100u)
@@ -219,8 +237,11 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
     }
     case FK_GLB: {                                    /* a global (reverb decay, delay tempo, chorus rate, drive tone) */
         const param_desc_t *d = &GP[f->a];
-        if (f->a == G_DRREV && song.g[G_DTIME] == 7)  /* A-SYNC's TIME: the ARP RATE's note values, in its order */
-            d = &TP[P_ARATE];
+        if (f->a == G_DRREV && song.g[G_DTIME] == 7) {  /* A-SYNC's TIME: the ARP RATE's note values that fit the line */
+            song.g[f->a] = (int16_t)async_turn(song.g[f->a], fmg_acc(role, s, 0));
+            fmg_gdirty = 1;
+            break;
+        }
         song.g[f->a] = (int16_t)param_turn(d, song.g[f->a], fmg_acc(role, s, d->fmt == F_ENUM ? 0 : d->max - d->min));
         fmg_gdirty = 1;
         break;
