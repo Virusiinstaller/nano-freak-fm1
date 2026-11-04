@@ -248,7 +248,7 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
 static void fa_switch(uint32_t pg, uint32_t ex, int32_t cx, int hot)
 {
     const fmgf_t *f = fmg_field(pg, 4u + ex);
-    int on = fmg_sw_on(f), x = cx - 15, y = pg == 0u ? 154 : pg == 2u ? 146 : 163;   /* CTRL: higher, no ON / OFF under it (VOICES below); MIXER: raised */
+    int on = fmg_sw_on(f), x = cx - 15, y = pg == 0u ? 154 : pg == 2u ? 136 : 163;   /* CTRL: higher, no ON / OFF under it (VOICES below); MIXER: raised */
     uint16_t col = pg == 0u ? FA_RED : pg == 2u ? FA_BLUE : on ? FA_OR : FA_RGB(0xD9, 0xD2, 0xC0);
     if (hot)
         cv_frame(x - 3, y - 3, 36, 20, FA_OR);
@@ -267,7 +267,7 @@ static void fa_switch(uint32_t pg, uint32_t ex, int32_t cx, int hot)
 static void fa_noise_btn(int32_t cx, int hot)
 {
     const fmgf_t *f = fmg_field(2u, 8u);
-    int on = fmg_sw_on(f), x = cx - 15, y = 180;
+    int on = fmg_sw_on(f), x = cx - 15, y = 170;
     if (hot)
         cv_frame(x - 3, y - 3, 36, 20, FA_OR);
     cv_rect(x, y, 31, 14, FA_RGB(0x4A, 0x44, 0x3D));
