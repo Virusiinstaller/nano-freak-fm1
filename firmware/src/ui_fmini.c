@@ -38,12 +38,14 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                         {"OSC 3", FK_NAME, FG_R3, FN_RANGE, ICON_OCTAVE}, {"DET 2", FK_BYTE, FG_F2, 0, ICON_DETUNE},
                         {"OSC 1", FK_NAME, FG_W1, FN_WAVE, ICON_WAVE}, {"OSC 2", FK_NAME, FG_W2, FN_WAVE, ICON_WAVE},
                         {"OSC 3", FK_NAME, FG_W3, FN_WAVE, ICON_WAVE}, {"DET 3", FK_BYTE, FG_F3, 0, ICON_DETUNE}}},
-    {"MIXER", 8, {{"OSC 1", FK_BYTE, FG_L1, 0, ICON_LEVEL}, {"OSC 2", FK_BYTE, FG_L2, 0, ICON_LEVEL},
+    {"MIXER", 9, {{"OSC 1", FK_BYTE, FG_L1, 0, ICON_LEVEL}, {"OSC 2", FK_BYTE, FG_L2, 0, ICON_LEVEL},
                   {"OSC 3", FK_BYTE, FG_L3, 0, ICON_LEVEL}, {"NOISE", FK_BYTE, FG_LN, 0, ICON_NOISE},
                   {"OSC 1", FK_SW, FG_SW1, FS_O1, ICON_LEVEL}, {"OSC 2", FK_SW, FG_SW1, FS_O2, ICON_LEVEL},
-                  {"OSC 3", FK_SW, FG_SW1, FS_O3, ICON_LEVEL}, {"NOISE", FK_SW, FG_SW1, FS_NZ, ICON_NOISE}}},
-    {"FILTER", 4, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
-                   {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK}}},
+                  {"OSC 3", FK_SW, FG_SW1, FS_O3, ICON_LEVEL}, {"NOISE", FK_SW, FG_SW1, FS_NZ, ICON_NOISE},
+                  {"NOISE", FK_SW, FG_SW1, FS_PINK, ICON_NOISE}}},
+    {"FILTER", 6, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
+                   {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK},
+                   {"LP/HP", FK_SW, FG_SW2, FT_HP, ICON_CUTOFF}, {"FILT. MOD", FK_SW, FG_SW1, FS_MFLT, ICON_MOD}}},   /* LP/HP under CUTOFF; FILT. MOD under it (MOD FLT's bit) */
     {"FILTER CONTOUR", 4, {{"ATTACK", FK_PAR, P_E3, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_E4, 0, ICON_DECAY},
                        {"SUSTAIN", FK_PAR, P_E5, 0, ICON_SUSTAIN}, {"AMOUNT", FK_PAR, P_E2, 0, ICON_SWEEP}}},
     {"LOUDNESS CONTOUR", 4, {{"ATTACK", FK_PAR, P_ATK, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_DEC, 0, ICON_DECAY},
@@ -111,6 +113,52 @@ static void fmg_write(uint32_t b, uint32_t v)
     fmg_commit(p, b);
 }
 static int32_t fmg_acc(uint32_t role, int32_t s, int32_t range);
+/* A-SYNC's TIME: a turn of `steps` over the ARP RATE's order, skipping the note values that do not fit the delay line now
+ * (dly_div_fits): only those are shown. A value that fits nowhere (a very slow tempo) stays. */
+static int32_t async_turn(int32_t v, int32_t steps)
+{
+    const param_desc_t *d = &TP[P_ARATE];
+    const uint8_t *o = enum_order(d);
+    int32_t top = d->max - d->min, i = enum_rank(d, v) - d->min, dir = steps < 0 ? -1 : 1, left = steps < 0 ? -steps : steps;
+    while (left > 0) {
+        int32_t j = i + dir;
+        while (j >= 0 && j <= top && !dly_div_fits(o[j]))
+            j += dir;
+        if (j < 0 || j > top)
+            break;
+        i = j;
+        left--;
+    }
+    return o[i] + d->min;
+}
+/* a knob's gauge: the value's place in the order it is shown (params.c enum_order: A-SYNC second, not last) */
+static int32_t fmg_ratio(const param_desc_t *d, int32_t v)
+{
+    return enum_order(d) ? RATIO(d, enum_rank(d, v)) : RATIO(d, v);
+}
+/* the delay's TIME is G_DRREV: ms (0..127, dly_ms) in the other types, a note value (0..9) in A-SYNC. A change to or from A-SYNC
+ * keeps the length: the nearest note value (one that fits the line, if there is one), or the nearest ms */
+static void dly_time_convert(uint32_t to_async)
+{
+    uint32_t i, best = 0, cur = (uint32_t)song.g[G_DRREV];
+    int32_t bd = 0x7FFFFFFF, d;
+    if (to_async) {
+        uint32_t want = (uint32_t)dly_ms((int32_t)cur) * (uint32_t)FS / 1000u;
+        for (i = 0; i < 12u; i++) {
+            uint32_t s = div_samples(i);
+            d = (int32_t)(s > want ? s - want : want - s) + (dly_div_fits(i) ? 0 : 1000000);
+            if (d < bd) { bd = d; best = i; }
+        }
+    } else {
+        int32_t want = (int32_t)(div_samples(cur < 12u ? cur : 0u) * 1000u / (uint32_t)FS);
+        for (i = 0; i <= 127u; i++) {
+            d = dly_ms((int32_t)i) - want;
+            if (d < 0) d = -d;
+            if (d < bd) { bd = d; best = i; }
+        }
+    }
+    song.g[G_DRREV] = (int16_t)best;
+}
 /* TUNE's byte (0..127, 64 = A 440) <-> the dial's tenths (0..100, 50 = 5.0): each tenth its own byte, round trips exact */
 #define FMG_TUNE_D(v) (((uint32_t)(v) * 200u + 127u) / 254u)
 #define FMG_TUNE_B(d) (((uint32_t)(d) * 127u + 50u) / 100u)
@@ -218,6 +266,19 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
     }
     case FK_GLB: {                                    /* a global (reverb decay, delay tempo, chorus rate, drive tone) */
         const param_desc_t *d = &GP[f->a];
+        if (f->a == G_DTIME) {                        /* the delay TYPE: its TIME keeps its length across A-SYNC (dly_time_convert) */
+            int32_t was = song.g[G_DTIME], v = param_turn(d, was, fmg_acc(role, s, 0));
+            song.g[G_DTIME] = (int16_t)v;
+            if ((was == 7) != (v == 7))
+                dly_time_convert(v == 7);
+            fmg_gdirty = 1;
+            break;
+        }
+        if (f->a == G_DRREV && song.g[G_DTIME] == 7) {  /* A-SYNC's TIME: the ARP RATE's note values that fit the line */
+            song.g[f->a] = (int16_t)async_turn(song.g[f->a], fmg_acc(role, s, 0));
+            fmg_gdirty = 1;
+            break;
+        }
         song.g[f->a] = (int16_t)param_turn(d, song.g[f->a], fmg_acc(role, s, d->fmt == F_ENUM ? 0 : d->max - d->min));
         fmg_gdirty = 1;
         break;
@@ -340,25 +401,31 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
         const param_desc_t *d = track_desc(TSEL, f->a);
         v = vo >= 0 ? vo : t->p[f->a];
         param_format(d, v, val, unit);
-        *ratio = RATIO(d, v);
+        *ratio = fmg_ratio(d, v);
         return;
     }
     case FK_GLB: {
         const param_desc_t *d = &GP[f->a];
         v = vo >= 0 ? vo : song.g[f->a];
+        if (f->a == G_DRREV && song.g[G_DTIME] == 7) {   /* A-SYNC's TIME: the note value (ARP RATE's names) */
+            d = &TP[P_ARATE];
+            param_format(d, v, val, unit);
+            *ratio = fmg_ratio(d, v);
+            return;
+        }
         if (f->a == G_DRREV) {                        /* the delay time in ms */
             fmt_int(val, dly_ms(v));
             str_cpy(val + str_len(val), "ms", 4);
-            *ratio = RATIO(d, v);
+            *ratio = fmg_ratio(d, v);
             return;
         }
         if (d->fmt == F_ENUM) {                        /* a TYPE: its whole name (param_format cuts at 5) */
             str_cpy(val, d->names[v < d->min ? d->min : v > d->max ? d->max : v], 12);
-            *ratio = RATIO(d, v);
+            *ratio = fmg_ratio(d, v);
             return;
         }
         param_format(d, v, val, unit);
-        *ratio = RATIO(d, v);
+        *ratio = fmg_ratio(d, v);
         return;
     }
     case FK_VOICE:
@@ -372,7 +439,7 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
     case FK_BYP:
     case FK_INS:
         v = vo >= 0 ? vo : (int32_t)fmg_sw_on(f);
-        str_cpy(val, v ? "ON" : "OFF", 12);
+        str_cpy(val, f->a == FS_PINK ? (v ? "PINK" : "WHITE") : f->b == FT_HP ? (v ? "HP" : "LP") : (v ? "ON" : "OFF"), 12);   /* the noise colour, the filter's LP / HP */
         return;
     case FK_NAME:
         v = clamp(vo >= 0 ? vo : (int32_t)fmg_byte(f->a), 0, 5);

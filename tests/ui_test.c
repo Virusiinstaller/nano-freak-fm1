@@ -7357,7 +7357,7 @@ static int test_div_order(void)
         uint32_t prev = 0xFFFFFFFFu, len;
         for (n = 0; n < 40; n++) v = param_turn(d, v, -1);
         for (n = 0; n <= d->max - d->min; n++) {
-            len = d->names == N_SLDIV ? 1000000u / SL_DEN[v] : v >= 10 ? (beat_samples() * 3u) >> DIV_DOT[v - 10] :
+            len = d->names == N_SLDIV ? 1000000u / SL_DEN[v] : d->names == N_DTIME && v >= 10 ? (beat_samples() * 3u) >> DIV_DOT[v - 10] :
                   div_samples((uint32_t)v);                     /* (TIME's dotted ones, 1.5.1: fx.c delay_samples) */
             if (!(len < prev && enum_rank(d, v) == d->min + n && !((seen >> v) & 1))) {
                 printf("  %s: %s (value %d, place %d, length %u) after %u\n", d->label, d->names[v], (int)v,
@@ -7370,10 +7370,10 @@ static int test_div_order(void)
         }
         ok &= seen == (1 << (d->max - d->min + 1)) - 1;
     }
-    ok &= str_eq(N_DIV[2], "1/16") && str_eq(N_DIV[4], "8T") && str_eq(N_DIV[9], "4BAR") && TP[P_SDIV].def == 2;
+    ok &= str_eq(N_DIV[2], "1/16") && str_eq(N_DIV[4], "1/8T") && str_eq(N_DIV[9], "4BAR") && TP[P_SDIV].def == 2;
     ok &= param_turn(&TP[P_SDIV], 2, 1) == 5 && param_turn(&TP[P_SDIV], 2, -1) == 4 &&   /* 1/16: right 16T, left 8T */
           param_turn(&TP[P_SDIV], 3, 1) == 3 && param_turn(&TP[P_SDIV], 9, -1) == 9 &&   /* the ends hold */
-          param_turn(&TP[P_SDIV], 2, -6) == 8 && param_turn(&TP[P_SDIV], 2, 40) == 3;    /* 6 left: 2BAR; far: clamped */
+          param_turn(&TP[P_SDIV], 2, -6) == 6 && param_turn(&TP[P_SDIV], 2, 40) == 3;    /* 6 left: 1/2; far: clamped */
     bad += check("#48 DIV / RATE / TIME / SLICER RATE step longest -> shortest, every value once, the ends hold", ok);
     ok = 1;                                         /* the real knob on the pages that show them, the gauge follows */
     for (id = 0; id < NPAGES; id++)

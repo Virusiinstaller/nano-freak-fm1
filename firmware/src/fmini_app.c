@@ -199,10 +199,11 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
 {
     const char *lb, *un;
     char val[16];
-    int32_t ratio, k, cy = 84, n = 11, a;
+    int32_t ratio, k, cy = 84, n = 11, a, dy = pg == 6u ? 10 : 0;   /* FX: the knobs and their labels 10 px lower */
     uint32_t ic;
     const fmgf_t *f = fmg_field(pg, i);
     uint16_t lab = hot ? FA_OR : FA_CR;
+    cy += dy;
     fmg_card_at(pg, i, -1, &lb, val, &un, &ratio, &ic);
     n = f->kind == FK_NAME && f->b == FN_RANGE ? 6 : 11;
     for (k = 0; k < n; k++) {                              /* the scale: ticks, then the numerals or the ranges */
@@ -229,34 +230,75 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
         int32_t ai = a % 360 * 1024 / 360, px = cx + SINE[ai & 1023] * 12 / 32768, py = cy - SINE[(ai + 256) & 1023] * 12 / 32768;
         cv_rect(px - 1, py - 1, 3, 3, FA_RGB(0xF6, 0xF1, 0xE3));
     }
-    fa_ctext(cx, 38, &AF_X, f->lb, lab);
+    fa_ctext(cx, 38 + dy + (pg == 1u && i < 3u ? 6 : 0), &AF_X, f->lb, lab);   /* OSC tab: OSC 1..3 labels 6 px lower */
     if (f->kind == FK_NAME && f->b == FN_RANGE) {
         str_cpy(val, FMG_RANGE[clamp((int32_t)fmg_byte(f->a), 0, 5)], 16);
     } else {
         fa_val(val, ratio, f);
     }
-    fa_ctext(cx, 112, &AF_S, val, FA_OR);
-    {
-        char kn[5] = {'K', (char)('1' + i), 0, 0, 0};
-        if (pg == 6u)                                      /* FX: the parameter each knob sets (the effect is the label above) */
-            str_cpy(kn, i == 3u ? "GAIN" : "MIX", 5);
-        fa_ctext(cx, 127, &AF_X, kn, FA_RGB(0x5D, 0x55, 0x4A));
-    }
+    fa_ctext(cx, 112 + dy, &AF_S, val, FA_OR);
+    if (pg == 6u)                                          /* FX: the parameter each knob sets (the effect is the label above); no K1..K4 */
+        fa_ctext(cx, 127 + dy, &AF_X, i == 3u ? "GAIN" : "MIX", FA_RGB(0x5D, 0x55, 0x4A));
 }
 
 static void fa_switch(uint32_t pg, uint32_t ex, int32_t cx, int hot)
 {
     const fmgf_t *f = fmg_field(pg, 4u + ex);
-    int on = fmg_sw_on(f), x = cx - 15, y = pg == 0u ? 154 : 163;   /* CTRL: higher, no ON / OFF under it (VOICES below) */
+    int on = fmg_sw_on(f), x = cx - 15, y = pg == 0u ? 154 : pg == 2u ? 136 : 163;   /* CTRL: higher, no ON / OFF under it (VOICES below); MIXER: raised */
     uint16_t col = pg == 0u ? FA_RED : pg == 2u ? FA_BLUE : on ? FA_OR : FA_RGB(0xD9, 0xD2, 0xC0);
     if (hot)
         cv_frame(x - 3, y - 3, 36, 20, FA_OR);
     cv_rect(x, y, 31, 14, FA_RGB(0x4A, 0x44, 0x3D));
     cv_rect(x + 1, y + 1, 29, 12, FA_RGB(0x0D, 0x0C, 0x0B));
     cv_rect(on ? x + 15 : x + 2, y + 2, 14, 10, col);
-    fa_ctext(cx, pg == 0u ? 141 : 150, &AF_X, f->lb, hot ? FA_OR : FA_CR);
-    if (pg != 0u)
-        fa_ctext(cx, 182, &AF_X, on ? "ON" : "OFF", on ? (pg == 2u ? FA_BLUE : FA_OR) : FA_MU);
+    if (pg != 2u)                                          /* MIXER: the buttons have no name above them */
+        fa_ctext(cx, pg == 0u ? 141 : 150, &AF_X, f->lb, hot ? FA_OR : FA_CR);
+    if (pg == 2u)                                          /* MIXER: ON light, OFF dark */
+        fa_ctext(cx, y + 19, &AF_X, on ? "ON" : "OFF", on ? FA_CR : FA_RGB(0x4A, 0x44, 0x3D));
+    else if (pg != 0u)
+        fa_ctext(cx, 182, &AF_X, on ? "ON" : "OFF", on ? FA_OR : FA_MU);
+}
+
+/* FILT: the LP / HP button under CUTOFF: a sliding box, LP at its left and HP at its right, the chosen word orange */
+static void fa_lphp(int hot)
+{
+    int on = (fmg_byte(FG_SW2) & FT_HP) != 0u;
+    int32_t x = 24, y = 150, w = 24, h = 12, ty = y + (h - fa_cap_h(&AF_X)) / 2;
+    fa_ctext(36, 139, &AF_X, "MODE", FA_CR);                        /* the switch's title, just above it */
+    if (hot)
+        cv_frame(x - 3, y - 3, w + 6, h + 6, FA_OR);
+    cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
+    cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
+    cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);     /* the thumb is always red */
+    fa_rtext(x - 4, ty, &AF_X, "LP", on ? FA_RGB(0x4A, 0x44, 0x3D) : FA_CR);     /* the chosen word light, the other dark, as MIX's ON / OFF */
+    fa_ltext(x + w + 4, ty, &AF_X, "HP", on ? FA_CR : FA_RGB(0x4A, 0x44, 0x3D));
+}
+/* FILT: FILT. MOD under the LP / HP button: the MOD FLT switch of CTRL (the filter follows the modulation), its name above */
+static void fa_filtmod(int hot)
+{
+    const fmgf_t *f = fmg_field(3u, 5u);
+    int on = fmg_sw_on(f);
+    int32_t x = 24, y = 180, w = 24, h = 12;
+    fa_ctext(36, 169, &AF_X, f->lb, hot ? FA_OR : FA_CR);      /* its name just above, as MODE is above LP / HP */
+    if (hot)
+        cv_frame(x - 3, y - 3, w + 6, h + 6, FA_OR);
+    cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
+    cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
+    cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);
+    fa_ltext(x + w + 4, y + (h - fa_cap_h(&AF_X)) / 2, &AF_X, on ? "ON" : "OFF", on ? FA_CR : FA_RGB(0x4A, 0x44, 0x3D));   /* the state, right of the box, as MIX's ON / OFF */
+}
+
+/* MIXER: the noise colour, a button under NOISE: ON = PINK, OFF = WHITE, the text always in the ON colour */
+static void fa_noise_btn(int32_t cx, int hot)
+{
+    const fmgf_t *f = fmg_field(2u, 8u);
+    int on = fmg_sw_on(f), x = cx - 15, y = 170;
+    if (hot)
+        cv_frame(x - 3, y - 3, 36, 20, FA_OR);
+    cv_rect(x, y, 31, 14, FA_RGB(0x4A, 0x44, 0x3D));
+    cv_rect(x + 1, y + 1, 29, 12, FA_RGB(0x0D, 0x0C, 0x0B));
+    cv_rect(on ? x + 15 : x + 2, y + 2, 14, 10, FA_BLUE);
+    fa_ctext(cx, y + 19, &AF_X, on ? "PINK" : "WHITE", FA_CR);
 }
 
 /* CTRL's VOICES: MONO | POLY, the chosen half filled */
@@ -287,31 +329,39 @@ static void fa_graph(uint32_t pg)
         fmg_card_at(pg, j, -1, &lb, val, &un, &ratio, &ic);
         k[j] = ratio < 0 ? 0 : ratio;                       /* 0..1000 */
     }
-    cv_rect(14, 146, 212, 46, FA_LINE);
-    cv_rect(15, 147, 210, 44, FA_BOX);
-    if (pg == 3u) {                                         /* the ladder's response: FMINI_GRAPH, the cutoff's singing pitch moving across it */
+    /* FILT: the response sits right of the LP / HP button (fa_lphp); the other pages: the full width */
+    if (pg == 3u) {
+        cv_rect(70, 136, 156, 56, FA_LINE);
+        cv_rect(71, 137, 154, 54, FA_BOX);
+    } else {
+        cv_rect(14, 146, 212, 46, FA_LINE);
+        cv_rect(15, 147, 210, 44, FA_BOX);
+    }
+    if (pg == 3u) {                                         /* the ladder's response: FMINI_GRAPH (LP) or FMINI_GRAPH_HP, the cutoff's singing pitch moving across it */
+        const int16_t (*T)[73] = (fmg_byte(FG_SW2) & FT_HP) ? FMINI_GRAPH_HP : FMINI_GRAPH;
+        const int32_t gx = 72, gw = 150;                    /* the drawing's left edge and width */
         int32_t fo = FMINI_CUT[clamp((int32_t)TSEL->p[P_E0], 0, 127)], e = clamp((int32_t)TSEL->p[P_E1], 0, 127), er, ef, px = 0, py = 0, xs;
         er = e >= 120 ? 15 : e >> 3;                        /* between two of the table's 17 emphasis rows (0, 8 .. 120, 127) */
         ef = e >= 120 ? (e - 120) * 256 / 7 : (e & 7) * 32;
-        xs = 17 + (fo - 24 * 16) * 206 / (112 * 16);        /* the singing pitch: a dotted line (the screen: MIDI 24 .. 136) */
-        for (i = 0; i < 44; i += 4)
-            cv_pset(xs, 148 + i, FA_MU);
-        for (i = 0; i <= 206; i += 2) {
-            int32_t c = (((24 * 16 + i * (112 * 16) / 206) - fo) * 256 / 24) + 48 * 256, ix, fr, a, b, db, y;
+        xs = gx + (fo - 24 * 16) * gw / (112 * 16);         /* the singing pitch: a dotted line (the screen: MIDI 24 .. 136) */
+        for (i = 0; i < 52; i += 4)
+            cv_pset(xs, 138 + i, FA_MU);
+        for (i = 0; i <= gw; i += 2) {
+            int32_t c = (((24 * 16 + i * (112 * 16) / gw) - fo) * 256 / 24) + 48 * 256, ix, fr, a, b, db, y;
             c = clamp(c, 0, 71 * 256);
             ix = c >> 8;
             fr = c & 255;
-            a = FMINI_GRAPH[er][ix] + (((FMINI_GRAPH[er][ix + 1] - FMINI_GRAPH[er][ix]) * fr) >> 8);
-            b = FMINI_GRAPH[er + 1][ix] + (((FMINI_GRAPH[er + 1][ix + 1] - FMINI_GRAPH[er + 1][ix]) * fr) >> 8);
+            a = T[er][ix] + (((T[er][ix + 1] - T[er][ix]) * fr) >> 8);
+            b = T[er + 1][ix] + (((T[er + 1][ix + 1] - T[er + 1][ix]) * fr) >> 8);
             db = (a + (((b - a) * ef) >> 8)) / 8;
-            y = 190 - (clamp(db, -50, 30) + 50) / 2;        /* -50 .. +30 dB over the 40 rows */
-            x = 17 + i;
+            y = 190 - (clamp(db, -50, 30) + 50) * 5 / 8;    /* -50 .. +30 dB over 50 rows (140 .. 190) */
+            x = gx + i;
             if (i)
                 cv_line_t(px, py, x, y, FA_OR, 2);
             px = x;
             py = y;
         }
-        fa_ltext(18, 198, &AF_X, "24 DB/OCT LADDER LOW PASS", FA_MU);
+        fa_ltext(70, 198, &AF_X, (fmg_byte(FG_SW2) & FT_HP) ? "24 DB/OCT LADDER HIGH PASS" : "24 DB/OCT LADDER LOW PASS", FA_MU);
     } else {                                                /* a contour: attack, decay, sustain, release */
         int32_t a = 5 + k[0] * 25 / 1000, dd = 5 + k[1] * 30 / 1000, su = k[2] * 2 / 10 - 100;
         pt[0] = 0; pt[1] = -100;
@@ -433,18 +483,6 @@ static void fa_fader(uint32_t pg, uint32_t i, int32_t cx, int hot)
     fa_ctext(cx, 186, &AF_S, val, FA_OR);
 }
 
-/* the FX page's EDIT button under each effect: a beige frame, a dark inside, EDIT; the cursor an orange frame */
-static void fa_edit_btn(int32_t cx, int hot)
-{
-    const uint16_t dk = FA_RGB(0x0D, 0x0C, 0x0B), bg = FA_RGB(0xD9, 0xD2, 0xC0);
-    int32_t x = cx - 22, y = 156, ty = y + 1 + (19 - AF_X_CAP_H) / 2 - AF_X_CAP_Y;
-    if (hot)
-        cv_frame(x - 3, y - 3, 50, 25, FA_OR);
-    cv_rect(x, y, 44, 21, bg);
-    cv_rect(x + 1, y + 1, 42, 19, dk);
-    cv_text_on(cx - text_w(&AF_X, "EDIT") / 2, ty, &AF_X, "EDIT", hot ? FA_OR : FA_CR, dk);
-}
-
 /* one knob of an FX pop-up: a scale of ticks, the dial and its pointer, the label above and the value below */
 static void fa_pop_knob(uint32_t pg, uint32_t i, int32_t cx, int32_t cy, int hot)
 {
@@ -471,10 +509,6 @@ static void fa_pop_knob(uint32_t pg, uint32_t i, int32_t cx, int32_t cy, int hot
     if (f->kind == FK_PAR || (f->kind == FK_GLB && GP[f->a].fmt == F_PCT))
         fa_val(val, ratio, f);
     fa_ctext(cx, cy + 32, &AF_S, val, FA_OR);
-    {
-        char kn[4] = {'K', (char)('1' + i), 0, 0};
-        fa_ctext(cx, cy + 50, &AF_X, kn, FA_RGB(0x5D, 0x55, 0x4A));
-    }
 }
 static void fa_fx_dialog(void)
 {
@@ -981,10 +1015,13 @@ static uint32_t fa_sound_keys(void)
  * SELECT picks a line, ALGORITHM changes it (or opens MIDI CC / ABOUT); GLO goes back, then closes. The settings are
  * kept in the flash settings record (favorites.factory rows 7 to 9: no engine of this firmware uses them).
  * MIDI CLOCK (OFF by default: the internal clock, or USB / TRS) makes the ARP and the SEQ follow that input's MIDI clock. */
-#define FA_NPG 44u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+8+4+4+4+8) */
+#define FA_NPG 47u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+6+4+4+8; CTRL's VOICES has no CC) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
-static uint8_t fa_gl_row;                                 /* 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 MIDI CLOCK, 4 PITCH BEND, 5 ABOUT */
+static uint8_t fa_gl_row;                                 /* 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 MIDI CLOCK, 4 PITCH BEND, 5 TUNING, 6 TRANSPOSE, 7 ABOUT */
+static uint16_t fa_tune_hz = 440;                         /* TUNING: the reference A, 410 .. 470 Hz (the global glo_tune_c) */
+/* the TUNING in cents from A 440, for 410 .. 470 Hz: round(1200 * log2(hz / 440)) */
+static const int16_t FA_TUNE_C[61] = {-122, -118, -114, -110, -105, -101, -97, -93, -89, -85, -81, -76, -72, -68, -64, -60, -56, -52, -48, -44, -40, -36, -32, -28, -24, -20, -16, -12, -8, -4, 0, 4, 8, 12, 16, 20, 23, 27, 31, 35, 39, 43, 47, 50, 54, 58, 62, 66, 69, 73, 77, 81, 84, 88, 92, 96, 99, 103, 107, 111, 114};
 static uint8_t fa_clk;                                    /* MIDI CLOCK: 0 OFF (internal), 1 USB, 2 TRS: the global CLK */
 static const char *const FA_CLK[3] = {"OFF", "USB", "TRS"};
 static uint8_t fa_cc_i;                                   /* the control highlighted in MIDI CC */
@@ -998,8 +1035,8 @@ static const char *const FA_PG_TAG[8] = {"CTRL", "OSC", "MIX", "FILT", "F.ENV", 
 static const uint8_t FA_CC0[FA_NCC] = {
     20, 5, 21, 22, 23, 24, 25, 26,                        /* CTRL: TUNE GLIDE MOD MIX LFO RATE, MOD OSC MOD FLT GLIDE LFO SQR */
     27, 28, 29, 30, 31, 33, 34, 62,                       /* OSC: ranges, DETUNE 2, waves, DETUNE 3 */
-    35, 36, 37, 39, 40, 41, 42, 43,                       /* MIX: levels, NOISE, switches */
-    74, 71, 44, 45,                                       /* FILT */
+    35, 36, 37, 39, 40, 41, 42, 43, 63,                   /* MIX: levels, NOISE, switches, the noise colour (PINK / WHITE; 63 is free) */
+    74, 71, 44, 45, 72, 76,                               /* FILT: CUTOFF EMPHASIS CONTOUR KBD CTRL, LP / HP (72), FILT. MOD (76): free */
     46, 47, 48, 49,                                       /* F.ENV */
     73, 75, 50, 7,                                        /* A.ENV: ATTACK DECAY SUSTAIN LEVEL */
     91, 94, 93, 51, 52, 53, 54, 55,                       /* FX: REVERB DELAY CHORUS DRIVE, switches */
@@ -1013,13 +1050,18 @@ static uint8_t *fa_cfg_byte(uint32_t i) { return &favorites.factory[7u + i / 32u
 static void fa_cfg_load(void)
 {
     uint32_t i;
-    if (*fa_cfg_byte(0) == 0xA7u && *fa_cfg_byte(1) == 0x4Fu) {
+    if (*fa_cfg_byte(0) == 0xA7u && *fa_cfg_byte(1) == 0x52u) {   /* 0x52: the controls' layout with FILT. MOD (0x51: LP / HP; 0x50: MIXER's ninth) */
         uint32_t src = *fa_cfg_byte(2), ch = *fa_cfg_byte(3);
         fm_midi_src = (uint8_t)(src == 0u || src == 1u ? src : 3u);   /* (2 was Bluetooth) */
         fm_midi_ch = (uint8_t)(ch > 16u ? 0u : ch);
         fm_bend_mode = (uint8_t)(*fa_cfg_byte(4u + FA_NCC) & 3u);
         {   uint32_t b = *fa_cfg_byte(17u + FA_NCC);   /* 0xC0 | clock; an erased byte (0xFF) reads OFF */
             fa_clk = (b & 0xFCu) == 0xC0u && (b & 3u) <= 2u ? (uint8_t)(b & 3u) : 0u;
+        }
+        {   uint32_t tb = *fa_cfg_byte(18u + FA_NCC), tr = *fa_cfg_byte(19u + FA_NCC);   /* TUNING 410 + v Hz, TRANSPOSE v - 12; erased (0xFF): 440, 0 */
+            fa_tune_hz = (uint16_t)(tb <= 60u ? 410u + tb : 440u);
+            glo_transpose = tr <= 24u ? (int32_t)tr - 12 : 0;
+            glo_tune_c = FA_TUNE_C[fa_tune_hz - 410u];
         }
         /* (the FX settings are not read back: each factory patch carries its own, a saved one and the autosave theirs) */
         fm_bt = 0;
@@ -1033,6 +1075,9 @@ static void fa_cfg_load(void)
         fm_bend_mode = 0;
         fm_bt = 0;
         fa_clk = 0;
+        fa_tune_hz = 440;
+        glo_tune_c = 0;
+        glo_transpose = 0;
         memcpy(fa_cc, FA_CC0, sizeof fa_cc);
     }
 }
@@ -1044,12 +1089,14 @@ static void fa_cfg_save(void)
     fa_cfg_dirty = 0;
     fmg_gdirty = 0;
     *fa_cfg_byte(0) = 0xA7;
-    *fa_cfg_byte(1) = 0x4F;
+    *fa_cfg_byte(1) = 0x52;
     *fa_cfg_byte(2) = fm_midi_src;
     *fa_cfg_byte(3) = fm_midi_ch;
     for (i = 0; i < FA_NCC; i++)
         *fa_cfg_byte(4u + i) = fa_cc[i];
     *fa_cfg_byte(4u + FA_NCC) = fm_bend_mode;
+    *fa_cfg_byte(18u + FA_NCC) = (uint8_t)(fa_tune_hz - 410u);
+    *fa_cfg_byte(19u + FA_NCC) = (uint8_t)(glo_transpose + 12);
     *fa_cfg_byte(17u + FA_NCC) = (uint8_t)(0xC0u | fa_clk);
     {
         static const uint8_t GID[4] = {G_RSIZE, G_DRREV, G_CRATE, G_DRLVL};
@@ -1219,12 +1266,26 @@ static void fa_gl_dialog(void)
             fmt_int(b, fm_midi_ch);
         else
             str_cpy(b, "ALL", 4);
-        fa_line(84, "MIDI CHANNEL", b, fa_gl_row == 1u);
-        fa_line(106, "MIDI CC", ">", fa_gl_row == 2u);
-        fa_line(128, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 3u);
-        fa_line(150, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 4u);
-        fa_line(172, "ABOUT", ">", fa_gl_row == 5u);
-        fa_ctext(120, 198, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
+        fa_line(79, "MIDI CHANNEL", b, fa_gl_row == 1u);
+        fa_line(96, "MIDI CC", ">", fa_gl_row == 2u);
+        fa_line(113, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 3u);
+        fa_line(130, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 4u);
+        {   char tn[12], tr[8];
+            fmt_int(tn, fa_tune_hz);
+            str_cpy(tn + str_len(tn), " HZ", 4);
+            if (glo_transpose > 0) {
+                tr[0] = '+';
+                fmt_int(tr + 1, glo_transpose);
+            } else if (glo_transpose < 0) {
+                tr[0] = '-';
+                fmt_int(tr + 1, -glo_transpose);
+            } else
+                str_cpy(tr, "0", 8);
+            fa_line(147, "TUNING", tn, fa_gl_row == 5u);
+            fa_line(164, "TRANSPOSE", tr, fa_gl_row == 6u);
+        }
+        fa_line(181, "ABOUT", ">", fa_gl_row == 7u);
+        fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else {                                              /* MIDI CC: a window of six lines on the list, a scroll bar */
         uint32_t top = fa_cc_i < 3u ? 0u : fa_cc_i - 3u, k;
         if (top + 6u > FA_NCC)
@@ -1371,6 +1432,8 @@ static void fa_scene(void)
     char b[24];
     if (pg == 0u && ex > 4u)                                 /* CTRL: the fifth is VOICES, drawn apart */
         ex = 4u;
+    if (pg == 2u && ex > 4u)                                 /* MIXER: the fifth is the noise colour, drawn under NOISE */
+        ex = 4u;
     int32_t x;
     cv_rect(8, 0, 224, 240, fa_bg(0));                       /* the panel: the gradient in 20 bands */
     for (i = 0; i < 20u; i++)
@@ -1420,18 +1483,19 @@ static void fa_scene(void)
         fa_wave_boxes(pg, cur);
     } else if (pg == 3u || pg == 4u || pg == 5u) {
         fa_graph(pg);
-    } else if (pg == 6u) {                                   /* FX: DECAY TEMPO RATE TONE under their sends, a thin bar between the four sections */
-        for (i = 0; i < 4u; i++)
-            fa_edit_btn(36 + (int32_t)i * 56, cur == 4u + i);
-        for (i = 1; i < 4u; i++) {                         /* the bars between the sections: a bright core with a faint glow */
-            cv_rect(7 + (int32_t)i * 56, 38, 3, 168, FA_RGB(0x4A, 0x40, 0x32));
-            cv_rect(8 + (int32_t)i * 56, 38, 1, 168, FA_RGB(0xD2, 0xC2, 0xA2));
+        if (pg == 3u) {
+            fa_lphp(cur == 4u);                              /* FILT: the LP / HP button under CUTOFF, left of the response */
+            fa_filtmod(cur == 5u);                           /* and FILT. MOD under it */
         }
+    } else if (pg == 6u) {                                   /* FX: DECAY TEMPO RATE TONE under their sends, a thin bar between the four sections */
+        fa_ctext(120, 170, &AF_S, "Press FX to edit effects.", FA_MU);   /* under the four knobs */
     } else {
         for (i = 0; i < ex; i++)
             fa_switch(pg, i, 36 + (int32_t)i * 56, cur == 4u + i);
         if (pg == 0u)
             fa_voices(cur == 8u);
+        if (pg == 2u)
+            fa_noise_btn(36 + 3 * 56, cur == 8u);
     }
     {   /* the foot: the patch's number (000..199, or U01.. of a saved one) and name, the battery at the right */
         int32_t w;
@@ -1488,6 +1552,7 @@ static uint32_t fa_signature(void)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
     h = (h ^ fa_base ^ (uint32_t)fa_pp_on() << 8 ^ (uint32_t)fa_cpu_on() << 9) * 16777619u;
     h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19) * 16777619u;
+    h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
     for (i = 0; i < FA_NCC; i++)
         h = (h ^ fa_cc[i]) * 16777619u;
     h = (h ^ fa_tp ^ (uint32_t)fa_clk << 1) * 16777619u;
@@ -1790,7 +1855,7 @@ static void fa_buttons(uint32_t pressed)
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_row = 5u;
+                fa_gl_row = 7u;
                 fa_gl = 3u;
             }
         }
@@ -2067,7 +2132,7 @@ static void fa_input(void)
         (void)panel_enc(EN_PRESET);
         if (fa_gl == 1u) {
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 6u + (s > 0 ? 1u : 5u)) % 6u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 8u + (s > 0 ? 1u : 7u)) % 8u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     static const uint8_t SRC[3] = {0, 1, 3};
@@ -2091,6 +2156,14 @@ static void fa_input(void)
                     fm_bend_mode = (uint8_t)clamp((int32_t)fm_bend_mode + (s > 0 ? 1 : -1), 0, 3);
                     for (ch = 0; ch < 16u; ch++)           /* the bend held now follows the new range */
                         midi_expression_channel(ch);
+                    fa_cfg_dirty = 1;
+                } else if (fa_gl_row == 5u) {               /* TUNING: 410 .. 470 Hz, 1 Hz a click */
+                    fa_tune_hz = (uint16_t)clamp((int32_t)fa_tune_hz + (s > 0 ? 1 : -1), 410, 470);
+                    glo_tune_c = FA_TUNE_C[fa_tune_hz - 410u];
+                    fa_cfg_dirty = 1;
+                } else if (fa_gl_row == 6u) {               /* TRANSPOSE: -12 .. +12 semitones */
+                    glo_transpose = clamp(glo_transpose + (s > 0 ? 1 : -1), -12, 12);
+                    panic_req |= 1u;                       /* the notes held now sound elsewhere: none may hang */
                     fa_cfg_dirty = 1;
                 } else
                     fa_gl = 3u;                            /* ABOUT */

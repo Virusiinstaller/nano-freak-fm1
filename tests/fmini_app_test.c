@@ -813,13 +813,47 @@ int main(int argc, char **argv)
         fturn(EN_ALGO, -1); fturn(EN_ALGO, -1); fturn(EN_ALGO, -1);
         if (fm_midi_src != 0) { printf("src min\n"); return 1; }
         fturn(EN_SELECT, -1);
-        if (fa_gl_row != 5) { printf("rows wrap\n"); return 1; }
+        if (fa_gl_row != 7) { printf("rows wrap\n"); return 1; }
         /* GLO: PITCH BEND draws at once, ABOUT closes with either encoder */
         fa_gl = 1; fa_gl_row = 4; fm_bend_mode = 0;
         sig = fa_signature();
         fturn(EN_ALGO, 1);
         if (fm_bend_mode != 1 || fa_signature() == sig) { printf("bend redraw\n"); return 1; }
-        /* GLO order: MIDI IN, CHANNEL, MIDI CC, MIDI TEMPO SYNC, PITCH BEND, ABOUT */
+        /* GLO: TUNING (410..470 Hz, 440 = 0 cents) and TRANSPOSE (-12..+12) are global: the keys' note and the pitch follow */
+        fa_gl = 1; fa_gl_row = 5; fa_tune_hz = 440; glo_tune_c = 0;
+        fa_sq = 0; fa_sv = 0; fa_ar = 0; ui.force = 1; fa_draw(); dump(dir, 930);   /* GLO: TUNING, TRANSPOSE, ABOUT */
+        sig = fa_signature();
+        fturn(EN_ALGO, 1);
+        if (fa_signature() == sig) { printf("tuning redraw\n"); return 1; }
+        if (fa_tune_hz != 441 || glo_tune_c <= 0) { printf("tuning up\n"); return 1; }
+        fa_tune_hz = 470; glo_tune_c = FA_TUNE_C[60];
+        fturn(EN_ALGO, 1);
+        if (fa_tune_hz != 470) { printf("tuning clamps at 470\n"); return 1; }
+        if (glo_tune_c != 114) { printf("470 Hz is +114 cents (%d)\n", glo_tune_c); return 1; }
+        fa_tune_hz = 410; glo_tune_c = FA_TUNE_C[0];
+        fturn(EN_ALGO, -1);
+        if (fa_tune_hz != 410 || glo_tune_c != -122) { printf("tuning clamps at 410\n"); return 1; }
+        fa_tune_hz = 440; glo_tune_c = 0;
+        fa_gl_row = 6; glo_transpose = 0;
+        sig = fa_signature();
+        fturn(EN_ALGO, 1); fturn(EN_ALGO, 1);
+        if (fa_signature() == sig) { printf("transpose redraw\n"); return 1; }
+        if (glo_transpose != 2) { printf("transpose up\n"); return 1; }
+        for (k = 0; k < 20; k++) fturn(EN_ALGO, 1);
+        if (glo_transpose != 12) { printf("transpose clamps at +12\n"); return 1; }
+        for (k = 0; k < 30; k++) fturn(EN_ALGO, -1);
+        if (glo_transpose != -12) { printf("transpose clamps at -12\n"); return 1; }
+        glo_transpose = 12;                               /* a note past 127 is dropped: no voice */
+        {   uint32_t i, held = 0;
+            for (i = 0; i < NVOICE; i++)
+                held += trk[0].v[i].active && trk[0].v[i].gate;
+            trk_note_on(&trk[0], 120, 100);              /* +12: 132, past MIDI's 127: no voice */
+            for (i = 0; i < NVOICE; i++)
+                held -= trk[0].v[i].active && trk[0].v[i].gate;
+            if (held != 0) { printf("note past 127 sounds\n"); return 1; }
+        }
+        glo_transpose = 0;
+        /* GLO order: MIDI IN, CHANNEL, MIDI CC, MIDI TEMPO SYNC, PITCH BEND, TUNING, TRANSPOSE, ABOUT */
         fa_gl = 1; fa_gl_row = 1; fturn(EN_SELECT, 1);
         if (fa_gl_row != 2) { printf("MIDI CC is row 2\n"); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 40);
@@ -863,7 +897,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 7; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -896,9 +930,45 @@ int main(int argc, char **argv)
                 if (fmg_fx != (q < 3u ? q + 2u : 0u)) { printf("FX cycles %u -> %u\n", q, fmg_fx); return 1; }
                 fmg_fx = 0; fmg_cur[6] = (uint8_t)(4u + q);
             }
-            {   /* a type's names: the five reverbs, seven delays, three choruses */
+            {   /* A-SYNC: shown after ANALOG; its TIME is the ARP RATE's note values (0..9), synced to the tempo */
+                uint32_t sv = song.g[G_DTIME], sr = song.g[G_DRREV];
+                if (param_turn(&GP[G_DTIME], 0, 1) != 7 || param_turn(&GP[G_DTIME], 7, 1) != 1 || param_turn(&GP[G_DTIME], 1, -1) != 7) {
+                    printf("A-SYNC is the type after ANALOG\n"); return 1;
+                }
+                song.g[G_DTIME] = 7; song.g[G_DRREV] = 0;
+                if (delay_samples() != div_samples(0)) { printf("A-SYNC: 1/4 is the tempo's quarter (%u)\n", delay_samples()); return 1; }
+                song.g[G_DRREV] = 2;
+                if (delay_samples() != div_samples(2)) { printf("A-SYNC: 1/16\n"); return 1; }
+                song.g[G_DRREV] = 7;                       /* 1/1: longer than the line at a slow tempo: silent, the others play */
+                if (dly_fits() != (div_samples(7) < DLY_LEN)) { printf("A-SYNC: the line's fit\n"); return 1; }
+                song.g[G_DRREV] = 0;
+                if (!dly_fits()) { printf("A-SYNC: 1/4 fits\n"); return 1; }
+                {   /* the knob shows only the values that fit: at 50 BPM 1/2T and 1/2 do not fit */
+                    int16_t b0 = song.g[G_BPM]; uint8_t c0 = song.g[G_CLOCK];
+                    song.g[G_BPM] = 50; song.g[G_CLOCK] = 0;   /* a quarter 1.2 s: 1/2T (1.6 s) and 1/2 do not fit */
+                    if (dly_div_fits(6) || !dly_div_fits(0) || !dly_div_fits(5)) { printf("A-SYNC: the fit at 50 BPM\n"); return 1; }
+                    if (async_turn(0, -1) != 0 || async_turn(0, -3) != 0) { printf("A-SYNC: 1/2T shown at 50 BPM (%d)\n", async_turn(0, -1)); return 1; }
+                    if (async_turn(0, 1) != 11 || async_turn(11, 1) != 1 || async_turn(1, 1) != 4) { printf("A-SYNC: the next fitting value\n"); return 1; }
+                    song.g[G_BPM] = b0; song.g[G_CLOCK] = c0;
+                }
+                {   /* the TYPE knob: A-SYNC second in the order (its gauge), and the TIME keeps its length across the change */
+                    int8_t fp = fmg_force_page; uint8_t fx0 = fmg_fx;
+                    song.g[G_DTIME] = 0; song.g[G_DRREV] = 65; fmg_force_page = 8; fmg_fx = 2;
+                    fmg_turn(8, 1, 1, EN_K1 + 1);
+                    if (song.g[G_DTIME] != 7 || song.g[G_DRREV] < 0 || song.g[G_DRREV] > 11 || fmg_ratio(&GP[G_DTIME], 7) != 142) {
+                        printf("A-SYNC: the type knob (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
+                    }
+                    fmg_turn(8, 1, -1, EN_K1 + 1);
+                    if (song.g[G_DTIME] != 0 || song.g[G_DRREV] < 10 || song.g[G_DRREV] > 127) {
+                        printf("A-SYNC: back to ANALOG (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
+                    }
+                    fmg_force_page = fp; fmg_fx = fx0;
+                }
+                song.g[G_DTIME] = (int16_t)sv; song.g[G_DRREV] = (int16_t)sr;
+            }
+            {   /* a type's names: the five reverbs, eight delays, three choruses */
                 char v[16]; const char *u; uint32_t n;
-                static const struct { uint8_t id; uint8_t n; const char *last; } TY[4] = {{G_RTYPE, 5, "CLOUD"}, {G_DTIME, 7, "REVERSE"}, {G_ENGGO, 3, "MULTI"}, {G_INFO, 2, "TUBE"}};
+                static const struct { uint8_t id; uint8_t n; const char *last; } TY[4] = {{G_RTYPE, 5, "CLOUD"}, {G_DTIME, 8, "A-SYNC"}, {G_ENGGO, 3, "MULTI"}, {G_INFO, 2, "TUBE"}};
                 for (n = 0; n < 4u; n++) {
                     str_cpy(v, GP[TY[n].id].names[GP[TY[n].id].max], 16);
                     if (GP[TY[n].id].max + 1 != TY[n].n || strcmp(v, TY[n].last)) { printf("type list %u: %d '%s'\n", n, GP[TY[n].id].max + 1, v); return 1; }
@@ -942,12 +1012,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 7) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 5) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 7) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);

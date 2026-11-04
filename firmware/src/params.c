@@ -10,10 +10,10 @@ static const char *const N_LTRIG[] = {"NOTE", "FREE"};
 static const char *const N_LPOL[] = {"BI", "UNI"};
 static const char *const N_AMODE[] = {"OFF", "UP", "DN", "UPDN", "RND", "ORD", "REPEAT",   /* (append-only: seq.c AM_*) */
                                        "DNUP", "UP+8", "CONV", "DIVG", "PINKY", "THUMB", "WALK", "CHORD"};
-static const char *const N_DIV[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T", "1/2", "1/1", "2BAR", "4BAR"};
+static const char *const N_DIV[] = {"1/4", "1/8", "1/16", "1/32", "1/8T", "1/16T", "1/2", "1/1", "2BAR", "4BAR", "1/2T", "1/4T"};   /* 10, 11: appended (1.x) */
 /* the delay's TIME (G_DTIME): N_DIV's ten (their values kept), then 1.5.1's dotted ones appended (stored values:
  * append-only). A list of its own: ARP RATE, SEQ DIV and LFO SYNC keep N_DIV's ten (fx.c delay_samples) */
-static const char *const N_DTIME[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T", "1/2", "1/1", "2BAR", "4BAR",
+static const char *const N_DTIME[] = {"1/4", "1/8", "1/16", "1/32", "1/8T", "1/16T", "1/2", "1/1", "2BAR", "4BAR",
                                       "1/8D", "1/16D", "1/4D"};
 static const char *const N_SCALE[] = {"CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", "MPEN", "HARM",
                                     "PHRY", "LYD", "LOC", "MEL", "BLUES", "WHOLE", "DIMHW", "DIMWH"};
@@ -57,7 +57,9 @@ static const char *const N_DASH[] = {"--"};
 #if FELUCCA_FMINI_ONLY
 /* FMini-1: G_RTYPE's five models (the FX > REVERB > TYPE list; fx.c rev_run runs them) */
 static const char *const N_RTYPE[] = {"ROOM", "HALL", "PLATE", "SPRING", "CLOUD"};
-static const char *const N_DLYTYPE[] = {"ANALOG", "DIGITAL", "TAPE", "P-PONG", "MULTI", "SLAP", "REVERSE"};   /* G_DTIME's use */
+/* G_DTIME's use. A-SYNC (7, FMini-1 1.x+): ANALOG's algorithm with its TIME in note values (G_DRREV: N_DIV, the ARP RATE's), synced
+ * to the tempo; appended, so the stored values keep their meaning. Shown after ANALOG (DLYTYPE_ORDER) */
+static const char *const N_DLYTYPE[] = {"ANALOG", "DIGITAL", "TAPE", "P-PONG", "MULTI", "SLAP", "REVERSE", "A-SYNC"};
 static const char *const N_CHOTYPE[] = {"STEREO", "JUNO", "MULTI"};                                       /* G_ENGGO's use */
 static const char *const N_DRVTYPE[] = {"SOFT", "TUBE"};                                                  /* G_INFO's use */
 #else
@@ -319,13 +321,20 @@ static int32_t enum_step(const param_desc_t *d, int32_t from, int32_t v)
 /* #48: the note divisions in the order of their length, longest first (triplets between their neighbours), on the
  * knobs and the gauges; the stored values (N_DIV, N_SLDIV indices: projects, presets, the editor protocol) stay.
  * -> the shown order of d's values (index: position, entry: value), 0 = the values' own order */
-static const uint8_t DIV_ORDER[10] = {9, 8, 7, 6, 0, 1, 4, 2, 5, 3};   /* 4BAR 2BAR 1/1 1/2 1/4 1/8 8T 1/16 16T 1/32 */
+static const uint8_t DIV_ORDER[12] = {9, 8, 7, 6, 10, 0, 11, 1, 4, 2, 5, 3};   /* 4BAR 2BAR 1/1 1/2 1/2T 1/4 1/4T 1/8 1/8T 1/16 1/16T 1/32 */
 static const uint8_t SLDIV_ORDER[6] = {0, 3, 1, 4, 2, 5};              /* 1/8 8T 1/16 16T 1/32 32T */
 static const uint8_t DTIME_ORDER[13] = {9, 8, 7, 6, 12, 0, 10, 1, 11, 4, 2, 5, 3};   /* 4BAR 2BAR 1/1 1/2 1/4D 1/4 1/8D
                                                                                       * 1/8 1/16D 8T 1/16 16T 1/32 */
+#if FELUCCA_FMINI_ONLY
+static const uint8_t DLYTYPE_ORDER[8] = {0, 7, 1, 2, 3, 4, 5, 6};   /* ANALOG, A-SYNC (next to it), then the others as stored */
+#endif
 static const uint8_t *enum_order(const param_desc_t *d)
 {
-    return d->names == N_DIV ? DIV_ORDER : d->names == N_SLDIV ? SLDIV_ORDER : d->names == N_DTIME ? DTIME_ORDER : 0;
+    return d->names == N_DIV ? DIV_ORDER : d->names == N_SLDIV ? SLDIV_ORDER : d->names == N_DTIME ? DTIME_ORDER
+#if FELUCCA_FMINI_ONLY
+         : d->names == N_DLYTYPE ? DLYTYPE_ORDER
+#endif
+         : 0;
 }
 static int32_t enum_rank(const param_desc_t *d, int32_t v)   /* v's place in the shown order (+ min): the gauges */
 {
