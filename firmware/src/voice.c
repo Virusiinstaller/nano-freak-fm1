@@ -396,9 +396,22 @@ static void mono_remove(track_t *t, uint32_t note)
     t->nmono = (uint8_t)k;
 }
 
+int32_t glo_tune_c = 0, glo_transpose = 0;          /* core.h: the GLO list's TUNING and TRANSPOSE */
+
+/* the note as it sounds: TRANSPOSE applied; -1 when it falls outside MIDI's 0..127 (then the note is dropped, on and off alike) */
+static int32_t trk_xnote(uint32_t note)
+{
+    int32_t n = (int32_t)note + glo_transpose;
+    return n < 0 || n > 127 ? -1 : n;
+}
+
 static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 {
     uint32_t any = 0, i, mode = trk_vmode(t);
+    int32_t xn = trk_xnote(note);
+    if (xn < 0)
+        return;
+    note = (uint32_t)xn;
     if (t->p[P_MUTE])
         return;
     if (t->xf_on || t->eng_req != t->engine) {          /* engine switch under way: after the fade */
@@ -445,6 +458,10 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 
 static void trk_note_off(track_t *t, uint32_t note)
 {
+    int32_t xn = trk_xnote(note);
+    if (xn < 0)
+        return;
+    note = (uint32_t)xn;
     uint32_t i, k = 0, mode = trk_vmode(t);
     for (i = 0; i < t->xp_n; i++)                       /* not sounding yet (engine switch): forget it */
         if (t->xp_note[i] != note) {

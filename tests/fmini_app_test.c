@@ -813,13 +813,43 @@ int main(int argc, char **argv)
         fturn(EN_ALGO, -1); fturn(EN_ALGO, -1); fturn(EN_ALGO, -1);
         if (fm_midi_src != 0) { printf("src min\n"); return 1; }
         fturn(EN_SELECT, -1);
-        if (fa_gl_row != 5) { printf("rows wrap\n"); return 1; }
+        if (fa_gl_row != 7) { printf("rows wrap\n"); return 1; }
         /* GLO: PITCH BEND draws at once, ABOUT closes with either encoder */
         fa_gl = 1; fa_gl_row = 4; fm_bend_mode = 0;
         sig = fa_signature();
         fturn(EN_ALGO, 1);
         if (fm_bend_mode != 1 || fa_signature() == sig) { printf("bend redraw\n"); return 1; }
-        /* GLO order: MIDI IN, CHANNEL, MIDI CC, MIDI TEMPO SYNC, PITCH BEND, ABOUT */
+        /* GLO: TUNING (410..470 Hz, 440 = 0 cents) and TRANSPOSE (-12..+12) are global: the keys' note and the pitch follow */
+        fa_gl = 1; fa_gl_row = 5; fa_tune_hz = 440; glo_tune_c = 0;
+        fa_sq = 0; fa_sv = 0; fa_ar = 0; ui.force = 1; fa_draw(); dump(dir, 930);   /* GLO: TUNING, TRANSPOSE, ABOUT */
+        fturn(EN_ALGO, 1);
+        if (fa_tune_hz != 441 || glo_tune_c <= 0) { printf("tuning up\n"); return 1; }
+        fa_tune_hz = 470; glo_tune_c = FA_TUNE_C[60];
+        fturn(EN_ALGO, 1);
+        if (fa_tune_hz != 470) { printf("tuning clamps at 470\n"); return 1; }
+        if (glo_tune_c != 114) { printf("470 Hz is +114 cents (%d)\n", glo_tune_c); return 1; }
+        fa_tune_hz = 410; glo_tune_c = FA_TUNE_C[0];
+        fturn(EN_ALGO, -1);
+        if (fa_tune_hz != 410 || glo_tune_c != -122) { printf("tuning clamps at 410\n"); return 1; }
+        fa_tune_hz = 440; glo_tune_c = 0;
+        fa_gl_row = 6; glo_transpose = 0;
+        fturn(EN_ALGO, 1); fturn(EN_ALGO, 1);
+        if (glo_transpose != 2) { printf("transpose up\n"); return 1; }
+        for (k = 0; k < 20; k++) fturn(EN_ALGO, 1);
+        if (glo_transpose != 12) { printf("transpose clamps at +12\n"); return 1; }
+        for (k = 0; k < 30; k++) fturn(EN_ALGO, -1);
+        if (glo_transpose != -12) { printf("transpose clamps at -12\n"); return 1; }
+        glo_transpose = 12;                               /* a note past 127 is dropped: no voice */
+        {   uint32_t i, held = 0;
+            for (i = 0; i < NVOICE; i++)
+                held += trk[0].v[i].active && trk[0].v[i].gate;
+            trk_note_on(&trk[0], 120, 100);              /* +12: 132, past MIDI's 127: no voice */
+            for (i = 0; i < NVOICE; i++)
+                held -= trk[0].v[i].active && trk[0].v[i].gate;
+            if (held != 0) { printf("note past 127 sounds\n"); return 1; }
+        }
+        glo_transpose = 0;
+        /* GLO order: MIDI IN, CHANNEL, MIDI CC, MIDI TEMPO SYNC, PITCH BEND, TUNING, TRANSPOSE, ABOUT */
         fa_gl = 1; fa_gl_row = 1; fturn(EN_SELECT, 1);
         if (fa_gl_row != 2) { printf("MIDI CC is row 2\n"); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 40);
@@ -863,7 +893,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 7; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -942,12 +972,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 7) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 5) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 7) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);

@@ -21,6 +21,11 @@
 #define FMINI_VER_MIN 1u
 #define FMINI_VER_PATCH 0u
 #define FMINI_VERSION "v2.1.0"
+/* FMini-1 GLOBAL (the GLO list, not the preset): TUNING, the reference A in cents from A 440 (-122 .. +114), and TRANSPOSE,
+ * semitones -12 .. +12. They apply to every note (voice.c trk_note_on / trk_note_off: keys, MIDI, SEQ, ARP) and to the pitch
+ * (eng_fmini.c). Defined in voice.c. */
+extern int32_t glo_tune_c;
+extern int32_t glo_transpose;
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
 #ifndef FELUCCA_FM4
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built

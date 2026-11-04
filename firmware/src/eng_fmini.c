@@ -431,7 +431,7 @@ static void fmini_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
 
     /* oscillator pitches */
     p16 = m->pitch16 + vib + (sw & FS_MOSC ? (mod * 16) >> 14 : 0);    /* full depth: +-2 semitones */
-    fine = m->fine + ((int32_t)g[FG_TUNE] - 64) * 237 / 64;
+    fine = m->fine + ((int32_t)g[FG_TUNE] - 64) * 237 / 64 + glo_tune_c * 237 / 100;   /* + the GLO TUNING (A 410..470) */
     {   /* the VCOs wander a few cents (temperature, the integrators): a slow random walk per oscillator, about +-2 cents */
         int32_t d1 = v->s[5], d2 = v->s[6];
         d1 += ((int32_t)(noise32(&fmini_nst[tr]) >> 20) - 2048 >> 6) - (d1 >> 11);
