@@ -20,7 +20,7 @@
 #define FELUCCA_OTA_DRYRUN 0     /* 1 = stage, ask "success", then undo: no record, no reset */
 #endif
 #ifndef FELUCCA_CDC
-#define FELUCCA_CDC 1            /* USB CDC-ACM serial console */
+#define FELUCCA_CDC 0            /* USB CDC-ACM serial console: off (frees EP2 / EP3 for USB audio out) */
 #endif
 #ifndef FELUCCA_UAC
 #define FELUCCA_UAC 1            /* USB audio input: the master output, 16-bit stereo 44.1 kHz (usb.c) */
