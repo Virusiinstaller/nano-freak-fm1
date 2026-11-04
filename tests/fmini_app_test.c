@@ -943,19 +943,19 @@ int main(int argc, char **argv)
                 if (dly_fits() != (div_samples(7) < DLY_LEN)) { printf("A-SYNC: the line's fit\n"); return 1; }
                 song.g[G_DRREV] = 0;
                 if (!dly_fits()) { printf("A-SYNC: 1/4 fits\n"); return 1; }
-                {   /* the knob shows only the values that fit: at 60 BPM (quarter 1 s) 1/2 and longer do not fit */
+                {   /* the knob shows only the values that fit: at 50 BPM 1/2T and 1/2 do not fit */
                     int16_t b0 = song.g[G_BPM]; uint8_t c0 = song.g[G_CLOCK];
-                    song.g[G_BPM] = 60; song.g[G_CLOCK] = 0;
-                    if (dly_div_fits(6) || !dly_div_fits(0) || !dly_div_fits(5)) { printf("A-SYNC: the fit at 60 BPM\n"); return 1; }
-                    if (async_turn(0, -1) != 0 || async_turn(0, -3) != 0) { printf("A-SYNC: 1/2 shown at 60 BPM (%d)\n", async_turn(0, -1)); return 1; }
-                    if (async_turn(0, 1) != 1 || async_turn(1, 1) != 4) { printf("A-SYNC: the next fitting value\n"); return 1; }
+                    song.g[G_BPM] = 50; song.g[G_CLOCK] = 0;   /* a quarter 1.2 s: 1/2T (1.6 s) and 1/2 do not fit */
+                    if (dly_div_fits(6) || !dly_div_fits(0) || !dly_div_fits(5)) { printf("A-SYNC: the fit at 50 BPM\n"); return 1; }
+                    if (async_turn(0, -1) != 0 || async_turn(0, -3) != 0) { printf("A-SYNC: 1/2T shown at 50 BPM (%d)\n", async_turn(0, -1)); return 1; }
+                    if (async_turn(0, 1) != 11 || async_turn(11, 1) != 1 || async_turn(1, 1) != 4) { printf("A-SYNC: the next fitting value\n"); return 1; }
                     song.g[G_BPM] = b0; song.g[G_CLOCK] = c0;
                 }
                 {   /* the TYPE knob: A-SYNC second in the order (its gauge), and the TIME keeps its length across the change */
                     int8_t fp = fmg_force_page; uint8_t fx0 = fmg_fx;
                     song.g[G_DTIME] = 0; song.g[G_DRREV] = 65; fmg_force_page = 8; fmg_fx = 2;
                     fmg_turn(8, 1, 1, EN_K1 + 1);
-                    if (song.g[G_DTIME] != 7 || song.g[G_DRREV] < 0 || song.g[G_DRREV] > 9 || fmg_ratio(&GP[G_DTIME], 7) != 142) {
+                    if (song.g[G_DTIME] != 7 || song.g[G_DRREV] < 0 || song.g[G_DRREV] > 11 || fmg_ratio(&GP[G_DTIME], 7) != 142) {
                         printf("A-SYNC: the type knob (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
                     }
                     fmg_turn(8, 1, -1, EN_K1 + 1);

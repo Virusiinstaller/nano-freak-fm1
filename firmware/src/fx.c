@@ -292,7 +292,8 @@ static uint32_t beat_samples(void)
 static uint32_t div_samples(uint32_t div)
 {
     uint32_t quarter = beat_samples();
-    return div < 6u ? quarter / DIV_DEN[div] : div < 10u ? quarter << (div - 5u) : quarter / DIV_DEN[div % 6u];
+    return div < 6u ? quarter / DIV_DEN[div] : div < 10u ? quarter << (div - 5u) : div == 10u ? quarter * 4u / 3u
+         : div == 11u ? quarter * 2u / 3u : quarter / DIV_DEN[div % 6u];   /* 10: 1/2T, 11: 1/4T (triplets) */
 }
 
 #include "perform.c"                                 /* the FX hold layer's effects (the master) */
@@ -314,12 +315,12 @@ static uint32_t dly_div_fits(uint32_t div)           /* A-SYNC: this note value 
 }
 static uint32_t dly_fits(void)
 {
-    return song.g[G_DTIME] != 7 || dly_div_fits((uint32_t)clamp(song.g[G_DRREV], 0, 9));
+    return song.g[G_DTIME] != 7 || dly_div_fits((uint32_t)clamp(song.g[G_DRREV], 0, 11));
 }
 static uint32_t delay_samples(void)
 {
     if (song.g[G_DTIME] == 7) {                          /* A-SYNC: the time in N_DIV's note values (G_DRREV, 0..9), the tempo's */
-        uint32_t s = div_samples((uint32_t)clamp(song.g[G_DRREV], 0, 9));
+        uint32_t s = div_samples((uint32_t)clamp(song.g[G_DRREV], 0, 11));
         return s < 16u ? 16u : s >= DLY_LEN ? DLY_LEN - 1u : s;
     }
 #if FELUCCA_FMINI_ONLY

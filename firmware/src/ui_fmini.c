@@ -143,13 +143,13 @@ static void dly_time_convert(uint32_t to_async)
     int32_t bd = 0x7FFFFFFF, d;
     if (to_async) {
         uint32_t want = (uint32_t)dly_ms((int32_t)cur) * (uint32_t)FS / 1000u;
-        for (i = 0; i < 10u; i++) {
+        for (i = 0; i < 12u; i++) {
             uint32_t s = div_samples(i);
             d = (int32_t)(s > want ? s - want : want - s) + (dly_div_fits(i) ? 0 : 1000000);
             if (d < bd) { bd = d; best = i; }
         }
     } else {
-        int32_t want = (int32_t)(div_samples(cur < 10u ? cur : 0u) * 1000u / (uint32_t)FS);
+        int32_t want = (int32_t)(div_samples(cur < 12u ? cur : 0u) * 1000u / (uint32_t)FS);
         for (i = 0; i <= 127u; i++) {
             d = dly_ms((int32_t)i) - want;
             if (d < 0) d = -d;

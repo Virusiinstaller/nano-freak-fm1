@@ -1125,7 +1125,9 @@ static int test_throw(void)
     for (b = 0; b < 4u; b++) {
         song.g[G_BPM] = (int16_t)BPM[b];
         for (v = 0; v < 13u; v++) {
-            uint32_t q = FS * 60u / BPM[b], want = v < 10u ? (MUL[v][0] * q) / MUL[v][1] : (MUL[v][0] * q) >> (v == 10u ? 2 : v == 11u ? 3 : 1);
+            uint32_t q = FS * 60u / BPM[b], want;
+            if (v == 7u) continue;                     /* 7 is the TYPE A-SYNC here (its TIME: fmini_app_test), not 1/1 */
+            want = v < 10u ? (MUL[v][0] * q) / MUL[v][1] : (MUL[v][0] * q) >> (v == 10u ? 2 : v == 11u ? 3 : 1);
             song.g[G_DTIME] = (int16_t)v;
             want = want >= DLY_LEN ? DLY_LEN - 1u : want;
             ok &= delay_samples() == want;
@@ -1157,7 +1159,7 @@ static int test_throw(void)
         static const uint8_t SHOWN[13] = {9, 8, 7, 6, 12, 0, 10, 1, 11, 4, 2, 5, 3};
         int32_t x = 9;
         ok = d->max == 12 && d->names[1][0] == '1' && d->names[1][2] == '8' && !d->names[1][3] && d->names[9][0] == '4' &&
-             TP[P_ARATE].max == 9 && TP[P_SDIV].max == 9 && TP[P_ARATE].names == TP[P_SDIV].names;
+             TP[P_ARATE].max == 11 && TP[P_SDIV].max == 11 && TP[P_ARATE].names == TP[P_SDIV].names;
         for (v = 0; v < 13u; v++) {
             ok &= x == SHOWN[v];
             x = param_turn(d, x, 1);
