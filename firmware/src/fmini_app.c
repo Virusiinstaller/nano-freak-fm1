@@ -237,13 +237,8 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
         fa_val(val, ratio, f);
     }
     fa_ctext(cx, 112 + dy, &AF_S, val, FA_OR);
-    {
-        char kn[5] = {'K', (char)('1' + i), 0, 0, 0};
-        if (pg == 6u)                                      /* FX: the parameter each knob sets (the effect is the label above) */
-            str_cpy(kn, i == 3u ? "GAIN" : "MIX", 5);
-        if (pg != 2u)                                      /* MIXER: no K1..K4 under its knobs */
-            fa_ctext(cx, 127 + dy, &AF_X, kn, FA_RGB(0x5D, 0x55, 0x4A));
-    }
+    if (pg == 6u)                                          /* FX: the parameter each knob sets (the effect is the label above); no K1..K4 */
+        fa_ctext(cx, 127 + dy, &AF_X, i == 3u ? "GAIN" : "MIX", FA_RGB(0x5D, 0x55, 0x4A));
 }
 
 static void fa_switch(uint32_t pg, uint32_t ex, int32_t cx, int hot)
@@ -477,10 +472,6 @@ static void fa_pop_knob(uint32_t pg, uint32_t i, int32_t cx, int32_t cy, int hot
     if (f->kind == FK_PAR || (f->kind == FK_GLB && GP[f->a].fmt == F_PCT))
         fa_val(val, ratio, f);
     fa_ctext(cx, cy + 32, &AF_S, val, FA_OR);
-    {
-        char kn[4] = {'K', (char)('1' + i), 0, 0};
-        fa_ctext(cx, cy + 50, &AF_X, kn, FA_RGB(0x5D, 0x55, 0x4A));
-    }
 }
 static void fa_fx_dialog(void)
 {
