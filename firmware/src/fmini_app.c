@@ -230,7 +230,7 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
         int32_t ai = a % 360 * 1024 / 360, px = cx + SINE[ai & 1023] * 12 / 32768, py = cy - SINE[(ai + 256) & 1023] * 12 / 32768;
         cv_rect(px - 1, py - 1, 3, 3, FA_RGB(0xF6, 0xF1, 0xE3));
     }
-    fa_ctext(cx, 38 + dy, &AF_X, f->lb, lab);
+    fa_ctext(cx, 38 + dy + (pg == 1u && i < 3u ? 6 : 0), &AF_X, f->lb, lab);   /* OSC tab: OSC 1..3 labels 6 px lower */
     if (f->kind == FK_NAME && f->b == FN_RANGE) {
         str_cpy(val, FMG_RANGE[clamp((int32_t)fmg_byte(f->a), 0, 5)], 16);
     } else {
