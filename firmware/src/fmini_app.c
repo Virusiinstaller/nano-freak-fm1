@@ -285,6 +285,7 @@ static void fa_filtmod(int hot)
     cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
     cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
     cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);
+    fa_ltext(x + w + 4, y + (h - fa_cap_h(&AF_X)) / 2, &AF_X, "ON", on ? FA_OR : FA_MU);   /* the state, right of the box, coloured as LP / HP */
 }
 
 /* MIXER: the noise colour, a button under NOISE: ON = PINK, OFF = WHITE, the text always in the ON colour */
