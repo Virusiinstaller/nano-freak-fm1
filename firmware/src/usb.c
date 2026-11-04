@@ -105,8 +105,14 @@ static uint32_t ep4tx[UA_MAXF] __attribute__((aligned(4)));
 #define PB_N 512u                                         /* frames, a power of two (11.6 ms at 44.1 kHz) */
 static uint32_t pb_ring[PB_N];
 static uint8_t pbrx[UAC_MAXP + 4] __attribute__((aligned(4)));   /* the EP3 OUT packet */
-static uint32_t pb_w, pb_r, pb_pkts, pb_frames, pb_drops;
-static uint8_t pb_pend;
+static volatile uint32_t pb_w, pb_r;                     /* writer: TIMER5 (pb_w); reader: the audio ISR (pb_r) */
+static volatile uint8_t pb_flush;                        /* writer -> reader: start empty (the reader moves pb_r) */
+static uint8_t pb_pend, pb_play;                         /* packet waiting; the reader is playing */
+static int32_t pb_last_l, pb_last_r;                     /* the last frame played (repeated when the host is slow) */
+static uint32_t pb_pkts, pb_frames, pb_drops, pb_under, pb_skip, pb_rep;   /* counters */
+#define PB_PRIME 128u                                    /* frames before the first sound (~3 ms) */
+#define PB_TARGET (PB_N / 2u)                            /* the ring's fill the reader aims at */
+#define PB_BAND 128u                                     /* one frame dropped / repeated outside TARGET +- BAND */
 #endif
 static struct {
     volatile uint8_t alt;        /* streaming interface setting: 1 = the host records */
@@ -257,6 +263,12 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 #define FMT_LEN 0
 #endif
 #if FELUCCA_UAC
+#define D_FMT_OUT 11, 0x24, 2, 1, 2, 2, 16, 1, UAC_RATE & 0xFF, (UAC_RATE >> 8) & 0xFF, UAC_RATE >> 16,   /* 44.1 kHz only */
+#define FMT_OUT_LEN 11
+#else
+#define FMT_OUT_LEN 0
+#endif
+#if FELUCCA_UAC
 /* the AC header's collection (#67): the audio streaming interfaces first, then the MIDI one. The kernel
  * AppleUSBAudio (macOS up to 15; its last published source, AppleUSBAudio-273.4.1,
  * AUAConfigurationDictionary::parseConfigurationDescriptor) drops a
@@ -291,7 +303,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     9, 4, (s), 0, 0, 1, 2, 0, 0,                           /* playback, alt 0: no bandwidth */          \
     9, 4, (s), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
     7, 0x24, 1, 3, 1, 0x01, 0x00,                          /* AS general: terminal 3, delay 1, PCM */   \
-    D_FMT                                                  /* type I: 2 ch, 16 bit, the rates */        \
+    D_FMT_OUT                                                  /* type I: 2 ch, 16 bit, the rates */        \
     9, 5, 0x03, 0x09, UAC_MAXP & 0xFF, UAC_MAXP >> 8, 1, 0, 0,   /* EP3 OUT isochronous adaptive, 1 ms */ \
     7, 0x25, 1, 0x01, 0, 0, 0,                             /* CS endpoint: sampling frequency control */
 #else
@@ -332,7 +344,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     5, 0x25, 1, 1, 3,
 #define D_AUDIO(a) D_AC(a) D_MIDI((a) + 1) D_AS((a) + 2) D_ASO((a) + 3)   /* audio + MIDI from interface a */
 #define AUD_NIF (2 + FELUCCA_UAC + FELUCCA_UAC_OUT)
-#define AUD_LEN (92 + (63 + FMT_LEN) * (FELUCCA_UAC + FELUCCA_UAC_OUT))
+#define AUD_LEN (92 + (63 + FMT_LEN) * FELUCCA_UAC + (63 + FMT_OUT_LEN) * FELUCCA_UAC_OUT)
 #define D_CDC(c)                                                                                     \
     D_IAD((c), 2, 2, 2, 1),                                /* IAD: CDC ACM */                           \
     9, 4, (c), 0, 1, 2, 2, 1, 0,                           /* communication */                          \
@@ -521,8 +533,7 @@ static void uac_out_stream(uint32_t alt)
 {
     uac_out_alt = (uint8_t)(alt && usb.config ? 1u : 0u);
     pb_pend = 0;
-    pb_w = 0;
-    pb_r = 0;
+    pb_flush = 1;
     sie_wr(S_INDEX, 3);
     if (uac_out_alt) {
         sie_wr(S_RXMAXP, UAC_MAXP);
@@ -569,6 +580,62 @@ static void uac_out_rx(void)                              /* EP3 OUT: one packet
     csr = (csr & ~0x164u) | 0x10u;
     sie_wr(S_RXCSR1, csr & 0xFFu);
     sie_wr(S_RXCSR2, csr >> 8);
+}
+static inline int32_t pb_add(int32_t a, int32_t b)
+{
+    int32_t x = a + b;
+    return x > 32767 ? 32767 : x < -32768 ? -32768 : x;
+}
+
+/* audio ISR, after the USB input (uac_tap) and USB LEVEL FIXED, before the click: the playback frames are
+ * added to the DAC's signal at MASTER's level (never to the USB input: the host would hear itself). The
+ * reader starts after PB_PRIME frames. It follows the host's clock by the ring's fill: a frame is dropped
+ * while the fill is PB_BAND above PB_TARGET, and repeated while it is PB_BAND below. A dry ring goes silent
+ * and primes again. */
+static __attribute__((noinline)) void usb_play_mix(int32_t *out, uint32_t n, int32_t master)
+{
+    uint32_t i, fill;
+    int rep = 0;
+    if (pb_flush) {                                      /* SET_INTERFACE, configuration, bus reset: start empty */
+        pb_flush = 0;
+        pb_r = pb_w;
+        pb_play = 0;
+    }
+    if (!uac_out_alt) {
+        pb_play = 0;
+        return;
+    }
+    fill = pb_w - pb_r;
+    if (!pb_play) {
+        if (fill < PB_PRIME)
+            return;
+        pb_play = 1;
+    }
+    if (fill > PB_TARGET + PB_BAND) {                    /* the host runs fast: drop one frame */
+        pb_r++;
+        fill--;
+        pb_skip++;
+    } else if (fill < PB_TARGET - PB_BAND) {             /* the host runs slow: repeat one */
+        rep = 1;
+        pb_rep++;
+    }
+    for (i = 0; i < n; i++) {
+        if (!(rep && i == 0)) {
+            uint32_t v;
+            if (!fill) {                                 /* dry: the rest of the block is silence */
+                pb_under++;
+                pb_play = 0;
+                return;
+            }
+            v = pb_ring[pb_r & (PB_N - 1u)];
+            pb_r++;
+            fill--;
+            pb_last_l = (int32_t)(int16_t)(v & 0xFFFFu);
+            pb_last_r = (int32_t)(int16_t)(v >> 16);
+        }
+        out[2u * i] = pb_add(out[2u * i], (pb_last_l * master) >> 12);
+        out[2u * i + 1u] = pb_add(out[2u * i + 1u], (pb_last_r * master) >> 12);
+    }
 }
 #endif
 

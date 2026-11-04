@@ -351,7 +351,7 @@ int main(void)
                     : same_as(dev, c, n, V10_MIDI_DEV, V10_MIDI_CFG, sizeof V10_MIDI_CFG));
 #if T_OUT
     {                                          /* the playback stream (FELUCCA_UAC_OUT) */
-        int pit = 0, pot = 0, pgen = 0, pep = 0, pcs = 0, palt = 0, pfmt = 0;
+        int pit = 0, pot = 0, pgen = 0, pep = 0, pcs = 0, palt = 0, pfmt = 0, pfmt1 = 0;
         for (off = 0; off < n; off += c[off]) {
             const uint8_t *d = c + off;
             if (d[1] == 4 && d[2] == out_if)           /* alt 0: no endpoint; alt 1: one isochronous */
@@ -366,14 +366,16 @@ int main(void)
                 pgen = d[0] == 7 && d[4] == 1 && le16(d + 5) == 1;
             if (d[1] == 0x24 && d[2] == 2 && d[3] == 1 && d[4] == 2 && d[5] == 2 && d[6] == 16)
                 pfmt++;                                    /* type I, 2 ch, 16 bit: the in and the out stream */
+            if (d[0] == 11 && d[6] == 16 && d[7] == 1 && le16(d + 8) == 44100)
+                pfmt1++;                                   /* the playback format: 44.1 kHz only */
             if (d[1] == 5 && d[2] == 0x03)                 /* EP 03 OUT isochronous adaptive, 1 ms */
                 pep = d[0] == 9 && d[3] == 0x09 && le16(d + 4) == UAC_MAXP && d[6] == 1;
             if (d[1] == 0x25 && d[0] == 7 && d[2] == 1 && d[3] == 0x01)   /* audio CS endpoint (not MIDI's 5-byte one) */
                 pcs++;
         }
         check("playback: IT 3 (USB streaming, L R), OT 4 (speaker, from 3), AS general from 3", pit && pot && pgen);
-        check("playback: alt 0 no endpoint, alt 1 one, 2 ch 16 bit format, EP 03 iso adaptive, 2 CS",
-              palt == 3 && pfmt == 2 && pep && pcs == 2);
+        check("playback: alt 0 no endpoint, alt 1 one, 2 ch 16 bit, 44.1 kHz only, EP 03 iso adaptive, 2 CS",
+              palt == 3 && pfmt == 2 && pfmt1 == (AUDIO_48K ? 1 : 2) && pep && pcs == 2);
     }
 #endif
     if (T_UAC) {                                       /* the audio streaming format, as a host lists the rates */
@@ -382,7 +384,7 @@ int main(void)
             const uint8_t *d = c + off;
             if (d[1] == 4)
                 as = d[5] == 1 && d[6] == 2;
-            if (as && d[1] == 0x24 && d[2] == 2 && d[0] == 8u + 3u * d[7]) {
+            if (as && rates == 0 && d[1] == 0x24 && d[2] == 2 && d[0] == 8u + 3u * d[7]) {   /* the input's format */
                 rates = d[7];
                 r0 = d[8] | d[9] << 8 | (uint32_t)d[10] << 16;
                 r1 = rates > 1 ? d[11] | d[12] << 8 | (uint32_t)d[13] << 16 : 0;

@@ -36,6 +36,9 @@ static void audio_block(int32_t *out, uint32_t n)       /* mix (fx.c), then Q15 
     if (!scope_mix)                                     /* the HOME scope (SCOPE OUT): the music, before the click */
         for (i = 1; i < n; i += 2u)                     /* (MIX: fx.c mix_block took it) */
             scope_buf[scope_w++ & (SCOPE_N - 1u)] = (int16_t)out[2u * i];
+#if FELUCCA_UAC_OUT
+    usb_play_mix(out, n, (int32_t)song.master_q12);      /* the USB playback (EP3), at MASTER; not in the USB input */
+#endif
     click_render(out, n);                               /* the metronome (click.c): the DAC only, not USB */
     for (i = 0; i < n; i++) {
         out[2u * i] *= 1 << OUT_SHIFT;
