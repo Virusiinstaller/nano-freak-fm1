@@ -951,6 +951,19 @@ int main(int argc, char **argv)
                     if (async_turn(0, 1) != 1 || async_turn(1, 1) != 4) { printf("A-SYNC: the next fitting value\n"); return 1; }
                     song.g[G_BPM] = b0; song.g[G_CLOCK] = c0;
                 }
+                {   /* the TYPE knob: A-SYNC second in the order (its gauge), and the TIME keeps its length across the change */
+                    int8_t fp = fmg_force_page; uint8_t fx0 = fmg_fx;
+                    song.g[G_DTIME] = 0; song.g[G_DRREV] = 65; fmg_force_page = 8; fmg_fx = 2;
+                    fmg_turn(8, 1, 1, EN_K1 + 1);
+                    if (song.g[G_DTIME] != 7 || song.g[G_DRREV] < 0 || song.g[G_DRREV] > 9 || fmg_ratio(&GP[G_DTIME], 7) != 142) {
+                        printf("A-SYNC: the type knob (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
+                    }
+                    fmg_turn(8, 1, -1, EN_K1 + 1);
+                    if (song.g[G_DTIME] != 0 || song.g[G_DRREV] < 10 || song.g[G_DRREV] > 127) {
+                        printf("A-SYNC: back to ANALOG (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
+                    }
+                    fmg_force_page = fp; fmg_fx = fx0;
+                }
                 song.g[G_DTIME] = (int16_t)sv; song.g[G_DRREV] = (int16_t)sr;
             }
             {   /* a type's names: the five reverbs, eight delays, three choruses */
