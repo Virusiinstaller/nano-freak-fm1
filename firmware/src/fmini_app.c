@@ -279,7 +279,7 @@ static void fa_filtmod(int hot)
     const fmgf_t *f = fmg_field(3u, 5u);
     int on = fmg_sw_on(f);
     int32_t x = 24, y = 180, w = 24, h = 12;
-    fa_ctext(36, 164, &AF_X, f->lb, hot ? FA_OR : FA_CR);
+    fa_ctext(36, 169, &AF_X, f->lb, hot ? FA_OR : FA_CR);      /* its name just above, as MODE is above LP / HP */
     if (hot)
         cv_frame(x - 3, y - 3, w + 6, h + 6, FA_OR);
     cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
