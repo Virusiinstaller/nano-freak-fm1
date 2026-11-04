@@ -199,10 +199,11 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
 {
     const char *lb, *un;
     char val[16];
-    int32_t ratio, k, cy = 84, n = 11, a;
+    int32_t ratio, k, cy = 84, n = 11, a, dy = pg == 6u ? 10 : 0;   /* FX: the knobs and their labels 10 px lower */
     uint32_t ic;
     const fmgf_t *f = fmg_field(pg, i);
     uint16_t lab = hot ? FA_OR : FA_CR;
+    cy += dy;
     fmg_card_at(pg, i, -1, &lb, val, &un, &ratio, &ic);
     n = f->kind == FK_NAME && f->b == FN_RANGE ? 6 : 11;
     for (k = 0; k < n; k++) {                              /* the scale: ticks, then the numerals or the ranges */
@@ -229,19 +230,19 @@ static void fa_knob_col(uint32_t pg, uint32_t i, int32_t cx, int hot)
         int32_t ai = a % 360 * 1024 / 360, px = cx + SINE[ai & 1023] * 12 / 32768, py = cy - SINE[(ai + 256) & 1023] * 12 / 32768;
         cv_rect(px - 1, py - 1, 3, 3, FA_RGB(0xF6, 0xF1, 0xE3));
     }
-    fa_ctext(cx, 38, &AF_X, f->lb, lab);
+    fa_ctext(cx, 38 + dy, &AF_X, f->lb, lab);
     if (f->kind == FK_NAME && f->b == FN_RANGE) {
         str_cpy(val, FMG_RANGE[clamp((int32_t)fmg_byte(f->a), 0, 5)], 16);
     } else {
         fa_val(val, ratio, f);
     }
-    fa_ctext(cx, 112, &AF_S, val, FA_OR);
+    fa_ctext(cx, 112 + dy, &AF_S, val, FA_OR);
     {
         char kn[5] = {'K', (char)('1' + i), 0, 0, 0};
         if (pg == 6u)                                      /* FX: the parameter each knob sets (the effect is the label above) */
             str_cpy(kn, i == 3u ? "GAIN" : "MIX", 5);
         if (pg != 2u)                                      /* MIXER: no K1..K4 under its knobs */
-            fa_ctext(cx, 127, &AF_X, kn, FA_RGB(0x5D, 0x55, 0x4A));
+            fa_ctext(cx, 127 + dy, &AF_X, kn, FA_RGB(0x5D, 0x55, 0x4A));
     }
 }
 
@@ -448,18 +449,6 @@ static void fa_fader(uint32_t pg, uint32_t i, int32_t cx, int hot)
     else if (f->a == G_CRATE)                              /* RATE in Hz */
         str_cpy(val + str_len(val), "Hz", 4);
     fa_ctext(cx, 186, &AF_S, val, FA_OR);
-}
-
-/* the FX page's EDIT button under each effect: a beige frame, a dark inside, EDIT; the cursor an orange frame */
-static void fa_edit_btn(int32_t cx, int hot)
-{
-    const uint16_t dk = FA_RGB(0x0D, 0x0C, 0x0B), bg = FA_RGB(0xD9, 0xD2, 0xC0);
-    int32_t x = cx - 22, y = 156, ty = y + 1 + (19 - AF_X_CAP_H) / 2 - AF_X_CAP_Y;
-    if (hot)
-        cv_frame(x - 3, y - 3, 50, 25, FA_OR);
-    cv_rect(x, y, 44, 21, bg);
-    cv_rect(x + 1, y + 1, 42, 19, dk);
-    cv_text_on(cx - text_w(&AF_X, "EDIT") / 2, ty, &AF_X, "EDIT", hot ? FA_OR : FA_CR, dk);
 }
 
 /* one knob of an FX pop-up: a scale of ticks, the dial and its pointer, the label above and the value below */
@@ -1467,12 +1456,7 @@ static void fa_scene(void)
     } else if (pg == 3u || pg == 4u || pg == 5u) {
         fa_graph(pg);
     } else if (pg == 6u) {                                   /* FX: DECAY TEMPO RATE TONE under their sends, a thin bar between the four sections */
-        for (i = 0; i < 4u; i++)
-            fa_edit_btn(36 + (int32_t)i * 56, cur == 4u + i);
-        for (i = 1; i < 4u; i++) {                         /* the bars between the sections: a bright core with a faint glow */
-            cv_rect(7 + (int32_t)i * 56, 38, 3, 168, FA_RGB(0x4A, 0x40, 0x32));
-            cv_rect(8 + (int32_t)i * 56, 38, 1, 168, FA_RGB(0xD2, 0xC2, 0xA2));
-        }
+        fa_ctext(120, 170, &AF_S, "Press FX to edit effects.", FA_MU);   /* under the four knobs */
     } else {
         for (i = 0; i < ex; i++)
             fa_switch(pg, i, 36 + (int32_t)i * 56, cur == 4u + i);
