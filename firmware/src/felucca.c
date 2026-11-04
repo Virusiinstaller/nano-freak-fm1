@@ -28,6 +28,9 @@
 #ifndef FELUCCA_UAC_TONE
 #define FELUCCA_UAC_TONE 0       /* bench: the USB input sends test triangles instead of the music */
 #endif
+#ifndef FELUCCA_UAC_OUT
+#define FELUCCA_UAC_OUT (FELUCCA_UAC && !FELUCCA_CDC)   /* USB audio out (the playback interface; no data yet) */
+#endif
 #ifndef FELUCCA_UART
 #define FELUCCA_UART 1           /* TRS MIDI IN on UART1 / PH8 */
 #endif

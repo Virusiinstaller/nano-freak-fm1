@@ -237,6 +237,16 @@ EOF
         "$OUT/usb_desc_test"
 done
 
+# USB audio out (FELUCCA_UAC_OUT, step 1: the playback interface's descriptors; no data yet): without the
+# console (the only build it is allowed in), 44.1 / 48 kHz, the AC collection in both orders
+for t_asf in 1 0; do
+    $CC -DT_CDC=0 -DT_UAC=1 -DT_LAYOUT=0 -DT_ON=0 -DT_48K=1 -DT_ASF=$t_asf -DT_OUT=1 -o "$OUT/usb_desc_test" \
+        tests/usb_desc_test.c
+    run "USB descriptors + playback (FELUCCA_UAC_OUT): AS first $t_asf, 48 kHz" "$OUT/usb_desc_test"
+done
+$CC -DT_CDC=0 -DT_UAC=1 -DT_LAYOUT=0 -DT_ON=0 -DT_48K=0 -DT_ASF=1 -DT_OUT=1 -o "$OUT/usb_desc_test" tests/usb_desc_test.c
+run "USB descriptors + playback (FELUCCA_UAC_OUT): 44.1 kHz only" "$OUT/usb_desc_test"
+
 PKG=$(ls build/fmini-1-fm1-*.fwsc 2>/dev/null | head -1)
 APP=$(ls build/fmini-1-fm1-*.bin 2>/dev/null | grep -v -- -app.bin | head -1)
 [ -f "$PKG" ] || { echo "run ./build.sh first"; exit 1; }

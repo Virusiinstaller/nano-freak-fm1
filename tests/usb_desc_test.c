@@ -37,6 +37,10 @@
 #define T_ASF 1
 #endif
 #define FELUCCA_UAC_AS_FIRST T_ASF
+#ifndef T_OUT
+#define T_OUT 0                                  /* FELUCCA_UAC_OUT: the playback stream */
+#endif
+#define FELUCCA_UAC_OUT T_OUT
 static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"   /* SIE register macros (never touched here) */
 #include "../firmware/src/usb.c"
@@ -57,7 +61,7 @@ static uint32_t le16(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8; }
 #define CDC_SHOWN (T_CDC && T_ON)
 #define AUDIO_48K (T_UAC && T_48K)
 #define AS_FIRST (T_UAC && T_ASF)
-#define BCD_EXPECT (0x300u + 0x10 * (T_UAC + AUDIO_48K) + 0x08 * AS_FIRST + (CDC_SHOWN ? 1 + 2 * T_LAYOUT : 0))
+#define BCD_EXPECT (0x300u + 0x10 * (T_UAC + AUDIO_48K) + 0x08 * AS_FIRST + 0x40 * T_OUT + (CDC_SHOWN ? 1 + 2 * T_LAYOUT : 0))
 
 /* AppleUSBAudio-273.4.1 AUAConfigurationDictionary::parseConfigurationDescriptor (the kernel USB audio driver of
  * macOS up to 15), reduced to its walk of the AC collection: the list of baInterfaceNr is walked with the count
@@ -163,7 +167,7 @@ int main(void)
     int cm_ok = !CDC_SHOWN, coll_ok = 0;
     int cur_if = -1, cur_neps = 0, got = 0, iad_next = -1, iad_cls = 0, iad_sub = 0;
     uint8_t if_class[16], if_sub[16], in_iad[16], seen[16], coll[4], ncoll = 0, eps[16];
-    int aud_if = -1, midi_if = -1, as_if = -1, comm_if = -1, data_if = -1;
+    int aud_if = -1, midi_if = -1, as_if = -1, comm_if = -1, data_if = -1, out_if = -1;
     char name[128];
 
     memset(if_class, 0, sizeof if_class);
@@ -243,8 +247,12 @@ int main(void)
                 aud_if = d[2];
             if (d[5] == 1 && d[6] == 3)
                 midi_if = d[2];
-            if (d[5] == 1 && d[6] == 2)
-                as_if = d[2];
+            if (d[5] == 1 && d[6] == 2) {
+                if (as_if < 0)
+                    as_if = d[2];
+                else if (d[2] != as_if)
+                    out_if = d[2];                  /* the playback stream (FELUCCA_UAC_OUT) */
+            }
             if (d[5] == 2 && d[6] == 2)
                 comm_if = d[2];
             if (d[5] == 10)
@@ -263,7 +271,10 @@ int main(void)
                 eps_ok = 0;
             if (d[2] == 0x82 && !(d[3] == 3 && cur_if == comm_if))
                 eps_ok = 0;
-            if ((d[2] == 0x03 || d[2] == 0x83) && !(d[3] == 2 && cur_if == data_if))
+            if (d[2] == 0x03 && T_OUT) {
+                if (!((d[3] & 0x03) == 1 && cur_if == out_if))
+                    eps_ok = 0;             /* playback: isochronous, in its stream setting */
+            } else if ((d[2] == 0x03 || d[2] == 0x83) && !(d[3] == 2 && cur_if == data_if))
                 eps_ok = 0;
             break;
         case 0x24:
@@ -283,18 +294,21 @@ int main(void)
     }
     if (cur_if >= 0 && got != cur_neps)
         eps_ok = 0;
-    if (AS_FIRST)                                      /* 1.5.1 (#67): audio streaming, then MIDI */
+    if (T_OUT)                                         /* the playback stream last, MIDI last with AS_FIRST */
+        coll_ok = ncoll == 3 && (AS_FIRST ? coll[0] == as_if && coll[1] == out_if && coll[2] == midi_if
+                                          : coll[0] == midi_if && coll[1] == as_if && coll[2] == out_if);
+    else if (AS_FIRST)                                 /* 1.5.1 (#67): audio streaming, then MIDI */
         coll_ok = ncoll == 2 && coll[0] == as_if && coll[1] == midi_if;
     else
         coll_ok = ncoll == 1 + T_UAC && coll[0] == midi_if && (!T_UAC || coll[1] == as_if);
 
     check("descriptor lengths add up to wTotalLength", lens_ok && off == n);
     snprintf(name, sizeof name, "bNumInterfaces %u = the interfaces, numbered 0..n-1 in order", (unsigned)c[4]);
-    check(name, order_ok && c[4] == nif && nif == 2u + T_UAC + 2u * CDC_SHOWN);
+    check(name, order_ok && c[4] == nif && nif == 2u + T_UAC + T_OUT + 2u * CDC_SHOWN);
     check("each setting has bNumEndpoints endpoints, each on its interface", eps_ok);
     snprintf(name, sizeof name, "endpoint addresses unique (%u: MIDI 01 81%s%s)", (unsigned)eps_n,
-             CDC_SHOWN ? ", CDC 82 03 83" : "", T_UAC ? ", audio 84" : "");
-    check(name, dup_ok && eps_n == 2u + 3u * CDC_SHOWN + T_UAC);
+             CDC_SHOWN ? ", CDC 82 03 83" : "", T_UAC ? (T_OUT ? ", audio 84, playback 03" : ", audio 84") : "");
+    check(name, dup_ok && eps_n == 2u + 3u * CDC_SHOWN + T_UAC + T_OUT);
     if (CDC_SHOWN) {
         snprintf(name, sizeof name, "IADs: audio IF %d-%d, CDC IF %d-%d, before their first interface", aud_if,
                  aud_if + 1 + T_UAC, comm_if, comm_if + 1);
@@ -315,22 +329,53 @@ int main(void)
               aua_parses_as(c, n) == AS_FIRST);
     check("UAC_AS_IF (SET_INTERFACE / GET_INTERFACE) = the audio streaming interface",
           !T_UAC || (int)UAC_AS_IF == as_if);
+#if T_OUT
+    check("UAC_AS_OUT_IF (playback SET_INTERFACE / GET_INTERFACE) = the playback interface",
+              (int)UAC_AS_OUT_IF == out_if);
+#endif
     check("CDC union and call management name the data interface", union_ok && cm_ok &&
           (!CDC_SHOWN || (data_if == comm_if + 1 && if_class[data_if] == 10)));
 
     /* ---- the released bytes ---- */
-    if (CDC_SHOWN && T_LAYOUT == 0)
+    if (CDC_SHOWN && T_LAYOUT == 0 && !T_OUT)
         check(AS_FIRST    ? "layout 0 = Felucca 1.0 + the 48 kHz rate (if built) + the AC collection order, nothing else"
               : AUDIO_48K ? "layout 0 = Felucca 1.0 + the 48 kHz rate (format, EP 0x84 size, bcdDevice), nothing else"
                           : "layout 0 = Felucca 1.0 byte for byte",
               T_UAC ? same_as(dev, c, n, V10_CDC_DEV, V10_CDC_CFG, sizeof V10_CDC_CFG)
                     : same_as(dev, c, n, V10_CDC_NOUAC_DEV, V10_CDC_NOUAC_CFG, sizeof V10_CDC_NOUAC_CFG));
-    if (!CDC_SHOWN)
+    if (!CDC_SHOWN && !T_OUT)
         check(AS_FIRST    ? "without the console = 1.0's FELUCCA_CDC=0 build + 48 kHz (if built) + the AC order"
               : AUDIO_48K ? "without the console = 1.0's FELUCCA_CDC=0 build + the 48 kHz rate, nothing else"
                           : "without the console = a FELUCCA_CDC=0 build of 1.0 byte for byte",
               T_UAC ? same_as(dev, c, n, V10_NOCDC_DEV, V10_NOCDC_CFG, sizeof V10_NOCDC_CFG)
                     : same_as(dev, c, n, V10_MIDI_DEV, V10_MIDI_CFG, sizeof V10_MIDI_CFG));
+#if T_OUT
+    {                                          /* the playback stream (FELUCCA_UAC_OUT) */
+        int pit = 0, pot = 0, pgen = 0, pep = 0, pcs = 0, palt = 0, pfmt = 0;
+        for (off = 0; off < n; off += c[off]) {
+            const uint8_t *d = c + off;
+            if (d[1] == 4 && d[2] == out_if)           /* alt 0: no endpoint; alt 1: one isochronous */
+                palt |= (d[3] == 0 && d[4] == 0) ? 1 : 0;
+            if (d[1] == 4 && d[2] == out_if && d[3] == 1)
+                palt |= (d[4] == 1 && d[5] == 1 && d[6] == 2) ? 2 : 0;
+            if (d[1] == 0x24 && d[2] == 2 && d[3] == 3)    /* input terminal 3: USB streaming, 2 ch (L R) */
+                pit = d[0] == 12 && le16(d + 4) == 0x0101 && d[7] == 2 && le16(d + 8) == 0x0003;
+            if (d[1] == 0x24 && d[2] == 3 && d[3] == 4)    /* output terminal 4: speaker, from 3 */
+                pot = d[0] == 9 && le16(d + 4) == 0x0301 && d[7] == 3;
+            if (d[1] == 0x24 && d[2] == 1 && d[3] == 3)    /* AS general: terminal 3, PCM */
+                pgen = d[0] == 7 && d[4] == 1 && le16(d + 5) == 1;
+            if (d[1] == 0x24 && d[2] == 2 && d[3] == 1 && d[4] == 2 && d[5] == 2 && d[6] == 16)
+                pfmt++;                                    /* type I, 2 ch, 16 bit: the in and the out stream */
+            if (d[1] == 5 && d[2] == 0x03)                 /* EP 03 OUT isochronous adaptive, 1 ms */
+                pep = d[0] == 9 && d[3] == 0x09 && le16(d + 4) == UAC_MAXP && d[6] == 1;
+            if (d[1] == 0x25 && d[0] == 7 && d[2] == 1 && d[3] == 0x01)   /* audio CS endpoint (not MIDI's 5-byte one) */
+                pcs++;
+        }
+        check("playback: IT 3 (USB streaming, L R), OT 4 (speaker, from 3), AS general from 3", pit && pot && pgen);
+        check("playback: alt 0 no endpoint, alt 1 one, 2 ch 16 bit format, EP 03 iso adaptive, 2 CS",
+              palt == 3 && pfmt == 2 && pep && pcs == 2);
+    }
+#endif
     if (T_UAC) {                                       /* the audio streaming format, as a host lists the rates */
         uint32_t rates = 0, r0 = 0, r1 = 0, maxp = 0, as = 0;
         for (off = 0; off < n; off += c[off]) {

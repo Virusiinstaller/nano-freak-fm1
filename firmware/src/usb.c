@@ -230,6 +230,12 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 #error "FELUCCA_USB_LAYOUT is 0..3"
 #endif
 
+#ifndef FELUCCA_UAC_OUT
+#define FELUCCA_UAC_OUT 0
+#endif
+#if FELUCCA_UAC_OUT && (!FELUCCA_UAC || FELUCCA_CDC)
+#error "FELUCCA_UAC_OUT needs FELUCCA_UAC and no FELUCCA_CDC (the console's bulk pipe is EP3)"
+#endif
 #define D_CFG(len, nif) 9, 2, (len) & 0xFF, (len) >> 8, (nif), 1, 0, 0x80, 50
 #define D_IAD(first, n, cls, sub, proto) 8, 0x0B, (first), (n), (cls), (sub), (proto), 0
 #if FELUCCA_UAC_48K
@@ -242,7 +248,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 #define FMT_LEN 0
 #endif
 #if FELUCCA_UAC
-/* the AC header's collection (#67): the audio streaming interface first, then the MIDI one. The kernel
+/* the AC header's collection (#67): the audio streaming interfaces first, then the MIDI one. The kernel
  * AppleUSBAudio (macOS up to 15; its last published source, AppleUSBAudio-273.4.1,
  * AUAConfigurationDictionary::parseConfigurationDescriptor) drops a
  * MIDI streaming interface from the collection while it walks it with the count from bInCollection: with
@@ -250,6 +256,36 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
  * streaming interface and no audio device appears (MIDI still works). Listed last, MIDI is dropped at the
  * end of the walk and the audio streaming interface is parsed. The class spec gives the order no meaning
  * (Linux takes each listed interface on its own); FELUCCA_UAC_AS_FIRST=0: 1.0 .. 1.5's order (MIDI first). */
+#if FELUCCA_UAC_OUT
+/* FELUCCA_UAC_OUT (step 1: descriptors only): the playback stream is interface a+3, endpoint 3 OUT
+ * (isochronous, adaptive), fed by a second USB streaming input terminal (3) and a speaker output (4). */
+#if FELUCCA_UAC_AS_FIRST
+#define AC_COLL(a) (a) + 2, (a) + 3, (a) + 1
+#else
+#define AC_COLL(a) (a) + 1, (a) + 2, (a) + 3
+#endif
+#define D_AC(a)                                                                                      \
+    9, 4, (a), 0, 0, 1, 1, 0, 0,                                                                     \
+    11, 0x24, 1, 0x00, 0x01, 53, 0, 3, AC_COLL(a),         /* AC header 1.00: audio + MIDI streaming */ \
+    12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 1: line, 2 ch (L R) */      \
+    9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */ \
+    12, 0x24, 2, 3, 0x01, 0x01, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 3: USB streaming, 2 ch (playback) */ \
+    9, 0x24, 3, 4, 0x01, 0x03, 0, 3, 0,                    /* output terminal 4: speaker, from 3 */
+#define D_AS(s)                                                                                      \
+    9, 4, (s), 0, 0, 1, 2, 0, 0,                           /* audio streaming, alt 0: no bandwidth */    \
+    9, 4, (s), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
+    7, 0x24, 1, 2, 1, 0x01, 0x00,                          /* AS general: terminal 2, delay 1, PCM */   \
+    D_FMT                                                  /* type I: 2 ch, 16 bit, the rates */        \
+    9, 5, 0x84, 0x05, UAC_MAXP & 0xFF, UAC_MAXP >> 8, 1, 0, 0,   /* EP4 IN isochronous async, 1 ms */   \
+    7, 0x25, 1, 0x01, 0, 0, 0,                             /* CS endpoint: sampling frequency control */
+#define D_ASO(s)                                                                                     \
+    9, 4, (s), 0, 0, 1, 2, 0, 0,                           /* playback, alt 0: no bandwidth */          \
+    9, 4, (s), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
+    7, 0x24, 1, 3, 1, 0x01, 0x00,                          /* AS general: terminal 3, delay 1, PCM */   \
+    D_FMT                                                  /* type I: 2 ch, 16 bit, the rates */        \
+    9, 5, 0x03, 0x09, UAC_MAXP & 0xFF, UAC_MAXP >> 8, 1, 0, 0,   /* EP3 OUT isochronous adaptive, 1 ms */ \
+    7, 0x25, 1, 0x01, 0, 0, 0,                             /* CS endpoint: sampling frequency control */
+#else
 #if FELUCCA_UAC_AS_FIRST
 #define AC_COLL(a) (a) + 2, (a) + 1
 #else
@@ -267,9 +303,12 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     D_FMT                                                  /* type I: 2 ch, 16 bit, the rates */        \
     9, 5, 0x84, 0x05, UAC_MAXP & 0xFF, UAC_MAXP >> 8, 1, 0, 0,   /* EP4 IN isochronous async, 1 ms */   \
     7, 0x25, 1, 0x01, 0, 0, 0,                             /* CS endpoint: sampling frequency control */
+#define D_ASO(s)
+#endif
 #else
 #define D_AC(a) 9, 4, (a), 0, 0, 1, 1, 0, 0, 9, 0x24, 1, 0x00, 0x01, 9, 0, 1, (a) + 1,
 #define D_AS(s)
+#define D_ASO(s)
 #endif
 #define D_MIDI(m)                                                                                    \
     9, 4, (m), 0, 2, 1, 3, 0, 0,                                                                     \
@@ -282,9 +321,9 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     5, 0x25, 1, 1, 1,                                                                                \
     9, 5, 0x81, 2, 64, 0, 0, 0, 0,                                                                   \
     5, 0x25, 1, 1, 3,
-#define D_AUDIO(a) D_AC(a) D_MIDI((a) + 1) D_AS((a) + 2)   /* audio + MIDI from interface a */
-#define AUD_NIF (2 + FELUCCA_UAC)
-#define AUD_LEN (92 + (63 + FMT_LEN) * FELUCCA_UAC)
+#define D_AUDIO(a) D_AC(a) D_MIDI((a) + 1) D_AS((a) + 2) D_ASO((a) + 3)   /* audio + MIDI from interface a */
+#define AUD_NIF (2 + FELUCCA_UAC + FELUCCA_UAC_OUT)
+#define AUD_LEN (92 + (63 + FMT_LEN) * (FELUCCA_UAC + FELUCCA_UAC_OUT))
 #define D_CDC(c)                                                                                     \
     D_IAD((c), 2, 2, 2, 1),                                /* IAD: CDC ACM */                           \
     9, 4, (c), 0, 1, 2, 2, 1, 0,                           /* communication */                          \
@@ -298,7 +337,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     7, 5, 0x83, 2, 64, 0, 0,                               /* EP3 IN bulk */
 #define CDC_LEN 66                                         /* with its IAD */
 #define BCD_LO(cdc)                                                                                  \
-    (0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + 0x08 * FELUCCA_UAC_AS_FIRST + ((cdc) ? 0x01 + 2 * FELUCCA_USB_LAYOUT : 0))
+    (0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + 0x08 * FELUCCA_UAC_AS_FIRST + 0x40 * FELUCCA_UAC_OUT + ((cdc) ? 0x01 + 2 * FELUCCA_USB_LAYOUT : 0))
 #define D_DEV(bcdusb, cls, sub, proto, cdc)                                                          \
     18, 1, (bcdusb) & 0xFF, (bcdusb) >> 8, (cls), (sub), (proto), 64, 0x09, 0x12, FELUCCA_USB_PID & 0xFF, \
     FELUCCA_USB_PID >> 8, BCD_LO(cdc), 0x03, 1, 2, 0, 1
@@ -347,6 +386,10 @@ static uint8_t usb_cdc_on = FELUCCA_CDC_DEFAULT != 0;      /* the console is pre
 #define AUD_IF 0u
 #endif
 #define UAC_AS_IF (AUD_IF + 2u)
+#if FELUCCA_UAC_OUT
+#define UAC_AS_OUT_IF (AUD_IF + 3u)                        /* the playback stream */
+static uint8_t uac_out_alt;                                /* its alt setting (step 1: no stream yet) */
+#endif
 static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
 static const uint8_t STR1[] = {36, 3, 'G', 0, 'u', 0, 'i', 0, 'l', 0, 'h', 0, 'e', 0, 'r', 0, 'm', 0, 'e', 0, ' ', 0, 'R', 0, 'u', 0, 'p', 0, 'p', 0, 'e', 0, 'r', 0, 't', 0};   /* the manufacturer */
 #ifdef FELUCCA_LOADER
@@ -629,6 +672,9 @@ static void ep0_service(void)
 #if FELUCCA_UAC
         if (usb.config != 1u)
             uac_stream(0);
+#if FELUCCA_UAC_OUT
+        uac_out_alt = 0;
+#endif
         uac_rate_set(UAC_RATE);                         /* a new configuration starts at 44.1 */
 #endif
         goto ack;
@@ -642,6 +688,12 @@ static void ep0_service(void)
         return;
     case 0x010B:                                        /* SET_INTERFACE: alt 0 (alt 1 for the audio stream) */
 #if FELUCCA_UAC
+#if FELUCCA_UAC_OUT
+        if (s[4] == UAC_AS_OUT_IF && wvalue <= 1u && usb.config) {
+            uac_out_alt = (uint8_t)wvalue;                  /* step 1: accepted, no data yet */
+            goto ack;
+        }
+#endif
         if (s[4] == UAC_AS_IF && wvalue <= 1u && usb.config) {
             uac_ep4_reset();
             uac_stream(wvalue);
@@ -653,6 +705,12 @@ static void ep0_service(void)
         goto stall;
     case 0x810A:
 #if FELUCCA_UAC
+#if FELUCCA_UAC_OUT
+        if (s[4] == UAC_AS_OUT_IF) {
+            e0_send(&uac_out_alt, 1, wlength);
+            return;
+        }
+#endif
         if (s[4] == UAC_AS_IF) {
             static uint8_t alt;
             alt = uac.alt;
