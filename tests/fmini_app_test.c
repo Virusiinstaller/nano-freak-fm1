@@ -930,9 +930,20 @@ int main(int argc, char **argv)
                 if (fmg_fx != (q < 3u ? q + 2u : 0u)) { printf("FX cycles %u -> %u\n", q, fmg_fx); return 1; }
                 fmg_fx = 0; fmg_cur[6] = (uint8_t)(4u + q);
             }
-            {   /* a type's names: the five reverbs, seven delays, three choruses */
+            {   /* A-SYNC: shown after ANALOG; its TIME is the ARP RATE's note values (0..9), synced to the tempo */
+                uint32_t sv = song.g[G_DTIME], sr = song.g[G_DRREV];
+                if (param_turn(&GP[G_DTIME], 0, 1) != 7 || param_turn(&GP[G_DTIME], 7, 1) != 1 || param_turn(&GP[G_DTIME], 1, -1) != 7) {
+                    printf("A-SYNC is the type after ANALOG\n"); return 1;
+                }
+                song.g[G_DTIME] = 7; song.g[G_DRREV] = 0;
+                if (delay_samples() != div_samples(0)) { printf("A-SYNC: 1/4 is the tempo's quarter (%u)\n", delay_samples()); return 1; }
+                song.g[G_DRREV] = 2;
+                if (delay_samples() != div_samples(2)) { printf("A-SYNC: 1/16\n"); return 1; }
+                song.g[G_DTIME] = (int16_t)sv; song.g[G_DRREV] = (int16_t)sr;
+            }
+            {   /* a type's names: the five reverbs, eight delays, three choruses */
                 char v[16]; const char *u; uint32_t n;
-                static const struct { uint8_t id; uint8_t n; const char *last; } TY[4] = {{G_RTYPE, 5, "CLOUD"}, {G_DTIME, 7, "REVERSE"}, {G_ENGGO, 3, "MULTI"}, {G_INFO, 2, "TUBE"}};
+                static const struct { uint8_t id; uint8_t n; const char *last; } TY[4] = {{G_RTYPE, 5, "CLOUD"}, {G_DTIME, 8, "A-SYNC"}, {G_ENGGO, 3, "MULTI"}, {G_INFO, 2, "TUBE"}};
                 for (n = 0; n < 4u; n++) {
                     str_cpy(v, GP[TY[n].id].names[GP[TY[n].id].max], 16);
                     if (GP[TY[n].id].max + 1 != TY[n].n || strcmp(v, TY[n].last)) { printf("type list %u: %d '%s'\n", n, GP[TY[n].id].max + 1, v); return 1; }

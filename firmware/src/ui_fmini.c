@@ -219,6 +219,8 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
     }
     case FK_GLB: {                                    /* a global (reverb decay, delay tempo, chorus rate, drive tone) */
         const param_desc_t *d = &GP[f->a];
+        if (f->a == G_DRREV && song.g[G_DTIME] == 7)  /* A-SYNC's TIME: the ARP RATE's note values, in its order */
+            d = &TP[P_ARATE];
         song.g[f->a] = (int16_t)param_turn(d, song.g[f->a], fmg_acc(role, s, d->fmt == F_ENUM ? 0 : d->max - d->min));
         fmg_gdirty = 1;
         break;
@@ -347,6 +349,12 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
     case FK_GLB: {
         const param_desc_t *d = &GP[f->a];
         v = vo >= 0 ? vo : song.g[f->a];
+        if (f->a == G_DRREV && song.g[G_DTIME] == 7) {   /* A-SYNC's TIME: the note value (ARP RATE's names) */
+            d = &TP[P_ARATE];
+            param_format(d, v, val, unit);
+            *ratio = RATIO(d, v);
+            return;
+        }
         if (f->a == G_DRREV) {                        /* the delay time in ms */
             fmt_int(val, dly_ms(v));
             str_cpy(val + str_len(val), "ms", 4);

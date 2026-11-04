@@ -301,8 +301,18 @@ static uint32_t div_samples(uint32_t div)
 /* the delay's TIME (params.c N_DTIME): N_DIV's ten (div_samples), then 1.5.1's dotted 1/8D 1/16D 1/4D (10, 11, 12: 3/4,
  * 3/8, 3/2 of a quarter); at most DLY_LEN - 1 samples (1.486 s): 1/4D clamps at 60 BPM and below (1/2 below 81) */
 static const uint8_t DIV_DOT[3] = {2, 3, 1};           /* 3 quarters >> this */
+/* the delay's algorithm: A-SYNC (7) is ANALOG's, its TIME in note values (delay_samples) */
+static uint32_t dly_kind(void)
+{
+    uint32_t d = (uint32_t)song.g[G_DTIME];
+    return d == 7u ? 0u : d % 7u;
+}
 static uint32_t delay_samples(void)
 {
+    if (song.g[G_DTIME] == 7) {                          /* A-SYNC: the time in N_DIV's note values (G_DRREV, 0..9), the tempo's */
+        uint32_t s = div_samples((uint32_t)clamp(song.g[G_DRREV], 0, 9));
+        return s < 16u ? 16u : s >= DLY_LEN ? DLY_LEN - 1u : s;
+    }
 #if FELUCCA_FMINI_ONLY
     {   /* FMini-1: the time in ms (FX > TIME) */
         uint32_t m = (uint32_t)dly_ms(song.g[G_DRREV]) * (uint32_t)FS / 1000u;
@@ -1046,7 +1056,7 @@ static inline void dly_put(int32_t v)                       /* the loop's input 
  *   reach 743 ms (the line's 65 k samples hold 2T). */
 static __attribute__((noinline)) void dly_block(const int32_t *dly_in, int32_t *wet, uint32_t n, int32_t fb)
 {
-    uint32_t i, ty = (uint32_t)song.g[G_DTIME] % 7u, w;
+    uint32_t i, ty = dly_kind(), w;
     int32_t dmix = song.g[G_DMIX] * 258, tgt = (int32_t)delay_samples() << 8, st = tgt - fx.dl_q, slap;
     fx.dl_q += clamp(st, -2048, 2048);                  /* up to 8 samples a block: +-25 % speed: a quick, smooth bend */
     slap = (1323 << 8) + (((fx.dl_q >> 6) * 3277) >> 9);   /* SLAP's time, 30 ms + TIME / 10 */
@@ -1212,7 +1222,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
         fx.ds_on = 1;
     }
     if (dly_act) {
-        uint32_t ty = (uint32_t)song.g[G_DTIME] % 7u;
+        uint32_t ty = dly_kind();
         fx.ds_on |= (uint8_t)(ty == 3u || ty == 4u);
         if (ty == 6u && !fx.rv_n[0]) {                   /* REVERSE: two heads half a sweep apart, the newest sample first */
             uint32_t nn = (uint32_t)clamp(fx.dl_q >> 8, 441, 32000);
