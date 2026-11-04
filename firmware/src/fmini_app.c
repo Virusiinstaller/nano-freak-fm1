@@ -264,6 +264,7 @@ static void fa_lphp(int hot)
 {
     int on = (fmg_byte(FG_SW2) & FT_HP) != 0u;
     int32_t x = 24, y = 150, w = 24, h = 12, ty = y + (h - fa_cap_h(&AF_X)) / 2;
+    fa_ctext(36, 136, &AF_X, "MODE", FA_CR);                        /* the switch's title, above it */
     if (hot)
         cv_frame(x - 3, y - 3, w + 6, h + 6, FA_OR);
     cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
@@ -329,8 +330,8 @@ static void fa_graph(uint32_t pg)
     }
     /* FILT: the response sits right of the LP / HP button (fa_lphp); the other pages: the full width */
     if (pg == 3u) {
-        cv_rect(70, 146, 156, 46, FA_LINE);
-        cv_rect(71, 147, 154, 44, FA_BOX);
+        cv_rect(70, 136, 156, 56, FA_LINE);
+        cv_rect(71, 137, 154, 54, FA_BOX);
     } else {
         cv_rect(14, 146, 212, 46, FA_LINE);
         cv_rect(15, 147, 210, 44, FA_BOX);
@@ -342,8 +343,8 @@ static void fa_graph(uint32_t pg)
         er = e >= 120 ? 15 : e >> 3;                        /* between two of the table's 17 emphasis rows (0, 8 .. 120, 127) */
         ef = e >= 120 ? (e - 120) * 256 / 7 : (e & 7) * 32;
         xs = gx + (fo - 24 * 16) * gw / (112 * 16);         /* the singing pitch: a dotted line (the screen: MIDI 24 .. 136) */
-        for (i = 0; i < 44; i += 4)
-            cv_pset(xs, 148 + i, FA_MU);
+        for (i = 0; i < 52; i += 4)
+            cv_pset(xs, 138 + i, FA_MU);
         for (i = 0; i <= gw; i += 2) {
             int32_t c = (((24 * 16 + i * (112 * 16) / gw) - fo) * 256 / 24) + 48 * 256, ix, fr, a, b, db, y;
             c = clamp(c, 0, 71 * 256);
@@ -352,7 +353,7 @@ static void fa_graph(uint32_t pg)
             a = T[er][ix] + (((T[er][ix + 1] - T[er][ix]) * fr) >> 8);
             b = T[er + 1][ix] + (((T[er + 1][ix + 1] - T[er + 1][ix]) * fr) >> 8);
             db = (a + (((b - a) * ef) >> 8)) / 8;
-            y = 190 - (clamp(db, -50, 30) + 50) / 2;        /* -50 .. +30 dB over the 40 rows */
+            y = 190 - (clamp(db, -50, 30) + 50) * 5 / 8;    /* -50 .. +30 dB over 50 rows (140 .. 190) */
             x = gx + i;
             if (i)
                 cv_line_t(px, py, x, y, FA_OR, 2);
