@@ -822,7 +822,9 @@ int main(int argc, char **argv)
         /* GLO: TUNING (410..470 Hz, 440 = 0 cents) and TRANSPOSE (-12..+12) are global: the keys' note and the pitch follow */
         fa_gl = 1; fa_gl_row = 5; fa_tune_hz = 440; glo_tune_c = 0;
         fa_sq = 0; fa_sv = 0; fa_ar = 0; ui.force = 1; fa_draw(); dump(dir, 930);   /* GLO: TUNING, TRANSPOSE, ABOUT */
+        sig = fa_signature();
         fturn(EN_ALGO, 1);
+        if (fa_signature() == sig) { printf("tuning redraw\n"); return 1; }
         if (fa_tune_hz != 441 || glo_tune_c <= 0) { printf("tuning up\n"); return 1; }
         fa_tune_hz = 470; glo_tune_c = FA_TUNE_C[60];
         fturn(EN_ALGO, 1);
@@ -833,7 +835,9 @@ int main(int argc, char **argv)
         if (fa_tune_hz != 410 || glo_tune_c != -122) { printf("tuning clamps at 410\n"); return 1; }
         fa_tune_hz = 440; glo_tune_c = 0;
         fa_gl_row = 6; glo_transpose = 0;
+        sig = fa_signature();
         fturn(EN_ALGO, 1); fturn(EN_ALGO, 1);
+        if (fa_signature() == sig) { printf("transpose redraw\n"); return 1; }
         if (glo_transpose != 2) { printf("transpose up\n"); return 1; }
         for (k = 0; k < 20; k++) fturn(EN_ALGO, 1);
         if (glo_transpose != 12) { printf("transpose clamps at +12\n"); return 1; }
