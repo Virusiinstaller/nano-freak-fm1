@@ -270,8 +270,8 @@ static void fa_lphp(int hot)
     cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
     cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
     cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);     /* the thumb is always red */
-    fa_rtext(x - 4, ty, &AF_X, "LP", on ? FA_MU : FA_OR);
-    fa_ltext(x + w + 4, ty, &AF_X, "HP", on ? FA_OR : FA_MU);
+    fa_rtext(x - 4, ty, &AF_X, "LP", on ? FA_RGB(0x4A, 0x44, 0x3D) : FA_CR);     /* the chosen word light, the other dark, as MIX's ON / OFF */
+    fa_ltext(x + w + 4, ty, &AF_X, "HP", on ? FA_CR : FA_RGB(0x4A, 0x44, 0x3D));
 }
 /* FILT: FILT. MOD under the LP / HP button: the MOD FLT switch of CTRL (the filter follows the modulation), its name above */
 static void fa_filtmod(int hot)
@@ -285,7 +285,7 @@ static void fa_filtmod(int hot)
     cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
     cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
     cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);
-    fa_ltext(x + w + 4, y + (h - fa_cap_h(&AF_X)) / 2, &AF_X, "ON", on ? FA_OR : FA_MU);   /* the state, right of the box, coloured as LP / HP */
+    fa_ltext(x + w + 4, y + (h - fa_cap_h(&AF_X)) / 2, &AF_X, on ? "ON" : "OFF", on ? FA_CR : FA_RGB(0x4A, 0x44, 0x3D));   /* the state, right of the box, as MIX's ON / OFF */
 }
 
 /* MIXER: the noise colour, a button under NOISE: ON = PINK, OFF = WHITE, the text always in the ON colour */
