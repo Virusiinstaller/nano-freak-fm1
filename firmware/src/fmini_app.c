@@ -268,9 +268,22 @@ static void fa_lphp(int hot)
         cv_frame(x - 3, y - 3, w + 6, h + 6, FA_OR);
     cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
     cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
-    cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, on ? FA_OR : FA_RGB(0xD9, 0xD2, 0xC0));
+    cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);     /* the thumb is always red */
     fa_rtext(x - 4, ty, &AF_X, "LP", on ? FA_MU : FA_OR);
     fa_ltext(x + w + 4, ty, &AF_X, "HP", on ? FA_OR : FA_MU);
+}
+/* FILT: FILT. MOD under the LP / HP button: the MOD FLT switch of CTRL (the filter follows the modulation), its name above */
+static void fa_filtmod(int hot)
+{
+    const fmgf_t *f = fmg_field(3u, 5u);
+    int on = fmg_sw_on(f);
+    int32_t x = 24, y = 176, w = 24, h = 12;
+    fa_ctext(36, 164, &AF_X, f->lb, hot ? FA_OR : FA_CR);
+    if (hot)
+        cv_frame(x - 3, y - 3, w + 6, h + 6, FA_OR);
+    cv_rect(x, y, w, h, FA_RGB(0x4A, 0x44, 0x3D));
+    cv_rect(x + 1, y + 1, w - 2, h - 2, FA_RGB(0x0D, 0x0C, 0x0B));
+    cv_rect(on ? x + w / 2 : x + 2, y + 2, w / 2 - 2, h - 4, FA_RED);
 }
 
 /* MIXER: the noise colour, a button under NOISE: ON = PINK, OFF = WHITE, the text always in the ON colour */
@@ -1000,7 +1013,7 @@ static uint32_t fa_sound_keys(void)
  * SELECT picks a line, ALGORITHM changes it (or opens MIDI CC / ABOUT); GLO goes back, then closes. The settings are
  * kept in the flash settings record (favorites.factory rows 7 to 9: no engine of this firmware uses them).
  * MIDI CLOCK (OFF by default: the internal clock, or USB / TRS) makes the ARP and the SEQ follow that input's MIDI clock. */
-#define FA_NPG 46u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+5+4+4+8; CTRL's VOICES has no CC) */
+#define FA_NPG 47u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+6+4+4+8; CTRL's VOICES has no CC) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
 static uint8_t fa_gl_row;                                 /* 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 MIDI CLOCK, 4 PITCH BEND, 5 TUNING, 6 TRANSPOSE, 7 ABOUT */
@@ -1021,7 +1034,7 @@ static const uint8_t FA_CC0[FA_NCC] = {
     20, 5, 21, 22, 23, 24, 25, 26,                        /* CTRL: TUNE GLIDE MOD MIX LFO RATE, MOD OSC MOD FLT GLIDE LFO SQR */
     27, 28, 29, 30, 31, 33, 34, 62,                       /* OSC: ranges, DETUNE 2, waves, DETUNE 3 */
     35, 36, 37, 39, 40, 41, 42, 43, 63,                   /* MIX: levels, NOISE, switches, the noise colour (PINK / WHITE; 63 is free) */
-    74, 71, 44, 45, 72,                                   /* FILT: CUTOFF EMPHASIS CONTOUR KBD CTRL, the LP / HP (72 is free) */
+    74, 71, 44, 45, 72, 76,                               /* FILT: CUTOFF EMPHASIS CONTOUR KBD CTRL, LP / HP (72), FILT. MOD (76): free */
     46, 47, 48, 49,                                       /* F.ENV */
     73, 75, 50, 7,                                        /* A.ENV: ATTACK DECAY SUSTAIN LEVEL */
     91, 94, 93, 51, 52, 53, 54, 55,                       /* FX: REVERB DELAY CHORUS DRIVE, switches */
@@ -1035,7 +1048,7 @@ static uint8_t *fa_cfg_byte(uint32_t i) { return &favorites.factory[7u + i / 32u
 static void fa_cfg_load(void)
 {
     uint32_t i;
-    if (*fa_cfg_byte(0) == 0xA7u && *fa_cfg_byte(1) == 0x51u) {   /* 0x51: the controls' layout with FILT's LP / HP (0x50: MIXER's ninth) */
+    if (*fa_cfg_byte(0) == 0xA7u && *fa_cfg_byte(1) == 0x52u) {   /* 0x52: the controls' layout with FILT. MOD (0x51: LP / HP; 0x50: MIXER's ninth) */
         uint32_t src = *fa_cfg_byte(2), ch = *fa_cfg_byte(3);
         fm_midi_src = (uint8_t)(src == 0u || src == 1u ? src : 3u);   /* (2 was Bluetooth) */
         fm_midi_ch = (uint8_t)(ch > 16u ? 0u : ch);
@@ -1074,7 +1087,7 @@ static void fa_cfg_save(void)
     fa_cfg_dirty = 0;
     fmg_gdirty = 0;
     *fa_cfg_byte(0) = 0xA7;
-    *fa_cfg_byte(1) = 0x51;
+    *fa_cfg_byte(1) = 0x52;
     *fa_cfg_byte(2) = fm_midi_src;
     *fa_cfg_byte(3) = fm_midi_ch;
     for (i = 0; i < FA_NCC; i++)
@@ -1468,8 +1481,10 @@ static void fa_scene(void)
         fa_wave_boxes(pg, cur);
     } else if (pg == 3u || pg == 4u || pg == 5u) {
         fa_graph(pg);
-        if (pg == 3u)
+        if (pg == 3u) {
             fa_lphp(cur == 4u);                              /* FILT: the LP / HP button under CUTOFF, left of the response */
+            fa_filtmod(cur == 5u);                           /* and FILT. MOD under it */
+        }
     } else if (pg == 6u) {                                   /* FX: DECAY TEMPO RATE TONE under their sends, a thin bar between the four sections */
         fa_ctext(120, 170, &AF_S, "Press FX to edit effects.", FA_MU);   /* under the four knobs */
     } else {

@@ -43,9 +43,9 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                   {"OSC 1", FK_SW, FG_SW1, FS_O1, ICON_LEVEL}, {"OSC 2", FK_SW, FG_SW1, FS_O2, ICON_LEVEL},
                   {"OSC 3", FK_SW, FG_SW1, FS_O3, ICON_LEVEL}, {"NOISE", FK_SW, FG_SW1, FS_NZ, ICON_NOISE},
                   {"NOISE", FK_SW, FG_SW1, FS_PINK, ICON_NOISE}}},
-    {"FILTER", 5, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
+    {"FILTER", 6, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
                    {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK},
-                   {"LP/HP", FK_SW, FG_SW2, FT_HP, ICON_CUTOFF}}},   /* the button under CUTOFF: LP (left) or HP (right) */
+                   {"LP/HP", FK_SW, FG_SW2, FT_HP, ICON_CUTOFF}, {"FILT. MOD", FK_SW, FG_SW1, FS_MFLT, ICON_MOD}}},   /* LP/HP under CUTOFF; FILT. MOD under it (MOD FLT's bit) */
     {"FILTER CONTOUR", 4, {{"ATTACK", FK_PAR, P_E3, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_E4, 0, ICON_DECAY},
                        {"SUSTAIN", FK_PAR, P_E5, 0, ICON_SUSTAIN}, {"AMOUNT", FK_PAR, P_E2, 0, ICON_SWEEP}}},
     {"LOUDNESS CONTOUR", 4, {{"ATTACK", FK_PAR, P_ATK, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_DEC, 0, ICON_DECAY},

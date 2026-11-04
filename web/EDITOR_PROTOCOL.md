@@ -1056,7 +1056,8 @@ GLID (17) the kept glide time.
 
 **FILT's LP / HP (2.x, the bit 4 of SW2):** the filter's output is the low-pass ladder (0, every patch so far) or the high-pass
 (1): (1 - LP)^4 of the same four stages, 24 dB/oct. The sanitiser keeps SW2 up to 7 (before it kept 3: a patch written with 4 had
-the bit cleared). The patch's CC for it is 72 (free); the settings record's layout is 0x51 (the controls grew by one).
+the bit cleared). The patch's CC for it is 72 (free). FILT. MOD (the MOD FLT bit, FG_SW1 64, a second control of it) answers CC 76. The
+settings record's layout is 0x52 (the controls grew by two).
 
 **1.14.10 (DET FINE removed):** the fine law of 1.10 and 1.11 is gone. F2 and F3 are the coarse law again (64 = 0, 11 cents a step,
 +-7 semitones), with no switch. SW2 value 4 is no longer used: the sanitiser keeps SW2 up to 3 and clears that bit. While the GLIDE
