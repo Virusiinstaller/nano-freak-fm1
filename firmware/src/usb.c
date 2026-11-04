@@ -99,6 +99,15 @@ _Static_assert(UA_HI + HALF_FRAMES + UA_MAXF < UA_N, "the ring holds the band, a
 static uint32_t ua_ring[UA_N];
 static volatile uint32_t ua_w, ua_r;
 static uint32_t ep4tx[UA_MAXF] __attribute__((aligned(4)));
+#if FELUCCA_UAC_OUT
+/* the playback stream (EP3 OUT, step 2): the packets' frames go to pb_ring (16-bit L | R << 16, as ua_ring);
+ * step 3 reads it in the audio ISR. Written only by the TIMER5 ISR (usb_poll), so no lock. */
+#define PB_N 512u                                         /* frames, a power of two (11.6 ms at 44.1 kHz) */
+static uint32_t pb_ring[PB_N];
+static uint8_t pbrx[UAC_MAXP + 4] __attribute__((aligned(4)));   /* the EP3 OUT packet */
+static uint32_t pb_w, pb_r, pb_pkts, pb_frames, pb_drops;
+static uint8_t pb_pend;
+#endif
 static struct {
     volatile uint8_t alt;        /* streaming interface setting: 1 = the host records */
     volatile uint8_t r48;        /* the host's rate (SET_CUR): 1 = 48 kHz, 0 = 44.1 (bus reset) */
@@ -505,6 +514,64 @@ static void uac_rate_set(uint32_t hz)
 }
 #endif
 
+#if FELUCCA_UAC_OUT
+/* SET_INTERFACE of the playback stream (alt 1 = on), SET_CONFIGURATION, bus reset. The ring restarts empty:
+ * step 3 adds the reader, which then has to restart with it. */
+static void uac_out_stream(uint32_t alt)
+{
+    uac_out_alt = (uint8_t)(alt && usb.config ? 1u : 0u);
+    pb_pend = 0;
+    pb_w = 0;
+    pb_r = 0;
+    sie_wr(S_INDEX, 3);
+    if (uac_out_alt) {
+        sie_wr(S_RXMAXP, UAC_MAXP);
+        sie_wr(S_RXCSR1, 0x90);                           /* ClrDataTog + FlushFIFO (as EP1's RX) */
+        sie_wr(S_RXCSR2, 0x40);                           /* ISO */
+        fm1_usb_ep_enable(1u << 3);
+    }
+    sie_wr(S_INTRRX1E, usb.config == 1u ? (uac_out_alt ? 0x0Au : 0x02u) : 0u);   /* EP1 RX, + EP3 RX on alt 1 */
+}
+
+/* a packet's frames (16-bit L, R, little endian) into the ring: 0 when they do not fit (dropped) */
+static int uac_out_store(const uint8_t *b, uint32_t n)
+{
+    uint32_t i, f = n / 4u, w = pb_w;
+    if (PB_N - (w - pb_r) < f)
+        return 0;
+    for (i = 0; i < f; i++) {
+        const uint8_t *q = b + 4u * i;
+        pb_ring[(w + i) & (PB_N - 1u)] = (uint32_t)(q[0] | q[1] << 8) | (uint32_t)(q[2] | q[3] << 8) << 16;
+    }
+    RING_PUBLISH();
+    pb_w = w + f;
+    pb_frames += f;
+    return 1;
+}
+
+static void uac_out_rx(void)                              /* EP3 OUT: one packet; dropped when the ring is full */
+{
+    uint32_t csr, n;
+    sie_wr(S_INDEX, 3);
+    csr = sie_rd(S_RXCSR1) | (sie_rd(S_RXCSR2) << 8);
+    if (!(csr & 1u)) {
+        pb_pend = 0;
+        return;
+    }
+    n = sie_rd(S_RXCOUNT1) | (sie_rd(S_RXCOUNT2) << 8);
+    if (n > UAC_MAXP)
+        n = UAC_MAXP;
+    fm1_usb_rx_sync();
+    pb_pend = 0;
+    pb_pkts++;
+    if (!uac_out_store(pbrx, n))
+        pb_drops++;
+    csr = (csr & ~0x164u) | 0x10u;
+    sie_wr(S_RXCSR1, csr & 0xFFu);
+    sie_wr(S_RXCSR2, csr >> 8);
+}
+#endif
+
 static void ep1_config(void)
 {
     fm1_usb_ep_txbuf(1, ep1tx);
@@ -547,6 +614,10 @@ no_cdc:;
     uac_ep4_reset();
     fm1_usb_ep_enable(1u << 4);
     uac_stream(0);
+#if FELUCCA_UAC_OUT
+    fm1_usb_ep_rxbuf(3, pbrx);
+    uac_out_stream(0);
+#endif
 #endif
 }
 
@@ -673,7 +744,8 @@ static void ep0_service(void)
         if (usb.config != 1u)
             uac_stream(0);
 #if FELUCCA_UAC_OUT
-        uac_out_alt = 0;
+        if (usb.config != 1u)
+            uac_out_stream(0);
 #endif
         uac_rate_set(UAC_RATE);                         /* a new configuration starts at 44.1 */
 #endif
@@ -690,7 +762,7 @@ static void ep0_service(void)
 #if FELUCCA_UAC
 #if FELUCCA_UAC_OUT
         if (s[4] == UAC_AS_OUT_IF && wvalue <= 1u && usb.config) {
-            uac_out_alt = (uint8_t)wvalue;                  /* step 1: accepted, no data yet */
+            uac_out_stream(wvalue);
             goto ack;
         }
 #endif
@@ -1348,6 +1420,9 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
         uac.e0_rx = 0;
         uac_stream(0);
         uac_rate_set(UAC_RATE);
+#if FELUCCA_UAC_OUT
+        uac_out_stream(0);
+#endif
 #endif
         fm1_usb_ep0_buf(ep0buf);
         sie_wr(S_INTRUSBE, 0x07);
@@ -1360,6 +1435,12 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
         usb.rx_pend = 1;
     if (usb.rx_pend)                                    /* not every poll: 3 SIE round trips each */
         ep1_rx();
+#if FELUCCA_UAC_OUT
+    if (ir & 0x08u)
+        pb_pend = 1;
+    if (pb_pend && uac_out_alt)
+        uac_out_rx();
+#endif
     if (usb.config)
         ep1_tx();
 #if FELUCCA_CDC

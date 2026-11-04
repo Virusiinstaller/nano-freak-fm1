@@ -213,6 +213,10 @@ $CC -O2 -DT_CDC=1 -DHALF_FRAMES=$HALF -o "$OUT/uac_test" tests/uac_test.c -lm
 run "USB audio input: descriptors (with CDC), ring and packets, 44.1 -> 48 kHz resampler, 48 kHz stream" "$OUT/uac_test"
 $CC -O2 -DT_CDC=0 -DHALF_FRAMES=$HALF -o "$OUT/uac_test_nocdc" tests/uac_test.c -lm
 run "USB audio input: descriptors (without CDC), ring and packets, resampler, 48 kHz stream" "$OUT/uac_test_nocdc"
+# USB audio out, step 2 (FELUCCA_UAC_OUT): the playback store (EP3 OUT packets -> pb_ring): byte layout, partial
+# and largest packets, wrap-around, a full ring (drop whole), the reader's room
+$CC -O2 -DT_CDC=0 -DHALF_FRAMES=$HALF -o "$OUT/uac_out_test" tests/uac_out_test.c
+run "USB audio out: playback store (EP3 OUT packets into the ring), wrap, full ring, reader room" "$OUT/uac_out_test"
 # USB descriptor layouts (#67): CDC UAC LAYOUT CDC-presented 48K; layout 0 and the console left out = 1.0's bytes
 # (+ the 48 kHz rate with 48K = 1, the default; 48K = 0: byte for byte; + the AC collection's audio streaming
 # interface first, FELUCCA_UAC_AS_FIRST = 1, the default since 1.6)
