@@ -378,5 +378,29 @@ int main(int argc, char **argv)
         check("the mod wheel at 0 leaves the pitch still; at 127 it sways about a semitone (MOD OSC off)",
               cents(hi[0], lo[0]) < 10 && cents(hi[1], lo[1]) > 80 && cents(hi[1], lo[1]) < 220);
     }
+    {   /* 6. FT_HP (FG_SW2 bit 4): the high-pass output, (1 - LP)^4 of the same stages: a low note is cut, a high one passes */
+        static double yl[FS / 2], yh[FS / 2];
+        double lo_lp, lo_hp, hi_lp, hi_hp;
+        uint32_t a = FS / 8, b = FS / 2;
+        int k;
+        for (k = 0; k < 4; k++) {
+            setup(64, 0, 0, FS_O1);                          /* the dial at 0, no EMPHASIS: a plain ladder */
+            if (k & 1) { pv[FG_SW2] = FT_HP; fmini_set_patch(0, pv); fmini_slot[0] = FMINI_OWN; }
+            play(k < 2 ? 36u : 96u, k < 2 ? yl : yh, FS / 2);   /* a C2 (65 Hz) and a C7 (2.1 kHz) */
+            {
+                double r = 0;
+                uint32_t i;
+                for (i = a; i < b; i++) r += (k < 2 ? yl[i] : yh[i]) * (k < 2 ? yl[i] : yh[i]);
+                r = sqrt(r / (b - a));
+                if (k == 0) lo_lp = r; else if (k == 1) lo_hp = r; else if (k == 2) hi_lp = r; else hi_hp = r;
+            }
+        }
+        printf("   HP: C2 LP %.0f HP %.0f (%.1f dB), C7 LP %.0f HP %.0f (%+.1f dB)\n", lo_lp, lo_hp,
+               20 * log10(lo_hp / lo_lp), hi_lp, hi_hp, 20 * log10(hi_hp / hi_lp));
+        /* the wave is a saw: its harmonics above the corner pass the high-pass, so the low note's rms falls ~19 dB, not the
+         * 48 dB of the fundamental alone; the bar is 14 dB */
+        check("FT_HP: the high-pass output cuts a low note by 14 dB or more and passes a high one more than the low-pass",
+              lo_hp < lo_lp * 0.2 && hi_hp > hi_lp * 1.5);
+    }
     return bad ? 1 : 0;
 }

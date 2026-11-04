@@ -148,9 +148,10 @@ def tables():
     return cut, kq, trim, m0, G, GX
 
 
-def graph_rows():
+def graph_rows(hp=False):
     """the FILT page's response drawing: 17 rows (EMPHASIS 0, 8 .. 120, 127) x 73 columns (the frequency from 6 octaves
-    below the singing pitch to 3 above, an eighth of an octave a column): dB x 8, clamped to -50 .. +30 dB"""
+    below the singing pitch to 3 above, an eighth of an octave a column): dB x 8, clamped to -50 .. +30 dB.
+    hp: the high-pass output (FT_HP): (1 - H)^4 = (jw / (1 + jw))^4 over the same loop (eng_fmini.c fmini_render)"""
     import numpy as np
     rows = []
     for r in range(17):
@@ -161,7 +162,8 @@ def graph_rows():
             w = W0 * 2 ** (-6 + j / 8.0)
             h4 = 1 / (1 + 1j * w) ** 4
             hx = 1 / (1 + 1j * w / WX)
-            t = abs(h4 / (1 + min(k, KC * 0.985) * hx * h4)) * trim     # (just below singing: a line has no infinite peak)
+            out = (1j * w / (1 + 1j * w)) ** 4 if hp else h4
+            t = abs(out / (1 + min(k, KC * 0.985) * hx * h4)) * trim     # (just below singing: a line has no infinite peak)
             line.append(int(round(max(-50.0, min(30.0, 20 * math.log10(t + 1e-9))) * 8)))
         rows.append(line)
     return rows
@@ -191,6 +193,11 @@ def emit(path):
     gr = graph_rows()
     L.append("static const int16_t FMINI_GRAPH[17][73] = {   /* the FILT page's response: EMPHASIS 0, 8 .. 120, 127 x the frequency re the singing pitch (-6 .. +3 octaves, 1/8 a column), dB x 8 */")
     for line in gr:
+        L.append("    {" + ", ".join(str(v) for v in line) + "},")
+    L.append("};")
+    L.append("")
+    L.append("static const int16_t FMINI_GRAPH_HP[17][73] = {   /* the same for FT_HP (the high-pass output), dB x 8 */")
+    for line in graph_rows(hp=True):
         L.append("    {" + ", ".join(str(v) for v in line) + "},")
     L.append("};")
     L.append("")

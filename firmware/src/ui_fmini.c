@@ -43,8 +43,9 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                   {"OSC 1", FK_SW, FG_SW1, FS_O1, ICON_LEVEL}, {"OSC 2", FK_SW, FG_SW1, FS_O2, ICON_LEVEL},
                   {"OSC 3", FK_SW, FG_SW1, FS_O3, ICON_LEVEL}, {"NOISE", FK_SW, FG_SW1, FS_NZ, ICON_NOISE},
                   {"NOISE", FK_SW, FG_SW1, FS_PINK, ICON_NOISE}}},
-    {"FILTER", 4, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
-                   {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK}}},
+    {"FILTER", 5, {{"CUTOFF", FK_PAR, P_E0, 0, ICON_CUTOFF}, {"EMPHASIS", FK_PAR, P_E1, 0, ICON_RESO},
+                   {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK},
+                   {"LP/HP", FK_SW, FG_SW2, FT_HP, ICON_CUTOFF}}},   /* the button under CUTOFF: LP (left) or HP (right) */
     {"FILTER CONTOUR", 4, {{"ATTACK", FK_PAR, P_E3, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_E4, 0, ICON_DECAY},
                        {"SUSTAIN", FK_PAR, P_E5, 0, ICON_SUSTAIN}, {"AMOUNT", FK_PAR, P_E2, 0, ICON_SWEEP}}},
     {"LOUDNESS CONTOUR", 4, {{"ATTACK", FK_PAR, P_ATK, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_DEC, 0, ICON_DECAY},
@@ -438,7 +439,7 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
     case FK_BYP:
     case FK_INS:
         v = vo >= 0 ? vo : (int32_t)fmg_sw_on(f);
-        str_cpy(val, f->a == FS_PINK ? (v ? "PINK" : "WHITE") : (v ? "ON" : "OFF"), 12);   /* the noise colour: PINK or WHITE */
+        str_cpy(val, f->a == FS_PINK ? (v ? "PINK" : "WHITE") : f->b == FT_HP ? (v ? "HP" : "LP") : (v ? "ON" : "OFF"), 12);   /* the noise colour, the filter's LP / HP */
         return;
     case FK_NAME:
         v = clamp(vo >= 0 ? vo : (int32_t)fmg_byte(f->a), 0, 5);

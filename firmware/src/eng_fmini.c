@@ -44,7 +44,7 @@ enum {                           /* the patch's bytes */
     FG_NUM
 };
 enum { FS_O1 = 1, FS_O2 = 2, FS_O3 = 4, FS_NZ = 8, FS_PINK = 16, FS_MOSC = 32, FS_MFLT = 64 };   /* FG_SW1 */
-enum { FT_GLIDE = 1, FT_SQR = 2 };                                                                 /* FG_SW2 */
+enum { FT_GLIDE = 1, FT_SQR = 2, FT_HP = 4 };                                                      /* FG_SW2 (FT_HP: the high-pass output, 1.x) */
 
 /* DET 2 / 3, in cents: the signed 16-bit at bytes lo, lo + 1 (FG_DC2L, FG_DC3L). The coarse byte FG_F2 / FG_F3 (64 = 0,
  * 11 cents a step) is what a CC writes and is kept near the cents for the editor; the sound uses the cents (1.14.12). */
@@ -84,7 +84,7 @@ static int32_t fmini_mn[NTRK];                    /* the modulation noise of thi
 /* the highest value of each byte */
 static uint32_t fmini_max(uint32_t i)
 {
-    static const uint8_t MAXV[FG_NUM] = {5, 5, 5, 5, 5, 5, 127, 127, 127, 127, 127, 127, 127, 3, 127, 127, 127, 127, 127, 15, 127, 15, 127, 127};
+    static const uint8_t MAXV[FG_NUM] = {5, 5, 5, 5, 5, 5, 127, 127, 127, 127, 127, 127, 127, 7, 127,   /* FG_SW2: FT_GLIDE, FT_SQR, FT_HP */ 127, 127, 127, 127, 15, 127, 15, 127, 127};
     return i < FG_NUM ? MAXV[i] : 0u;
 }
 
@@ -412,6 +412,7 @@ static void fmini_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     int32_t mix[CTL];
     int32_t env15, mod, lfo, vib, lc, p16, fine, k12, G16, gx16, c0, c1, c2, c3, inv14, kinv12, trim12;
     int32_t l1 = 0, l2 = 0, l3 = 0, ln = 0, dr1, dr2, dr3;
+    uint32_t hp = (uint32_t)(g[FG_SW2] & FT_HP) ? 1u : 0u;      /* the output: LP (the last stage) or HP ((1 - LP)^4 of the same stages) */
     uint32_t tr = (uint32_t)(t - trk) % NTRK, i, sw = g[FG_SW1];
     uint32_t inc1, inc2, inc3;
     int32_t s0 = v->s[0], s1 = v->s[1], s2 = v->s[2], s3 = v->s[3], sx = v->s[4];
@@ -511,11 +512,12 @@ static void fmini_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     }
 
     for (i = 0; i < n; i++) {
-        int32_t x = softclip(mix[i]), S, fbc, u, v1, v2, v3, v4, y1, y2, y3, y4, w;      /* the mixer overloads softly */
+        int32_t x = softclip(mix[i]), S, fbc, u, xin, v1, v2, v3, v4, y1, y2, y3, y4, w, o;   /* the mixer overloads softly */
         S = (c0 * ((s0 + 128) >> 8) + c1 * ((s1 + 128) >> 8) + c2 * ((s2 + 128) >> 8) + c3 * ((s3 + 128) >> 8)) >> 14;   /* what the stages already hold */
         fbc = sx + fmini_mulr((S << 8) - sx, (uint32_t)gx16);              /* through the lag pole (Q8) */
         u = ((x * inv14) >> 14) - ((kinv12 * ((fbc + 128) >> 8)) >> 12);  /* the input less the feedback, the loop solved */
-        v1 = fmini_mulr((softclip(u) << 8) - s0, (uint32_t)G16);           /* each stage is a differential pair: tanh in front of it */
+        xin = softclip(u) << 8;                                              /* the first stage's input (Q8) */
+        v1 = fmini_mulr(xin - s0, (uint32_t)G16);                          /* each stage is a differential pair: tanh in front of it */
         y1 = v1 + s0;
         s0 = y1 + v1;
         v2 = fmini_mulr((softclip((y1 + 128) >> 8) << 8) - s1, (uint32_t)G16);
@@ -529,7 +531,9 @@ static void fmini_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         s3 = y4 + v4;
         w = fmini_mulr(y4 - sx, (uint32_t)gx16);                           /* the lag pole follows the output */
         sx += w + w;
-        out[i] += voice_amp((((y4 + 128) >> 8) * trim12) >> 12, m, i) << 1;
+        /* HP: the stages are one-pole lows H; (1 - H)^4 = 1 - 4H + 6H^2 - 4H^3 + H^4 on the stages' outputs (linear, the states as they are) */
+        o = hp ? xin - 4 * y1 + 6 * y2 - 4 * y3 + y4 : y4;
+        out[i] += voice_amp((((o + 128) >> 8) * trim12) >> 12, m, i) << 1;
     }
     v->ph[0] = ph0;
     v->ph[1] = ph1;
