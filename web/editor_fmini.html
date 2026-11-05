@@ -408,12 +408,17 @@ function mkSeg(c) {
   const bs = c.names.map((n, i) => { const b = document.createElement("button"); b.textContent = n; b.addEventListener("click", () => commit(c, i)); el.querySelector(".opts").append(b); return b; });
   return { el, upd: () => bs.forEach((b, i) => b.setAttribute("aria-pressed", getv(c) === i ? "true" : "false")) };
 }
+const NOT_OFFERED = new Set(["LEG", "UNI"]);
 function mkSel(c) {
   const el = document.createElement("div"); el.className = "sel";
   el.innerHTML = `<div class="t"></div><select></select>`; el.querySelector(".t").textContent = c.lb;
   const s = el.querySelector("select"), d = descOf(c);
   const n = d.names ? d.names.length : d.max - d.min + 1;
-  for (let i = 0; i < n; i++) { const o = document.createElement("option"); o.value = d.min + i; o.textContent = d.names ? d.names[i] : String(d.min + i); s.append(o); }
+  for (let i = 0; i < n; i++) {
+    const o = document.createElement("option"); o.value = d.min + i; o.textContent = d.names ? d.names[i] : String(d.min + i);
+    o.hidden = !!d.names && NOT_OFFERED.has(d.names[i]);   /* VOICE LEG / UNI: not offered, still shown when a patch has them */
+    s.append(o);
+  }
   s.addEventListener("change", () => commit(c, +s.value));
   return { el, upd: () => { if (document.activeElement !== s) s.value = getv(c); } };
 }
