@@ -115,13 +115,13 @@ int main(void)
     make_packet(UAC_MAXP / 4u);
     check("after the reader took 100 frames, a 49-frame packet fits", uac_out_store(pkt, UAC_MAXP) == 1);
 
-    /* ---- the reader (audio ISR, usb_play_mix) ---- */
+    /* ---- the reader (audio ISR, usb_play_mix): linear interpolation, the rate follows the fill ---- */
     {
         static int32_t out[2 * 64];
-        uint32_t k;
+        uint32_t k, blocks;
         int32_t l0, r0;
 
-        /* 7. nothing plays before PB_PRIME frames; then the frames, at MASTER's level, in order */
+        /* 7. nothing plays before PB_PRIME frames */
         reset_ring();
         uac_out_alt = 1;
         pb_play = 0;
@@ -135,24 +135,32 @@ int main(void)
             ok_all &= out[i] == 0;
         check("98 frames (under PB_PRIME 128): nothing plays", ok_all && pb_play == 0 && pb_r == 0);
 
-        for (k = 0; k < 2; k++)
-            uac_out_store(pkt, 4 * 15);                    /* 98 + 30 = 128 */
+        /* 8. at the target (fill 256 after the start): the step is exactly one frame, so sample i is frame i */
+        reset_ring();
+        pb_play = 0;
+        make_packet(UAC_MAXP / 4u);
+        for (k = 0; k < 5; k++)
+            uac_out_store(pkt, UAC_MAXP);                  /* 245 */
+        make_packet(13);
+        uac_out_store(pkt, 4u * 13u);                      /* 258 */
+        memset(out, 0, sizeof out);
         usb_play_mix(out, 32, 4096);
-        check("128 frames: the reader starts and takes 32", pb_play == 1 && pb_r == 32);
-        ok_all = 1;
+        ok_all = pb_play == 1 && pb_r == 34 && pb_skip == 0 && pb_rep == 0;
         for (i = 0; i < 32; i++) {
             l0 = (int32_t)(int16_t)(pb_ring[i] & 0xFFFFu);
             r0 = (int32_t)(int16_t)(pb_ring[i] >> 16);
             ok_all &= out[2 * i] == l0 && out[2 * i + 1] == r0;
         }
-        check("MASTER 4096: each frame added as it is, in order", ok_all);
+        check("at the target: sample i is frame i, step exact, no counters", ok_all);
 
-        /* 8. MASTER 2048: half; the sum is saturated at +-32767 */
+        /* 9. MASTER 2048: half the level (arithmetic shift) */
         reset_ring();
-        pb_play = 1;
+        pb_play = 0;
         make_packet(UAC_MAXP / 4u);
-        for (k = 0; k < 4; k++)
-            uac_out_store(pkt, UAC_MAXP);                  /* 196 frames, in the middle of the band */
+        for (k = 0; k < 5; k++)
+            uac_out_store(pkt, UAC_MAXP);
+        make_packet(13);
+        uac_out_store(pkt, 4u * 13u);
         memset(out, 0, sizeof out);
         usb_play_mix(out, 32, 2048);
         ok_all = 1;
@@ -160,51 +168,58 @@ int main(void)
             l0 = (int32_t)(int16_t)(pb_ring[i] & 0xFFFFu);
             ok_all &= out[2 * i] == ((l0 * 2048) >> 12);
         }
-        check("MASTER 2048: half the level (arithmetic shift)", ok_all);
-        for (i = 0; i < 64; i++)                           /* the reader is at frame 32: its L is 97, its R -33 */
-            out[i] = (i & 1u) ? -32760 : 32760;
+        check("MASTER 2048: half the level", ok_all);
+
+        /* 10. saturation of the sum at +32767 / -32768 */
+        for (i = 0; i < 64; i++)
+            out[i] = (i & 1u) ? -32768 : 32767;
         usb_play_mix(out, 32, 4096);
         check("a loud DAC signal plus the playback: saturated at +32767 / -32768",
               out[0] == 32767 && out[1] == -32768);
 
-        /* 9. the host is fast: one frame dropped while the fill is above TARGET + BAND */
+        /* 11. the host is fast (fill 439 at the start): the reader moves faster, a few counters */
         reset_ring();
-        pb_play = 1;
+        pb_play = 0;
         make_packet(UAC_MAXP / 4u);
         for (k = 0; k < 9; k++)
-            uac_out_store(pkt, UAC_MAXP);                  /* 441 frames > 384 */
+            uac_out_store(pkt, UAC_MAXP);                  /* 441 */
         memset(out, 0, sizeof out);
         usb_play_mix(out, 32, 4096);
-        check("fill 441 (above 384): one frame dropped, the reader takes 33", pb_skip == 1 && pb_r == 33);
+        check("fill 439 (above 384): the reader is faster (32 or 33 frames for 32 samples), pb_skip 1",
+              pb_skip == 1 && pb_r - 2u >= 32u && pb_r - 2u <= 33u);
 
-        /* 10. the host is slow: the last frame repeated for one frame when the fill is below 128 */
+        /* 12. the host is slow (fill 127 at the start): the reader takes fewer, pb_rep 1 */
         reset_ring();
-        pb_play = 1;
-        pb_last_l = -7;
-        pb_last_r = 9;
+        pb_play = 0;
+        make_packet(UAC_MAXP / 4u);
+        uac_out_store(pkt, UAC_MAXP);
+        uac_out_store(pkt, UAC_MAXP);
+        make_packet(31);
+        uac_out_store(pkt, 4u * 31u);                      /* 129 frames: 127 after the start */
+        memset(out, 0, sizeof out);
+        usb_play_mix(out, 32, 4096);
+        check("fill 127 (below 128): the reader takes fewer than 33, pb_rep 1",
+              pb_rep == 1 && pb_r - 2u <= 32u && pb_r - 2u >= 31u);
+
+        /* 13. the ring runs dry: silence after it, not playing, pb_under 1 */
+        reset_ring();
+        pb_play = 0;
         make_packet(UAC_MAXP / 4u);
         for (k = 0; k < 2; k++)
-            uac_out_store(pkt, UAC_MAXP);                  /* 98 frames < 128 */
+            uac_out_store(pkt, UAC_MAXP);
+        make_packet(32);
+        uac_out_store(pkt, 4u * 32u);                      /* 130 frames */
         memset(out, 0, sizeof out);
-        usb_play_mix(out, 32, 4096);
-        check("fill 98 (below 128): the first frame is stretched (blended with the next), the reader takes 31",
-              pb_rep == 1 && pb_r == 31 &&
-              out[0] == ((-7 + (int32_t)(int16_t)(pb_ring[0] & 0xFFFFu)) >> 1) &&
-              out[1] == ((9 + (int32_t)(int16_t)(pb_ring[0] >> 16)) >> 1));
-        check("... and the frames after it are the ring's, in order",
-              out[2] == (int32_t)(int16_t)(pb_ring[0] & 0xFFFFu) && out[2 * 31] == (int32_t)(int16_t)(pb_ring[30] & 0xFFFFu));
+        for (blocks = 0; blocks < 8; blocks++) {
+            memset(out, 0, sizeof out);
+            usb_play_mix(out, 32, 4096);
+            if (pb_under)
+                break;
+        }
+        check("the ring runs dry: pb_under 1, not playing, the rest of that block is silence",
+              pb_under == 1 && pb_play == 0 && out[2 * 31] == 0);
 
-        /* 11. the ring runs dry mid-block: silence for the rest, and primes again */
-        reset_ring();
-        pb_play = 1;
-        make_packet(20);
-        uac_out_store(pkt, 80);                            /* 20 frames: below 128, so block 0 repeats one */
-        memset(out, 0, sizeof out);
-        usb_play_mix(out, 32, 4096);
-        check("20 frames, 32 asked: the frames then silence, pb_under 1, not playing",
-              pb_under == 1 && pb_play == 0 && pb_r == 20 && out[2 * 20] != 0 && out[2 * 21] == 0);
-
-        /* 12. SET_INTERFACE / reset: the flag makes the reader start empty, from the writer's index */
+        /* 14. SET_INTERFACE / reset: the flag makes the reader start empty, from the writer's index */
         reset_ring();
         pb_play = 1;
         make_packet(UAC_MAXP / 4u);
@@ -213,7 +228,7 @@ int main(void)
         usb_play_mix(out, 32, 4096);
         check("flush: pb_r moves to pb_w, not playing, flag cleared", pb_r == pb_w && pb_play == 0 && pb_flush == 0);
 
-        /* 13. alt 0: the reader plays nothing and consumes nothing */
+        /* 15. alt 0: the reader plays nothing and consumes nothing */
         reset_ring();
         pb_play = 1;
         make_packet(UAC_MAXP / 4u);
@@ -225,15 +240,15 @@ int main(void)
         check("alt 0: nothing consumed, nothing mixed", pb_r == 0 && out[0] == 0 && pb_play == 0);
         uac_out_alt = 1;
 
-        /* 14. a whole session: the host's clock 0.04 % slow (44100 Hz against the DAC's 44117.6 Hz), 10 s of
-         * 32-frame blocks: no dry ring, and the frames the reader repeats are about the frames it is short by */
+        /* 16. a whole session: the host's clock 0.04 % slow against the DAC (44117.6 Hz), 10 s of 32-frame blocks:
+         * the rate follows, the fill stays near TARGET, the ring never runs dry */
         {
-            uint32_t blocks = 0, written = 0, target;
+            uint32_t blocks2 = 0, written = 0, target;
             reset_ring();
             pb_play = 0;
             pb_under = pb_rep = pb_skip = 0;
-            while (blocks < 13786u) {                      /* 10 s at 44117.6 Hz, 32 frames a block */
-                target = (uint32_t)((uint64_t)(blocks + 1u) * 32u * 44100u / 44117u);
+            while (blocks2 < 13786u) {
+                target = (uint32_t)((uint64_t)(blocks2 + 1u) * 32u * 44100u / 44117u);
                 while (written < target) {
                     uint32_t f = target - written > 45u ? 45u : target - written;
                     make_packet(f);
@@ -241,12 +256,11 @@ int main(void)
                     written += f;
                 }
                 usb_play_mix(out, 32, 4096);
-                blocks++;
+                blocks2++;
             }
-            /* the drift of 17.6 frames a second, 10 s: about 176 frames more are read than written */
-            check("10 s, host 0.04 % slow: no dry ring", pb_under == 0 && pb_play == 1);
-            check("10 s: the repeats follow the drift (about 176 frames, +-25 %)",
-                  pb_rep >= 132u && pb_rep <= 220u && pb_skip == 0);
+            check("10 s, host 0.04 % slow: no dry ring, still playing", pb_under == 0 && pb_play == 1);
+            check("10 s: the fill settles near TARGET (within 200..320)",
+                  (pb_w - pb_r) >= 200u && (pb_w - pb_r) <= 320u);
         }
     }
 

@@ -108,12 +108,15 @@ static uint8_t pbrx[UAC_MAXP + 4] __attribute__((aligned(4)));   /* the EP3 OUT 
 static volatile uint32_t pb_w, pb_r;                     /* writer: TIMER5 (pb_w); reader: the audio ISR (pb_r) */
 static volatile uint8_t pb_flush;                        /* writer -> reader: start empty (the reader moves pb_r) */
 static uint8_t pb_pend, pb_play;                         /* packet waiting; the reader is playing */
-static int32_t pb_last_l, pb_last_r;                     /* the last frame played (repeated when the host is slow) */
+static int32_t pb_cur_l, pb_cur_r, pb_nxt_l, pb_nxt_r;  /* the frames the reader interpolates between */
+static uint32_t pb_frac;                                 /* Q16 position between cur and nxt */
 static uint32_t pb_pkts, pb_frames, pb_drops, pb_under, pb_skip, pb_rep;   /* counters */
 static uint32_t pb_setif, pb_irq;                       /* SET_INTERFACE of the playback interface; EP3 interrupts */
 #define PB_PRIME 128u                                    /* frames before the first sound (~3 ms) */
 #define PB_TARGET (PB_N / 2u)                            /* the ring's fill the reader aims at */
-#define PB_BAND 128u                                     /* one frame dropped / stretched outside TARGET +- BAND (the stretch blends, no click) */
+#define PB_BAND 128u                                     /* the counters count the blocks outside TARGET +- BAND */
+#define PB_K 4                                           /* rate control: the step is 1 + (fill - TARGET) * PB_K / 65536 frames */
+#define PB_STEP_MAX 2048                                 /* at most +-3 %, whatever the fill */
 #endif
 static struct {
     volatile uint8_t alt;        /* streaming interface setting: 1 = the host records */
@@ -590,17 +593,30 @@ static inline int32_t pb_add(int32_t a, int32_t b)
 
 /* audio ISR, after the USB input (uac_tap) and USB LEVEL FIXED, before the click: the playback frames are
  * added to the DAC's signal at MASTER's level (never to the USB input: the host would hear itself). The
- * reader starts after PB_PRIME frames. It follows the host's clock by the ring's fill: a frame is dropped
- * while the fill is PB_BAND above PB_TARGET, and repeated while it is PB_BAND below. A dry ring goes silent
- * and primes again. */
+ * reader starts after PB_PRIME frames. It follows the host's clock by the ring's fill: the rate is
+ * 1 + PB_K * (fill - PB_TARGET) frames per sample, interpolated (no drop, no repeat). A dry ring goes
+ * silent and primes again. */
+/* Reads one frame from the ring (the caller checked there is one). */
+static void pb_take(int32_t *l, int32_t *r)
+{
+    uint32_t v = pb_ring[pb_r & (PB_N - 1u)];
+    pb_r++;
+    *l = (int32_t)(int16_t)(v & 0xFFFFu);
+    *r = (int32_t)(int16_t)(v >> 16);
+}
+
+/* The reader: linear interpolation between the frames at a rate that follows the ring's fill. The step is
+ * 1 frame per sample at TARGET; above it the reader moves faster, below it slower, so the fill settles at
+ * TARGET with no drop and no repeat (a continuous rate change, no step in the sound). */
 static __attribute__((noinline)) void usb_play_mix(int32_t *out, uint32_t n, int32_t master)
 {
     uint32_t i, fill;
-    int rep = 0;
+    int32_t step;
     if (pb_flush) {                                      /* SET_INTERFACE, configuration, bus reset: start empty */
         pb_flush = 0;
         pb_r = pb_w;
         pb_play = 0;
+        pb_frac = 0;
     }
     if (!uac_out_alt) {
         pb_play = 0;
@@ -610,44 +626,38 @@ static __attribute__((noinline)) void usb_play_mix(int32_t *out, uint32_t n, int
     if (!pb_play) {
         if (fill < PB_PRIME)
             return;
+        pb_take(&pb_cur_l, &pb_cur_r);
+        pb_take(&pb_nxt_l, &pb_nxt_r);
+        pb_frac = 0;
         pb_play = 1;
+        fill = pb_w - pb_r;
     }
-    if (fill > PB_TARGET + PB_BAND) {                    /* the host runs fast: drop one frame */
-        pb_r++;
-        fill--;
+    if (fill > PB_TARGET + PB_BAND)
         pb_skip++;
-    } else if (fill < PB_TARGET - PB_BAND) {             /* the host runs slow: repeat one */
-        rep = 1;
+    else if (fill < PB_TARGET - PB_BAND)
         pb_rep++;
-    }
+    step = 65536 + PB_K * ((int32_t)fill - (int32_t)PB_TARGET);
+    if (step > 65536 + PB_STEP_MAX)
+        step = 65536 + PB_STEP_MAX;
+    if (step < 65536 - PB_STEP_MAX)
+        step = 65536 - PB_STEP_MAX;
     for (i = 0; i < n; i++) {
-        int32_t l, r;
-        if (rep && i == 0) {                             /* slow host: stretch one frame, blended with the next (no step) */
-            if (fill) {
-                uint32_t v = pb_ring[pb_r & (PB_N - 1u)];
-                l = (pb_last_l + (int32_t)(int16_t)(v & 0xFFFFu)) >> 1;
-                r = (pb_last_r + (int32_t)(int16_t)(v >> 16)) >> 1;
-            } else {
-                l = pb_last_l;
-                r = pb_last_r;
-            }
-        } else {
-            uint32_t v;
-            if (!fill) {                                 /* dry: the rest of the block is silence */
+        int32_t l = pb_cur_l + (((pb_nxt_l - pb_cur_l) * (int32_t)(pb_frac >> 1)) >> 15);
+        int32_t r = pb_cur_r + (((pb_nxt_r - pb_cur_r) * (int32_t)(pb_frac >> 1)) >> 15);
+        out[2u * i] = pb_add(out[2u * i], (l * master) >> 12);
+        out[2u * i + 1u] = pb_add(out[2u * i + 1u], (r * master) >> 12);
+        pb_frac += (uint32_t)step;
+        while (pb_frac >= 65536u) {                      /* the next frame; the ring must hold it */
+            pb_frac -= 65536u;
+            pb_cur_l = pb_nxt_l;
+            pb_cur_r = pb_nxt_r;
+            if (pb_r == pb_w) {                          /* dry: the rest of the block is silence */
                 pb_under++;
                 pb_play = 0;
                 return;
             }
-            v = pb_ring[pb_r & (PB_N - 1u)];
-            pb_r++;
-            fill--;
-            pb_last_l = (int32_t)(int16_t)(v & 0xFFFFu);
-            pb_last_r = (int32_t)(int16_t)(v >> 16);
-            l = pb_last_l;
-            r = pb_last_r;
+            pb_take(&pb_nxt_l, &pb_nxt_r);
         }
-        out[2u * i] = pb_add(out[2u * i], (l * master) >> 12);
-        out[2u * i + 1u] = pb_add(out[2u * i + 1u], (r * master) >> 12);
     }
 }
 #endif
