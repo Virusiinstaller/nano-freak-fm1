@@ -1010,12 +1010,16 @@ static int bank_pc_test(void)
     ok = t->preset == 9;
     bad += check("  CC0 = CC32 = 0 again: PC 9 is bank 0", ok);
 
-    queued(0xB1u, 0, 1, 1); queued(0xB1u, 32, 0, 1);
-    was = trk[1].preset;
+    queued(0xB1u, 0, 1, 1); queued(0xB1u, 32, 0, 1);   /* CC0 is ignored: CC32 = 0 is bank 0 */
     pc(1, 3);
     frame();
-    ok = trk[1].preset == was && t->preset == 9;
-    bad += check("  CC0 = 1 on channel 1: its PC 3 is bank 128, not a preset: ignored; channel 1's bank is its own", ok);
+    ok = trk[1].preset == 3;
+    bad += check("  CC0 = 1 on channel 1 is ignored: CC32 = 0, so its PC 3 is bank 0, preset 3", ok);
+    queued(0xB1u, 32, 5, 1);                           /* CC32 = 5 is bank 1 (any value above 0) */
+    pc(1, 4);
+    ok = ui.mpc[1] == (0x80u | 4u | 1u << 8);
+    frame();
+    bad += check("  CC32 = 5 on channel 1: PC 4 is bank 1 (the PC carries bank 1, program 4)", ok);
     return bad;
 }
 /* External clock tempo (owner's report, 1.19.1): USB clocks come in whole ms with about 1 ms of jitter. A tempo taken

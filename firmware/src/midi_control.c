@@ -11,7 +11,7 @@ typedef struct {
     uint8_t owned[NTRK];                    /* held/pedal notes per track, at most 128 per channel */
     uint8_t ready, semis, cents;
     uint8_t rpn_msb, rpn_lsb;
-    uint8_t bank_msb, bank_lsb;             /* CC0 / CC32: bank select, for Program Change (bank x100 + program) */
+    uint8_t bank_lsb;                       /* CC32: bank select, for Program Change (bank x100 + program); CC0 is ignored (MSB fixed at 0) */
 } midi_channel_t;
 static midi_channel_t midi_ch[16];
 /* Low bits: track + 1. High bit: key released, held by its channel's pedal. */
@@ -372,7 +372,7 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
         else
             midi_pedal_up(ch);
         break;
-    case 0: c->bank_msb = (uint8_t)value; break;   /* bank select: the next Program Change uses it */
+    case 0: break;                                 /* bank MSB: ignored (always 0); the bank is CC32 alone */
     case 32: c->bank_lsb = (uint8_t)value; break;
     case 101: c->rpn_msb = (uint8_t)value; break;
     case 100: c->rpn_lsb = (uint8_t)value; break;
@@ -450,7 +450,7 @@ static void __attribute__((noinline)) midi_event(uint32_t st, uint32_t ch, uint3
     else if (st == 0xC0u && mpc_io && d1 < 100u) { /* Program Change 0..99 in the bank selected by CC0 / CC32; the main
                                                     * loop loads bank x 100 + program (ui.c midi_pc_poll) */
         midi_channel_t *c = midi_channel(ch);
-        uint32_t bank = (uint32_t)c->bank_msb * 128u + c->bank_lsb;
+        uint32_t bank = c->bank_lsb ? 1u : 0u;      /* CC32 = 0: bank 0; any other value: bank 1 */
         mpc_io[trk_index(midi_track(ch))] = (uint16_t)(0x80u | d1 | (bank > 255u ? 255u : bank) << 8);
     }
 }
