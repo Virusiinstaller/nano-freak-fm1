@@ -1100,6 +1100,7 @@ static int ep1_take(const uint8_t *b, uint32_t n)
     return 1;
 }
 
+uint32_t midi_mon_rx(void) { return usb.rx_pkts; }    /* the EP1 packets the device took (the MIDI monitor's header) */
 static void ep1_rx(void)                                /* leaves the packet (NAK) while the ring is too full */
 {
     uint32_t csr, n;

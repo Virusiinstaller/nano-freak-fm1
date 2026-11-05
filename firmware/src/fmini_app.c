@@ -1328,11 +1328,19 @@ static void fa_mon_line(uint32_t pkt, uint32_t src, char *l, char *r)
 }
 uint32_t midi_mon_total(void);
 uint32_t midi_mon_get(uint32_t age, uint32_t *src);
+uint32_t midi_mon_rx(void);
 static void fa_mon_dialog(void)
 {
     char l[16], r[24];
     uint32_t total = midi_mon_total(), k;
+    char hd[32] = "USB ", nb[12];
     fa_frame("MIDI MONITOR");
+    fmt_int(nb, (int32_t)midi_mon_rx());                  /* the diagnosis: USB packets taken, MIDI messages queued */
+    str_cpy(hd + str_len(hd), nb, 12);
+    str_cpy(hd + str_len(hd), "  MIDI ", 10);
+    fmt_int(nb, (int32_t)total);
+    str_cpy(hd + str_len(hd), nb, 12);
+    fa_ctext(120, 48, &AF_S, hd, FA_MU);
     if (!total)
         fa_ctext(120, 110, &AF_S, "WAITING FOR MIDI", FA_MU);
     for (k = 0; k < MON_SHOW && k < total; k++) {
