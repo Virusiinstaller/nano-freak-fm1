@@ -19,8 +19,8 @@
 /* FMini-1 firmware version: the one the device shows and INFO reports (tag 0x49). Bump it on every firmware change. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 2u
-#define FMINI_VER_PATCH 0u
-#define FMINI_VERSION "v2.2.0"
+#define FMINI_VER_PATCH 1u
+#define FMINI_VERSION "v2.2.1"
 /* FMini-1 GLOBAL (the GLO list, not the preset): TUNING, the reference A in cents from A 440 (-122 .. +114), and TRANSPOSE,
  * semitones -12 .. +12. They apply to every note (voice.c trk_note_on / trk_note_off: keys, MIDI, SEQ, ARP) and to the pitch
  * (eng_fmini.c). Defined in voice.c. */
