@@ -118,6 +118,7 @@
   <span id="status"><span class="dot" id="dot"></span><span id="stxt"></span></span>
   <select id="port" class="btn" hidden aria-label="MIDI"></select>
   <button class="btn pri" id="connect"></button>
+  <button class="btn" id="usbdiag" title="USB">USB</button>
 </div></header>
 
 <div class="wrap" id="body">
@@ -162,7 +163,7 @@ const TX = {
     noedit: "Este firmware não parece ser o FMini-1. O editor é só para o FMini-1.",
     oldfw: "Este FMini-1 tem um firmware antigo. Atualize pelo instalador atual e conecte de novo.",
     getlink: "Abrir o instalador atual",
-    fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar",
+    fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar", usbTitle: "Áudio USB de saída: contadores", usbAlt: "Interface de saída ativa (alt)", usbPlay: "Tocando agora", usbSetIf: "Vezes que o Windows selecionou a saída", usbIrq: "Interrupções do endpoint 3", usbPkts: "Pacotes recebidos", usbFrames: "Quadros guardados", usbDrops: "Pacotes descartados (fila cheia)", usbDry: "Blocos sem quadro (fila vazia)", usbSkip: "Quadros descartados (fila acima da faixa)", usbRep: "Quadros repetidos (fila abaixo da faixa)", usbFill: "Fila agora (quadros, de 0 a 512)", usbYes: "sim", usbNo: "não",
     noext: "Atualização disponível: instale o FMini-1 v1.6.1 ou mais novo para editar a oitava e guardar tempo, oitava e efeitos na biblioteca.",
     noenv: "Atualização necessária: este firmware não tem o editor de osciladores e chaves. Instale a versão mais nova pelo site para editar tudo.",
     nonames: "Atualização disponível: este firmware envia só os nomes dos %n primeiros presets. Instale o FMini-1 v1.7.2 ou mais novo para ver todos.",
@@ -186,7 +187,7 @@ const TX = {
     noedit: "This firmware does not look like the FMini-1. The editor is for the FMini-1 only.",
     oldfw: "This FMini-1 runs an old firmware. Update it with the current installer and connect again.",
     getlink: "Open the current installer",
-    fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close",
+    fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close", usbTitle: "USB audio out: counters", usbAlt: "Playback interface alt setting", usbPlay: "Playing now", usbSetIf: "Times Windows selected the output", usbIrq: "Endpoint 3 interrupts", usbPkts: "Packets received", usbFrames: "Frames stored", usbDrops: "Packets dropped (ring full)", usbDry: "Blocks without a frame (ring empty)", usbSkip: "Frames dropped (fill above the band)", usbRep: "Frames repeated (fill below the band)", usbFill: "Fill now (frames, 0 to 512)", usbYes: "yes", usbNo: "no",
     noext: "Update available: install FMini-1 v1.6.1 or newer to edit the octave and keep tempo, octave and effects in the library.",
     noenv: "Update needed: this firmware has no oscillator / switch editing. Install the newest version from the site to edit everything.",
     nonames: "Update available: this firmware sends only the names of the first %n presets. Install FMini-1 v1.7.2 or newer to see them all.",
@@ -206,7 +207,7 @@ const T = (k, o) => { let t = TX[LANG][k] || k; for (const x in o || {}) t = t.r
 document.documentElement.lang = LANG === "pt" ? "pt-BR" : "en";
 
 /* ---------------------------------------------------------------- protocol --- */
-const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, PRESET: 8, NAMES: 10, TRACK: 27, FMINI_GET: 82, FMINI_PUT: 83, FMINI_PRESET: 84, FMINI_REC: 85, FMINI_RPUT: 86, FMINI_RESTORE: 87, FMINI_RESET: 88 };
+const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, PRESET: 8, NAMES: 10, TRACK: 27, FMINI_GET: 82, FMINI_PUT: 83, FMINI_PRESET: 84, FMINI_REC: 85, FMINI_RPUT: 86, FMINI_RESTORE: 87, FMINI_RESET: 88, USBDIAG: 89 };
 const FG = { R1: 0, R2: 1, R3: 2, W1: 3, W2: 4, W3: 5, F2: 6, F3: 7, L1: 8, L2: 9, L3: 10, LN: 11, SW1: 12, SW2: 13, TUNE: 14, MMIX: 15, KBD: 16, GLID: 17, SIZE: 32 };
 const FS = { O1: 1, O2: 2, O3: 4, NZ: 8, PINK: 16, MOSC: 32, MFLT: 64 }, FT = { GLIDE: 1, SQR: 2 };
 /* track parameters (core.h; all but E0..E7 are fixed ids) and globals */
@@ -506,6 +507,34 @@ async function connect() {
     setStatus(false, T("disc")); $("connect").textContent = T("connect"); $("connect").disabled = false;
   }
 }
+/* USB diagnostics (command 89, firmware 1.14.3): the playback counters in a pop-up */
+function usbDiagShow(r) {
+  if (!r || r.length < 3 + 45 || r[0] !== 1) { msg(T("oldfw"), true); return; }
+  const cnt = (k) => { let v = 0; for (let j = 4; j >= 0; j--) v = v * 128 + (r[3 + 5 * k + j] & 127); return v; };
+  const names = ["usbSetIf", "usbIrq", "usbPkts", "usbFrames", "usbDrops", "usbDry", "usbSkip", "usbRep", "usbFill"];
+  const box = document.createElement("div");
+  box.id = "usbpop";
+  box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px";
+  const card = document.createElement("div");
+  card.style.cssText = "background:var(--panel,#fff);color:var(--ink,#111);border:1px solid var(--line,#999);border-radius:8px;max-width:520px;padding:20px;font:14px/1.5 system-ui,sans-serif";
+  const h = document.createElement("h3"); h.textContent = T("usbTitle"); h.style.margin = "0 0 8px";
+  const pre = document.createElement("pre"); pre.style.cssText = "margin:0;white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace";
+  const lines = [[T("usbAlt"), String(r[1])], [T("usbPlay"), r[2] ? T("usbYes") : T("usbNo")]];
+  names.forEach((n, k) => lines.push([T(n), String(cnt(k))]));
+  pre.textContent = lines.map(([a, b]) => a + ": " + b).join("\n");
+  const row = document.createElement("div"); row.style.cssText = "display:flex;justify-content:flex-end;margin-top:14px";
+  const x = document.createElement("button"); x.className = "btn"; x.textContent = T("fwclose");
+  x.onclick = () => box.remove();
+  row.append(x); card.append(h, pre, row); box.append(card); box.onclick = (e) => { if (e.target === box) box.remove(); };
+  document.body.append(box);
+}
+$("usbdiag").addEventListener("click", async () => {
+  if (!dev.open) { msg(T("none")); return; }
+  let r;
+  try { r = await req(CMD.USBDIAG, [], 1500); } catch (e) { msg(T("timeout"), true); return; }
+  usbDiagShow(r);
+});
+
 /* the device runs an older firmware than this page: a pop-up with the link to the installer */
 function fwCheck() {
   const v = S.fwver;

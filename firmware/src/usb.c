@@ -110,6 +110,7 @@ static volatile uint8_t pb_flush;                        /* writer -> reader: st
 static uint8_t pb_pend, pb_play;                         /* packet waiting; the reader is playing */
 static int32_t pb_last_l, pb_last_r;                     /* the last frame played (repeated when the host is slow) */
 static uint32_t pb_pkts, pb_frames, pb_drops, pb_under, pb_skip, pb_rep;   /* counters */
+static uint32_t pb_setif, pb_irq;                       /* SET_INTERFACE of the playback interface; EP3 interrupts */
 #define PB_PRIME 128u                                    /* frames before the first sound (~3 ms) */
 #define PB_TARGET (PB_N / 2u)                            /* the ring's fill the reader aims at */
 #define PB_BAND 128u                                     /* one frame dropped / repeated outside TARGET +- BAND */
@@ -829,6 +830,7 @@ static void ep0_service(void)
 #if FELUCCA_UAC
 #if FELUCCA_UAC_OUT
         if (s[4] == UAC_AS_OUT_IF && wvalue <= 1u && usb.config) {
+            pb_setif++;
             uac_out_stream(wvalue);
             goto ack;
         }
@@ -1503,8 +1505,10 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
     if (usb.rx_pend)                                    /* not every poll: 3 SIE round trips each */
         ep1_rx();
 #if FELUCCA_UAC_OUT
-    if (ir & 0x08u)
+    if (ir & 0x08u) {
+        pb_irq++;
         pb_pend = 1;
+    }
     if (pb_pend && uac_out_alt)
         uac_out_rx();
 #endif

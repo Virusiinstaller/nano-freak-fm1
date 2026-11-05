@@ -15,7 +15,8 @@
  * kept besides the track's values (FMini-1: the tempo, the octave, the FX pop-ups' globals), as stored: BPM (40..240),
  * OCT (octave + 4: 1..7), the FX page's G_RSIZE G_DRREV G_CRATE G_DRLVL + 1 (1..128), then G_RTYPE G_RDAMP G_DTIME G_DFDBK
  * G_ENGGO G_CDEPTH G_INFO G_MIDI + 1; 0 = the preset has none (older). rc 2: not an FMINI preset. */
-enum { ED_FMINI_GET = 82, ED_FMINI_PUT, ED_FMINI_PRESET, ED_FMINI_REC, ED_FMINI_RPUT, ED_FMINI_RESTORE, ED_FMINI_RESET };   /* 85..88: the backup, the factory reset (protocol 4) */
+enum { ED_FMINI_GET = 82, ED_FMINI_PUT, ED_FMINI_PRESET, ED_FMINI_REC, ED_FMINI_RPUT, ED_FMINI_RESTORE, ED_FMINI_RESET,   /* 85..88: the backup, the factory reset (protocol 4) */
+       ED_FMINI_USBDIAG };                                    /* 89: the USB playback's counters (1.14.3) */
 enum { ED_FMINI_TRACK = 0, ED_FMINI_FACTORY = 2, ED_FMINI_USER = 3 };
 
 
@@ -108,8 +109,36 @@ static void ed_fmini_reset(const uint8_t *a, uint32_t n)
     ed_b(n ? a[0] : 127u); ed_b(n > 1u ? a[1] : 127u); ed_b(rc);
 }
 
+/* 89 USBDIAG: -> version 1, the playback alt setting, playing (0/1), then 9 counters of 5 bytes each (7 bits,
+ * LSB first): SET_INTERFACE to the playback interface, EP3 interrupts, packets, frames stored, packets dropped,
+ * dry blocks, frames dropped (ring above its band), frames repeated (ring below it), the ring's fill (frames).
+ * Without FELUCCA_UAC_OUT the alt, playing and the counters are 0. */
+static void ed_fmini_usbdiag(void)
+{
+    uint32_t v[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}, k, j;
+    uint8_t alt = 0, play = 0;
+#if FELUCCA_UAC_OUT
+    alt = uac_out_alt;
+    play = pb_play;
+    v[0] = pb_setif;
+    v[1] = pb_irq;
+    v[2] = pb_pkts;
+    v[3] = pb_frames;
+    v[4] = pb_drops;
+    v[5] = pb_under;
+    v[6] = pb_skip;
+    v[7] = pb_rep;
+    v[8] = (uint32_t)(pb_w - pb_r);
+#endif
+    ed_b(1u); ed_b(alt); ed_b(play);
+    for (k = 0; k < 9u; k++)
+        for (j = 0; j < 5u; j++)
+            ed_b(v[k] >> (7u * j));
+}
+
 static int ed_fmini_handle(uint32_t cmd, const uint8_t *a, uint32_t n)
 {
+    if (cmd == ED_FMINI_USBDIAG) { ed_fmini_usbdiag(); return 1; }
     if (cmd == ED_FMINI_REC) { ed_fmini_rec_get(a, n); return 1; }
     if (cmd == ED_FMINI_RPUT) { ed_fmini_rec_put(a, n); return 1; }
     if (cmd == ED_FMINI_RESTORE) { ed_fmini_restore(a, n); return 1; }
