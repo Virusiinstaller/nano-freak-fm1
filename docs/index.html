@@ -194,6 +194,12 @@
   body.busy #go { background: var(--surface2); color: var(--or2); }
 
   .prog { margin-top: 14px; }
+  #install { padding-top: 72px; }
+  #install .lead { margin-top: 10px; }
+  #install .card { margin-top: 24px; padding: 22px; }
+  @media (max-width: 560px) { #install .card { padding: 14px; } }
+  #install .steps { margin-bottom: 12px; }
+  #install #go { padding: 13px 20px; }
   .meter { position: relative; height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
   .fill { height: 100%; width: 0; border-radius: 999px; background: var(--or); transition: width .25s ease; position: relative; }
   body.busy .fill::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, rgba(255,255,255,.25) 0 10px, rgba(255,255,255,0) 10px 22px);
