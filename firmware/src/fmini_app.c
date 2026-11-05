@@ -1341,6 +1341,7 @@ static void fa_mon_line(uint32_t pkt, uint32_t src, char *l, char *r)
 uint32_t midi_mon_total(void);
 uint32_t midi_mon_get(uint32_t age, uint32_t *src);
 uint32_t midi_mon_rx(void);
+uint32_t midi_mon_seq(void);
 void midi_mon_clear(void);
 static void fa_mon_dialog(void)
 {
@@ -1723,8 +1724,8 @@ static uint32_t fa_signature(void)
     for (i = 0; i < P_COUNT; i++)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
     h = (h ^ fa_base ^ (uint32_t)fa_pp_on() << 8 ^ (uint32_t)fa_cpu_on() << 9) * 16777619u;
-    if (fa_gl == 5u)                                      /* the monitor redraws with each message */
-        h = (h ^ midi_mon_total()) * 16777619u;
+    if (fa_gl == 5u)                                      /* the monitor redraws with each message and each scroll step */
+        h = (h ^ midi_mon_seq() ^ fa_mon_off << 16) * 16777619u;
     h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19) * 16777619u;
     h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
     for (i = 0; i < FA_NCC; i++)

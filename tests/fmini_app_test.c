@@ -857,6 +857,16 @@ int main(int argc, char **argv)
                 if (fa_mon_off != 17) { printf("monitor scroll clamps at 17 (%u)\n", (unsigned)fa_mon_off); return 1; }
                 fturn(EN_SELECT, -1);
                 if (fa_mon_off != 16) { printf("monitor scroll back (%u)\n", (unsigned)fa_mon_off); return 1; }
+                {   /* the screen redraws on a scroll step, and on a message past the 25th (the count stays at 25) */
+                    uint32_t sg = fa_signature();
+                    fturn(EN_SELECT, 1);
+                    if (fa_signature() == sg) { printf("monitor redraws on scroll\n"); return 1; }
+                    sg = fa_signature();
+                    midi_enqueue(0x9u | 0x90u << 8 | 70u << 16 | 90u << 24, 1u);
+                    if (fa_signature() == sg) { printf("monitor redraws past 25\n"); return 1; }
+                    events_block(CTL); trk_all_off(&trk[0]);
+                    fa_mon_off = 0;
+                }
                 ui.force = 1; fa_draw(); dump(dir, 42);
             }
             fturn(EN_ALGO, -1);
