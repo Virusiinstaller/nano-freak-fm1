@@ -1257,7 +1257,7 @@ static void fa_clk_apply(void)
 {
     song.g[G_CLOCK] = (int16_t)fa_clk;
 }
-/* MIDI MONITOR (MIDI SETTINGS, row 4): the last messages that arrive, newest first; any key or ALGORITHM goes back */
+/* MIDI MONITOR (MIDI SETTINGS, row 4): the last messages that arrive, the newest at the bottom; any key or ALGORITHM goes back */
 #define MON_SHOW 8u
 static void fa_hex(char *d, uint32_t v)
 {
@@ -1345,7 +1345,7 @@ static void fa_mon_dialog(void)
         fa_ctext(120, 110, &AF_S, "WAITING FOR MIDI", FA_MU);
     for (k = 0; k < MON_SHOW && k < total; k++) {
         uint32_t src, pkt = midi_mon_get(k, &src);
-        int32_t y = 66 + 15 * (int32_t)k;
+        int32_t y = 171 - 15 * (int32_t)k;                /* the newest at the bottom, the older above it */
         fa_mon_line(pkt, src, l, r);
         fa_ltext(20, y, &AF_S, l, k == 0u ? FA_OR : FA_CR);
         fa_rtext(216, y, &AF_S, r, k == 0u ? FA_OR : FA_CR);
