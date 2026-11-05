@@ -823,6 +823,11 @@ int main(int argc, char **argv)
             if (midi_mon_total() != before + 2) { printf("monitor counts\n"); return 1; }
             pkt = midi_mon_get(0, &src);
             if (pkt != (0xBu | 0xB0u << 8 | 74u << 16 | 127u << 24) || src != 2) { printf("monitor newest\n"); return 1; }
+            {   /* the USB path (EP1 packet: cin 9, status 90 3C 64) reaches the monitor too */
+                uint8_t ub[4] = {0x09, 0x90, 0x3C, 0x64};
+                uint32_t t0 = midi_mon_total();
+                if (!ep1_take(ub, 4) || midi_mon_total() != t0 + 1) { printf("monitor USB path (%u)\n", (unsigned)midi_mon_total()); return 1; }
+            }
             events_block(CTL);                             /* the two messages are played here, not left in the ring */
             trk_all_off(&trk[0]);
             ui.force = 1; fa_draw(); dump(dir, 41);
