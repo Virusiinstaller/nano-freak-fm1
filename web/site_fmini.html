@@ -378,6 +378,7 @@
 
       <details>
         <summary data-t="logT"></summary>
+        <p><a id="fwdl" class="fwdl" href="#" download data-t="fwdl"></a></p>
         <pre id="log"></pre>
       </details>
     </div>
@@ -430,6 +431,7 @@ const TEXT = {
     tagline: "Emulação do Minimoog para o FM-1 (mono/poly)",
     feat: "3 osciladores · filtro ladder · 200 presets · arpejador · MIDI",
     risk: "Use por sua conta e risco", logT: "Detalhes", fw: "Firmware",
+    fwdl: "Baixar este firmware (.fwsc): a versão desta página",
   },
   en: {
     intro: "Connect the FM-1 by USB. (Works in Chrome or Edge.)",
@@ -462,6 +464,7 @@ const TEXT = {
     tagline: "A Minimoog emulation for the M-Vave FM-1 (mono/poly)",
     feat: "3 oscillators · ladder filter · 200 presets · arpeggiator · MIDI",
     risk: "Use at your own risk", logT: "Details", fw: "Firmware",
+    fwdl: "Download this firmware (.fwsc): this page's version",
   },
 };
 /* ---- the site: texts (PT / EN / JA) and the parts it draws itself ---- */
@@ -672,6 +675,7 @@ const meta = /*META*/;
 let product = meta.product;                 /* the package to install: the site's, or one chosen below */
 document.querySelectorAll(".curver").forEach((e) => { e.textContent = "v" + meta.version; });
 document.querySelectorAll(".curver-b").forEach((e) => { e.textContent = "(v" + meta.version + ")"; });
+{ const dl = document.getElementById("fwdl"); if (dl) { dl.href = meta.pkg; dl.download = "FMini-1-" + meta.version + ".fwsc"; } }
 
 let writing = false;
 let wake = null;
