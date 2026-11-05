@@ -1376,6 +1376,33 @@ static void fa_mon_dialog(void)
     fa_ctext(120, 190, &AF_S, "SELECT: SCROLL   ALGO/KEY: BACK", FA_MU);
 }
 
+/* SUPPORT FMINI-1!! (GLOBAL, row 5): a black screen with the Ko-fi QR code (25 x 25 modules, bit 24 = column 0) */
+static const uint32_t FA_KOFI_QR[25] = {0x1FD507Fu, 0x104F941u, 0x175CE5Du, 0x175D75Du, 0x175355Du, 0x1046941u, 0x1FD557Fu, 0x0005700u, 0x1E5799Du, 0x0D85AB2u, 0x11DF907u, 0x1EAC249u, 0x194D6B7u, 0x050B410u, 0x0B7E830u, 0x178A527u, 0x03755FAu, 0x001C71Cu, 0x1FC8F5Fu, 0x1046F1Bu, 0x1748DF1u, 0x1754193u, 0x175C666u, 0x105BCB3u, 0x1FD2283u};
+static void fa_support_dialog(void)
+{
+    const int32_t qx = (240 - 83) / 2, qy = 100;          /* the code: 25 modules of 3 px and a 2-module quiet zone */
+    int32_t r, c;
+    cv_rect(0, 0, 240, 240, FA_RGB(0, 0, 0));
+    fa_ctext(120, 24, &AF_M, "Enjoying this software?", FA_OR);
+    fa_ctext(120, 62, &AF_S, "Support its development", FA_RGB(255, 255, 255));
+    fa_ctext(120, 78, &AF_S, "with a donation.", FA_RGB(255, 255, 255));
+    cv_rect(qx, qy, 83, 83, FA_RGB(255, 255, 255));
+    for (r = 0; r < 25; r++) {
+        c = 0;
+        while (c < 25) {                                  /* one rectangle per run of dark modules */
+            int32_t st = c;
+            if (!((FA_KOFI_QR[r] >> (24 - c)) & 1u)) {
+                c++;
+                continue;
+            }
+            while (c < 25 && ((FA_KOFI_QR[r] >> (24 - c)) & 1u))
+                c++;
+            cv_rect(qx + 6 + st * 3, qy + 6 + r * 3, (c - st) * 3, 3, FA_RGB(0, 0, 0));
+        }
+    }
+    fa_ctext(120, 190, &AF_S, "ko-fi.com/ruppert", FA_RGB(255, 255, 255));
+}
+
 static void fa_gl_dialog(void)
 {
     char b[24];
@@ -1398,6 +1425,7 @@ static void fa_gl_dialog(void)
         }
         fa_line(113, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 3u);
         fa_line(130, "ABOUT", ">", fa_gl_row == 4u);
+        fa_line(147, "SUPPORT FMINI-1!!", ">", fa_gl_row == 5u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
@@ -1633,6 +1661,8 @@ static void fa_scene(void)
     }
     if (fb_rs_state() == FB_RS_ASK || fb_rs == FB_RS_OK)
         fa_restore_dialog();                              /* the restore question / its progress: over everything */
+    else if (fa_gl == 6u)
+        fa_support_dialog();
     else if (fa_gl == 5u)
         fa_mon_dialog();
     else if (fa_gl == 1u || fa_gl == 2u || fa_gl == 4u)
@@ -1956,6 +1986,11 @@ static void fa_buttons(uint32_t pressed)
 {
     static const uint8_t PG_BTN[5] = {B_LFO, B_EDIT, B_SCL, B_FX, B_ENV};   /* (GLO: global, ARP, SEQ, REC, PLAY: their own) */
     uint32_t i;
+    if (fa_gl == 6u && pressed) {                         /* SUPPORT: any key goes back to GLOBAL */
+        fa_gl = 1u;
+        fa_gl_row = 5u;
+        return;
+    }
     if (fa_gl == 5u && pressed) {                         /* MIDI MONITOR: any key goes back to MIDI SETTINGS, and does nothing else */
         fa_mon_close();
         return;
@@ -2263,6 +2298,17 @@ static void fa_input(void)
             }
         return;
     }
+    if (fa_gl == 6u) {                                    /* SUPPORT: ALGORITHM goes back to GLOBAL */
+        for (k = 0; k < 4u; k++)
+            (void)panel_enc(EN_K1 + k);
+        (void)panel_enc(EN_PRESET);
+        (void)panel_enc(EN_SELECT);
+        if (panel_enc(EN_ALGO) != 0) {
+            fa_gl = 1u;
+            fa_gl_row = 5u;
+        }
+        return;
+    }
     if (fa_gl == 5u) {                                    /* MIDI MONITOR: SELECT scrolls, ALGORITHM goes back to MIDI SETTINGS */
         for (k = 0; k < 4u; k++)
             (void)panel_enc(EN_K1 + k);
@@ -2283,7 +2329,7 @@ static void fa_input(void)
         (void)panel_enc(EN_PRESET);
         if (fa_gl == 1u) {                                /* GLOBAL: MIDI SETTINGS, TUNING, TRANSPOSE, ABOUT */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 6u + (s > 0 ? 1u : 5u)) % 6u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     fa_gl = 4u;                            /* MIDI SETTINGS: its first line */
@@ -2301,7 +2347,9 @@ static void fa_input(void)
                     for (k = 0; k < 16u; k++)              /* the bend held now follows the new range */
                         midi_expression_channel(k);
                     fa_cfg_dirty = 1;
-                } else
+                } else if (fa_gl_row == 5u)
+                    fa_gl = 6u;                            /* SUPPORT: the QR code screen */
+                else
                     fa_gl = 3u;                            /* ABOUT */
             }
         } else if (fa_gl == 4u) {                         /* MIDI SETTINGS */

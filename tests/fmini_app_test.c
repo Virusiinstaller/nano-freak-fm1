@@ -814,6 +814,19 @@ int main(int argc, char **argv)
         if (fm_midi_src != 0) { printf("src min\n"); return 1; }
         fturn(EN_SELECT, -1);
         if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
+        /* GLOBAL: SUPPORT FMINI-1!! is row 5 (after ABOUT): ALGORITHM opens the QR screen, any key goes back to it */
+        fa_gl = 1; fa_gl_row = 4; fturn(EN_SELECT, 1);
+        if (fa_gl_row != 5) { printf("support row\n"); return 1; }
+        fturn(EN_SELECT, 1);
+        if (fa_gl_row != 0) { printf("GLOBAL wraps at 6 (%d)\n", fa_gl_row); return 1; }
+        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
+        if (fa_gl != 6) { printf("support opens (%d)\n", fa_gl); return 1; }
+        ui.force = 1; fa_draw(); dump(dir, 43);
+        fa_buttons(1u << panel.btn[B_EDIT]);
+        if (fa_gl != 1 || fa_gl_row != 5) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
+        fa_gl = 6; fturn(EN_ALGO, 1);
+        if (fa_gl != 1) { printf("support ALGO back (%d)\n", fa_gl); return 1; }
+        fa_gl = 4; fa_gl_row = 4;
         /* MIDI MONITOR (row 4): the last messages in, newest first; ALGORITHM or any key goes back to MIDI SETTINGS */
         {   uint32_t before = midi_mon_total(), src = 0, pkt;
             fturn(EN_ALGO, 1);
