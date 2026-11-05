@@ -589,6 +589,16 @@ static void uac_out_rx(void)                              /* EP3 OUT: one packet
     sie_wr(S_RXCSR1, csr & 0xFFu);
     sie_wr(S_RXCSR2, csr >> 8);
 }
+/* TIMER5 while the audio ISR runs: usb_poll is deferred then, so a packet waiting on EP3 could be overwritten by the
+ * next one (overrun). This reads it now; the nested TIMER5 comes every 100 us. */
+static void uac_out_nested(void)
+{
+    if (!usb.up || !usb.config || !uac_out_alt)
+        return;
+    sie_wr(S_INDEX, 3);
+    if (sie_rd(S_RXCSR1) & 1u)
+        uac_out_rx();
+}
 static inline int32_t pb_add(int32_t a, int32_t b)
 {
     int32_t x = a + b;

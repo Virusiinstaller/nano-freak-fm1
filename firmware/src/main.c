@@ -48,6 +48,9 @@ void fm1_timer5_irq(void)
         if (usb_due)
             uac_service();
 #endif
+#if FELUCCA_UAC_OUT
+        uac_out_nested();
+#endif
         t5_nested_ticks += fm1_ticks() - t0;
         return;
     }
