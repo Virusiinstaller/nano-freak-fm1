@@ -113,7 +113,7 @@ static uint32_t pb_pkts, pb_frames, pb_drops, pb_under, pb_skip, pb_rep;   /* co
 static uint32_t pb_setif, pb_irq;                       /* SET_INTERFACE of the playback interface; EP3 interrupts */
 #define PB_PRIME 128u                                    /* frames before the first sound (~3 ms) */
 #define PB_TARGET (PB_N / 2u)                            /* the ring's fill the reader aims at */
-#define PB_BAND 128u                                     /* one frame dropped / repeated outside TARGET +- BAND */
+#define PB_BAND 128u                                     /* one frame dropped / stretched outside TARGET +- BAND (the stretch blends, no click) */
 #endif
 static struct {
     volatile uint8_t alt;        /* streaming interface setting: 1 = the host records */
@@ -621,7 +621,17 @@ static __attribute__((noinline)) void usb_play_mix(int32_t *out, uint32_t n, int
         pb_rep++;
     }
     for (i = 0; i < n; i++) {
-        if (!(rep && i == 0)) {
+        int32_t l, r;
+        if (rep && i == 0) {                             /* slow host: stretch one frame, blended with the next (no step) */
+            if (fill) {
+                uint32_t v = pb_ring[pb_r & (PB_N - 1u)];
+                l = (pb_last_l + (int32_t)(int16_t)(v & 0xFFFFu)) >> 1;
+                r = (pb_last_r + (int32_t)(int16_t)(v >> 16)) >> 1;
+            } else {
+                l = pb_last_l;
+                r = pb_last_r;
+            }
+        } else {
             uint32_t v;
             if (!fill) {                                 /* dry: the rest of the block is silence */
                 pb_under++;
@@ -633,9 +643,11 @@ static __attribute__((noinline)) void usb_play_mix(int32_t *out, uint32_t n, int
             fill--;
             pb_last_l = (int32_t)(int16_t)(v & 0xFFFFu);
             pb_last_r = (int32_t)(int16_t)(v >> 16);
+            l = pb_last_l;
+            r = pb_last_r;
         }
-        out[2u * i] = pb_add(out[2u * i], (pb_last_l * master) >> 12);
-        out[2u * i + 1u] = pb_add(out[2u * i + 1u], (pb_last_r * master) >> 12);
+        out[2u * i] = pb_add(out[2u * i], (l * master) >> 12);
+        out[2u * i + 1u] = pb_add(out[2u * i + 1u], (r * master) >> 12);
     }
 }
 #endif

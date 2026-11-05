@@ -187,8 +187,10 @@ int main(void)
             uac_out_store(pkt, UAC_MAXP);                  /* 98 frames < 128 */
         memset(out, 0, sizeof out);
         usb_play_mix(out, 32, 4096);
-        check("fill 98 (below 128): the first frame repeats, the reader takes 31",
-              pb_rep == 1 && pb_r == 31 && out[0] == -7 && out[1] == 9);
+        check("fill 98 (below 128): the first frame is stretched (blended with the next), the reader takes 31",
+              pb_rep == 1 && pb_r == 31 &&
+              out[0] == ((-7 + (int32_t)(int16_t)(pb_ring[0] & 0xFFFFu)) >> 1) &&
+              out[1] == ((9 + (int32_t)(int16_t)(pb_ring[0] >> 16)) >> 1));
         check("... and the frames after it are the ring's, in order",
               out[2] == (int32_t)(int16_t)(pb_ring[0] & 0xFFFFu) && out[2 * 31] == (int32_t)(int16_t)(pb_ring[30] & 0xFFFFu));
 
