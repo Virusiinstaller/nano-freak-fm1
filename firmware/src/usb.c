@@ -111,7 +111,7 @@ static uint8_t pb_pend, pb_play;                         /* packet waiting; the 
 static int32_t pb_cur_l, pb_cur_r, pb_nxt_l, pb_nxt_r;  /* the frames the reader interpolates between */
 static uint32_t pb_frac;                                 /* Q16 position between cur and nxt */
 static uint32_t pb_pkts, pb_frames, pb_drops, pb_under, pb_skip, pb_rep;   /* counters */
-static uint32_t pb_setif, pb_irq;                       /* SET_INTERFACE of the playback interface; EP3 interrupts */
+static uint32_t pb_setif, pb_irq, pb_ovr;                /* SET_INTERFACE of the playback interface; EP3 interrupts; packets with overrun/data-error bits */
 #define PB_PRIME 128u                                    /* frames before the first sound (~3 ms) */
 #define PB_TARGET (PB_N / 2u)                            /* the ring's fill the reader aims at */
 #define PB_BAND 128u                                     /* the counters count the blocks outside TARGET +- BAND */
@@ -573,6 +573,8 @@ static void uac_out_rx(void)                              /* EP3 OUT: one packet
         pb_pend = 0;
         return;
     }
+    if (csr & 0x0Cu)                                     /* RXCSR1 bit 2 overrun / bit 3 data error: the packet may be damaged */
+        pb_ovr++;
     n = sie_rd(S_RXCOUNT1) | (sie_rd(S_RXCOUNT2) << 8);
     if (n > UAC_MAXP)
         n = UAC_MAXP;
