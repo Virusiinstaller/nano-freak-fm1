@@ -431,7 +431,7 @@ static int page_visible(uint32_t i)
         return ENGINES[TSEL->eng_req % NENGINES] == &ENG_ANALOG;
     if (PAGES[i].graph >= GR_FMOP && PAGES[i].graph <= GR_FMENV)
         return TSEL->eng_req % NENGINES == ENGI_FM6;
-    if (PAGES[i].graph >= GR_FMG0 && PAGES[i].graph <= GR_FMG6)      /* FMINI's panel (ui_fmini.c) */
+    if (PAGES[i].graph >= GR_FMG0 && PAGES[i].graph <= GR_FMG7)      /* FMINI's panel (ui_fmini.c) */
         return TSEL->eng_req % NENGINES == ENGI_FMINI;
     return !(PAGES[i].fam == FAM_EDIT && PAGES[i].id[0] >= P_FM1_ATK &&
              PAGES[i].id[0] <= P_FM4_LEVEL) || (FELUCCA_FM4 && TSEL->eng_req % NENGINES == ENGI_DIGITAL);

@@ -504,7 +504,7 @@ enum { SC_TRACK, SC_GLOBAL, SC_ENGINE, SC_STEP, SC_TRK };   /* SC_TRK: the TRACK
 enum { GR_NONE, GR_ADSR, GR_LFO, GR_STEPS, GR_ARP, GR_SCALE, GR_FX, GR_ROLL, GR_BROWSE, GR_SLOTS, GR_USER, GR_TRK,
        GR_SLCR, GR_MOD, GR_PATS, GR_SONG, GR_TOOLS, GR_CHORD, GR_EVENTS,
        GR_FMOP, GR_FMOP2, GR_FMENV, GR_INS,
-       GR_FMG0, GR_FMG1, GR_FMG2, GR_FMG3, GR_FMG4, GR_FMG5, GR_FMG6 };   /* GR_FMG0..6: FMINI's seven panel pages (ui_fmini.c) */   /* (GR_STEPS: SEQ TOOLS' knobs; GR_FMOP..: FM6's operator pages, ui_fm6op.c) */
+       GR_FMG0, GR_FMG1, GR_FMG2, GR_FMG3, GR_FMG4, GR_FMG5, GR_FMG6, GR_FMG7 };   /* GR_FMG0..7: FMINI's eight panel pages (ui_fmini.c) */   /* (GR_STEPS: SEQ TOOLS' knobs; GR_FMOP..: FM6's operator pages, ui_fm6op.c) */
 
 typedef struct {
     const char *title;
@@ -544,6 +544,7 @@ static const page_t PAGES[] = {
     {"F.ENV", FAM_EDIT, SC_TRACK, GR_FMG4, {0xFF, 0xFF, 0xFF, 0xFF}},
     {"A.ENV", FAM_EDIT, SC_TRACK, GR_FMG5, {0xFF, 0xFF, 0xFF, 0xFF}},
     {"FMINI FX", FAM_EDIT, SC_TRACK, GR_FMG6, {0xFF, 0xFF, 0xFF, 0xFF}},
+    {"PRESET", FAM_EDIT, SC_TRACK, GR_FMG7, {0xFF, 0xFF, 0xFF, 0xFF}},   /* after FX: PRESET SETTINGS (also EDIT on FILT, a pop-up) */
     {"OP1 ENV", FAM_EDIT, SC_TRACK, GR_ADSR, {P_FM1_ATK, P_FM1_DEC, P_FM1_SUS, P_FM1_REL}},
     {"OP2 ENV", FAM_EDIT, SC_TRACK, GR_ADSR, {P_FM2_ATK, P_FM2_DEC, P_FM2_SUS, P_FM2_REL}},
     {"OP3 ENV", FAM_EDIT, SC_TRACK, GR_ADSR, {P_FM3_ATK, P_FM3_DEC, P_FM3_SUS, P_FM3_REL}},

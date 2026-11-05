@@ -3,6 +3,7 @@
  * UART parser, ownership model, sequencer, voice renderer and UI source. */
 #define UI_TEST_NO_MAIN 1
 #include "ui_test.c"
+volatile uint8_t fm_bend_mode;               /* seq.c's (the firmware's; this test has no seq.c): the PITCH BEND range */
 
 static void midi_test_reset(void)
 {

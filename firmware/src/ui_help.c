@@ -39,7 +39,7 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
     {"OP ENV", H_FMOP},
     {"OPERATOR 2", H_FMOP},
     {"CTRL", H_FMINI}, {"OSC", H_FMINI}, {"MIX", H_FMINI}, {"FILT", H_FMINI}, {"F.ENV", H_FMINI}, {"A.ENV", H_FMINI},
-    {"FMINI FX", H_FMINI},
+    {"FMINI FX", H_FMINI}, {"PRESET", H_FMINI},
     {"VOICE", "[K1]POLY, MONO[K2]GLIDE"},
     {"VOICE 2", "[K2]DETUNE[K3]PAN[K4]MUTE"},
     {"VOICE 3", "[K1]STEREO SPREAD[EDIT]EDIT 1"},

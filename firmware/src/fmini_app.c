@@ -27,7 +27,7 @@
 #define FA_BOX FA_RGB(0x0F, 0x0E, 0x0D)
 #define FA_LINE FA_RGB(0x3A, 0x35, 0x30)
 #define FA_RULE FA_RGB(0x4A, 0x44, 0x3D)
-#define FA_NPAGE 7u
+#define FA_NPAGE 8u
 
 static uint8_t fa_page;                                  /* 0..6 */
 static uint8_t fa_env_last;                              /* ENV: the page it opened last (F.ENV or A.ENV) */
@@ -35,7 +35,8 @@ static uint32_t fa_sig_prev = 0xFFFFFFFFu;
 static uint16_t fa_knob_bmp[38 * 38];                    /* the baked knob: 0 = transparent */
 static uint8_t fa_knob_ok;
 
-static const char *const FA_TAB[FA_NPAGE] = {"CTRL", "OSC", "MIX", "FILT", "F.ENV", "A.ENV", "FX"};
+static const char *const FA_TAB[FA_NPAGE] = {"CTRL", "OSC", "MIX", "FILT", "F.ENV", "A.ENV", "FX", "PRESET"};
+static uint8_t fa_pset_pop;                                   /* EDIT again on FILT: the PRESET SETTINGS pop-up (fmg page 7) */
 
 /* ---------------------------------------------------------- colours --- */
 static uint16_t fa_mix(uint16_t a, uint16_t b, uint32_t t)   /* a + (b - a) * t / 256 per channel */
@@ -512,7 +513,7 @@ static void fa_pop_knob(uint32_t pg, uint32_t i, int32_t cx, int32_t cy, int hot
 }
 static void fa_fx_dialog(void)
 {
-    uint32_t pg = 6u + fmg_fx, i;
+    uint32_t pg = fa_pset_pop ? 7u : 7u + fmg_fx, i;
     const uint16_t bgd = FA_RGB(0x1B, 0x19, 0x17);
     cv_rect(12, 42, 216, 164, FA_OR);
     cv_rect(14, 44, 212, 160, bgd);
@@ -520,7 +521,7 @@ static void fa_fx_dialog(void)
     cv_rect(20, 66, 200, 1, FA_RULE);
     for (i = 0; i < 4u; i++)
         fa_pop_knob(pg, i, 39 + (int32_t)i * 54, 112, fmg_cur[pg] == i);
-    fa_ctext(120, 190, &AF_X, fmg_fx == 2u ? "K1-K4  SCL=TAP  FX=NEXT" : "K1-K4  SELECT  ALGO  FX=NEXT", FA_MU);
+    fa_ctext(120, 190, &AF_X, fa_pset_pop ? "K1-K4  SELECT  ALGO  EDIT=CLOSE" : fmg_fx == 2u ? "K1-K4  SCL=TAP  FX=NEXT" : "K1-K4  SELECT  ALGO  FX=NEXT", FA_MU);
 }
 
 static void fa_wave_boxes(uint32_t pg, uint32_t cur)
@@ -1018,7 +1019,7 @@ static uint32_t fa_sound_keys(void)
 #define FA_NPG 47u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+6+4+4+8; CTRL's VOICES has no CC) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
-static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 PITCH BEND, 4 SUPPORT, 5 ABOUT;
+static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 SUPPORT, 4 ABOUT;
                                                            * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK */
 static uint16_t fa_tune_hz = 440;                         /* TUNING: the reference A, 410 .. 470 Hz (the global glo_tune_c) */
 /* the TUNING in cents from A 440, for 410 .. 470 Hz: round(1200 * log2(hz / 440)) */
@@ -1158,6 +1159,8 @@ static void fa_ctl_name(uint32_t n, const char **tag, char *name)
         str_cpy(name, "GLIDE TIME", 16);
     else if (pg == 0u && i == 6u)
         str_cpy(name, "GLIDE ON", 16);
+    else if (pg == 5u && i == 3u)
+        str_cpy(name, "VOLUME", 16);
     else if (pg == 6u && i >= 4u)
         str_cpy(name, i == 4u ? "REVERB DECAY" : i == 5u ? "DELAY TIME" : i == 6u ? "CHORUS RATE" : "DRIVE TONE", 16);
 }
@@ -1180,13 +1183,16 @@ static void fa_ctl_apply(uint32_t n, uint32_t v)
     fa_ctl_loc(n, &pg, &i);
     if (pg == 6u && i >= 4u) {                            /* the FX page's slots 4..7 kept their CCs: DECAY TIME RATE TONE, now in the pop-ups */
         static const uint8_t POPI[4] = {2, 2, 3, 2};
-        pg = 6u + (i - 3u);
+        pg = 7u + (i - 3u);                               /* (the FX pop-ups are FMG pages 8..11, after PRESET SETTINGS) */
         i = POPI[i - 4u];
     }
     f = fmg_field(pg, i);
     switch (f->kind) {
     case FK_PAR:
         midi_cc_set(t, f->a, v);
+        break;
+    case FK_NONE:                                         /* A.ENV's LEVEL slot: its CC 7 is VOLUME, which is on PRESET SETTINGS now */
+        midi_cc_set(t, P_LEVEL, v);
         break;
     case FK_NAME:
         fmg_write(f->a, v * 6u / 128u);
@@ -1440,9 +1446,8 @@ static void fa_gl_dialog(void)
             fa_line(79, "TUNING", tn, fa_gl_row == 1u);
             fa_line(96, "TRANSPOSE", tr, fa_gl_row == 2u);
         }
-        fa_line(113, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 3u);
-        fa_line(130, "SUPPORT FMINI-1", ">", fa_gl_row == 4u);
-        fa_line(147, "ABOUT", ">", fa_gl_row == 5u);
+        fa_line(113, "SUPPORT FMINI-1", ">", fa_gl_row == 3u);
+        fa_line(130, "ABOUT", ">", fa_gl_row == 4u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
@@ -1630,7 +1635,7 @@ static void fa_scene(void)
         cv_text_on(lx, 3, &AF_S, "1", FA_OR, FA_RGB(0x0E, 0x0D, 0x0C));
     }
     {
-        static const uint8_t TW[FA_NPAGE] = {24, 22, 20, 22, 30, 30, 18};
+        static const uint8_t TW[FA_NPAGE] = {20, 18, 18, 20, 24, 24, 16, 30};
         int32_t tx = 60;
         for (i = 0; i < FA_NPAGE; i++) {
             uint16_t bgc = i == pg ? FA_OR : FA_RGB(0x1E, 0x1B, 0x19);
@@ -1692,7 +1697,7 @@ static void fa_scene(void)
         fa_ar_dialog();
     else if (fa_sv)
         fa_sv_conf ? fa_confirm_dialog() : fa_dialog();
-    else if (fmg_fx)
+    else if (fmg_fx || fa_pset_pop)
         fa_fx_dialog();
     else if (fa_msg_on()) {
         int32_t mw = text_w(&AF_M, fa_msg) + 20;
@@ -1736,7 +1741,7 @@ static uint32_t fa_signature(void)
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_DRREV] << 7 ^ (uint32_t)song.g[G_CRATE] << 14 ^ (uint32_t)song.g[G_DRLVL] << 21) * 16777619u;   /* FX: DECAY TIME RATE TONE */
     for (i = 0; i < 8u; i++)                                 /* the pop-ups' others, and which pop-up is open */
         h = (h ^ (uint32_t)song.g[FA_GID2[i]]) * 16777619u;
-    h = (h ^ fmg_fx) * 16777619u;
+    h = (h ^ fmg_fx ^ (uint32_t)fa_pset_pop << 4) * 16777619u;
     h = (h ^ fa_sv_slot ^ (uint32_t)fa_sv_pos << 8 ^ (uint32_t)(fa_sv_conf | fa_sv_yes << 1) << 12 ^ (uint32_t)t->user << 16 ^ (uint32_t)fa_msg_on() << 24) * 16777619u;
     for (i = 0; i < 12u; i++)
         h = (h ^ (uint8_t)fa_sv_name[i]) * 16777619u;
@@ -1878,6 +1883,12 @@ static void fa_factory_extras(track_t *t, uint32_t n)
     if (n >= FMINI_NSLOT)
         return;
     fb_extra(n, x);                             /* the slot's record (saved or factory) */
+    {   uint8_t bnd, wh;                        /* the preset's PITCH BEND range and MOD WHEEL position */
+        fb_pset(n, &bnd, &wh);
+        t->mw = wh;
+        if (t == &trk[0])
+            fm_bend_mode = bnd;
+    }
     t->p[P_AMODE] = x->arp[0] ? x->arp[1] : 0;
     t->p[P_ARATE] = x->arp[2];
     t->p[P_AOCT] = x->arp[3];
@@ -1949,6 +1960,9 @@ static int fa_save_slot(uint32_t k, const char *name)
     n = fr_put(rec, FB_SLOT, n, FR_PATCH, patch, FG_SIZE);
     n = fr_put(rec, FB_SLOT, n, FR_EXTRA, (const uint8_t *)&x, sizeof x);
     n = fr_put(rec, FB_SLOT, n, FR_PARAM, par, sizeof par);
+    {   const uint8_t ps[2] = {(uint8_t)(fm_bend_mode & 3u), (uint8_t)(t->mw & 127u)};   /* the bend range and the wheel as they are now */
+        n = fr_put(rec, FB_SLOT, n, FR_PSET, ps, sizeof ps);
+    }
     if (!n)
         return -1;
     return fb_write(k, rec, n);                       /* flash (fmini_bank.c), or the host's RAM copy */
@@ -2005,7 +2019,7 @@ static void fa_buttons(uint32_t pressed)
     uint32_t i;
     if (fa_gl == 6u && pressed) {                         /* SUPPORT: any key goes back to GLOBAL */
         fa_gl = 1u;
-        fa_gl_row = 4u;
+        fa_gl_row = 3u;
         return;
     }
     if (fa_gl == 5u && pressed) {                         /* MIDI MONITOR: any key goes back to MIDI SETTINGS, and does nothing else */
@@ -2040,7 +2054,7 @@ static void fa_buttons(uint32_t pressed)
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_row = 5u;
+                fa_gl_row = 4u;
                 fa_gl = 3u;
             }
         }
@@ -2057,7 +2071,7 @@ static void fa_buttons(uint32_t pressed)
         } else if (fa_gl == 2u)
             fa_gl = 4u;                                    /* MIDI CC -> MIDI SETTINGS (its row kept) */
         else if (fa_gl == 4u || fa_gl == 3u) {             /* MIDI SETTINGS / ABOUT -> GLOBAL */
-            fa_gl_row = fa_gl == 3u ? 5u : 0u;
+            fa_gl_row = fa_gl == 3u ? 4u : 0u;
             fa_gl = 1;
         } else
             fa_gl_close();
@@ -2180,6 +2194,16 @@ static void fa_buttons(uint32_t pressed)
     }
     for (i = 0; i < 5u; i++)
         if ((pressed >> panel.btn[PG_BTN[i]]) & 1u) {
+            if (PG_BTN[i] == B_EDIT && fa_page == 3u) {   /* EDIT again on FILT: the PRESET SETTINGS pop-up, EDIT closes it */
+                fa_pset_pop = (uint8_t)!fa_pset_pop;
+                fa_sv = 0;
+                fa_ar = 0;
+                fa_sc = 0;
+                fa_sq = 0;
+                fa_sq_rec = 0;
+                fa_gl_close();
+                continue;
+            }
             if (PG_BTN[i] == B_FX && fa_page == 6u) {     /* FX again: round the four pop-ups, then back to the page */
                 fa_sv = 0;
                 fa_ar = 0;
@@ -2193,6 +2217,7 @@ static void fa_buttons(uint32_t pressed)
                 continue;
             }
             fmg_fx = 0;
+            fa_pset_pop = 0;
             fa_sv = 0;                                    /* a page button cancels the dialog */
             fa_ar = 0;
             fa_sc = 0;
@@ -2300,9 +2325,11 @@ static void fa_input(void)
     fa_track_preset();                                      /* a new preset (the knob, a Program Change, a saved one): the screen stays */
     fa_cc_poll();                                         /* the CCs the MIDI inputs brought */
     if (fa_gl || fa_sq || fa_ar || fa_sv || fa_page != 6u)
-        fmg_fx = 0;                                       /* the FX pop-up lives on the FX page alone, under no other dialog */
-    if (fmg_fx) {                                         /* an FX pop-up: K1..K4 its four knobs, SELECT / ALGO as on a page */
-        uint32_t pg = 6u + fmg_fx;
+        fmg_fx = 0;
+    if (fa_gl || fa_sq || fa_ar || fa_sv || fa_page != 3u)
+        fa_pset_pop = 0;                                  /* PRESET SETTINGS lives on FILT alone */                                       /* the FX pop-up lives on the FX page alone, under no other dialog */
+    if (fmg_fx || fa_pset_pop) {                          /* an FX pop-up, or PRESET SETTINGS: K1..K4 its four knobs, SELECT / ALGO as on a page */
+        uint32_t pg = fa_pset_pop ? 7u : 7u + fmg_fx;
         fmg_force_page = (int8_t)pg;
         if ((s = panel_enc(EN_SELECT)) != 0)
             fmg_cur[pg] = (uint8_t)((fmg_cur[pg] + 4u + (s > 0 ? 1u : 3u)) % 4u);
@@ -2322,7 +2349,7 @@ static void fa_input(void)
         (void)panel_enc(EN_SELECT);
         if (panel_enc(EN_ALGO) != 0) {
             fa_gl = 1u;
-            fa_gl_row = 4u;
+            fa_gl_row = 3u;
         }
         return;
     }
@@ -2346,7 +2373,7 @@ static void fa_input(void)
         (void)panel_enc(EN_PRESET);
         if (fa_gl == 1u) {                                /* GLOBAL: MIDI SETTINGS, TUNING, TRANSPOSE, ABOUT */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 6u + (s > 0 ? 1u : 5u)) % 6u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     fa_gl = 4u;                            /* MIDI SETTINGS: its first line */
@@ -2359,12 +2386,7 @@ static void fa_input(void)
                     glo_transpose = clamp(glo_transpose + (s > 0 ? 1 : -1), -12, 12);
                     panic_req |= 1u;                       /* the notes held now sound elsewhere: none may hang */
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 3u) {               /* PITCH BEND: the range, 0 .. 3 */
-                    fm_bend_mode = (uint8_t)clamp((int32_t)fm_bend_mode + (s > 0 ? 1 : -1), 0, 3);
-                    for (k = 0; k < 16u; k++)              /* the bend held now follows the new range */
-                        midi_expression_channel(k);
-                    fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 4u)
+                } else if (fa_gl_row == 3u)
                     fa_gl = 6u;                            /* SUPPORT: the QR code screen */
                 else
                     fa_gl = 3u;                            /* ABOUT */
@@ -2527,7 +2549,7 @@ static void fa_leds(void)
     for (k = 0; k < 27u; k++)
         led_put(nd, 14u + k, 1);                            /* every key's glow too: the keys lit when held or sounding stand over it */
     {
-        static const uint8_t PG_LED[FA_NPAGE] = {B_LFO, B_SCL, B_SCL, B_EDIT, B_ENV, B_ENV, B_FX};
+        static const uint8_t PG_LED[FA_NPAGE] = {B_LFO, B_SCL, B_SCL, B_EDIT, B_ENV, B_ENV, B_FX, B_EDIT};
         led_put(nl, panel.btn[PG_LED[fa_page]], 1);          /* the page's button */
         led_put(nl, panel.btn[B_HOME], fa_page == FA_HOME_PAGE);   /* FILT is HOME's: HOME and EDIT both light */
     }

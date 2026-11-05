@@ -70,6 +70,7 @@ int main(int argc, char **argv)
         for (k = 0; k < 16; k++) {
             int pg2 = pgs[k / 4], kn = k % 4;
             uint32_t before = 0, after = 0, i;
+            if (pg2 == 5 && kn == 3) continue;             /* A.ENV's LEVEL: no function now (VOLUME is on PRESET SETTINGS) */
             fa_page = (uint8_t)pg2;
             for (i = 0; i < FG_SIZE; i++) before = before * 31u + fmini_patch[0][i];
             for (i = 0; i < P_COUNT; i++) before = before * 31u + (uint32_t)TSEL->p[i];
@@ -816,21 +817,45 @@ int main(int argc, char **argv)
         if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
         /* FX: SELECT goes through its four knobs and on to the next page (the EDIT slots 4..7 are not on the face) */
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 3; fturn(EN_SELECT, 1);
-        if (fa_page != 0) { printf("FX select leaves at the fourth knob (%u)\n", (unsigned)fa_page); return 1; }
+        if (fa_page != 7) { printf("FX select leaves at the fourth knob (%u)\n", (unsigned)fa_page); return 1; }   /* PRESET SETTINGS is next */
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, -1);
         if (fa_page != 5 || fmg_curi(5) != fmg_count(5) - 1u) { printf("FX select back (%u)\n", (unsigned)fa_page); return 1; }
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, 1); fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
         if (fmg_curi(6) != 3u) { printf("FX select reaches 4 knobs (%u)\n", (unsigned)fmg_curi(6)); return 1; }
+        {   /* PRESET SETTINGS (1.25.0): the page after FX; EDIT again on FILT opens it as a pop-up; its four knobs are VOLUME,
+             * MODE, PITCH BEND and MOD WHEEL; EDIT closes the pop-up */
+            int32_t lv = TSEL->p[P_LEVEL];
+            uint8_t bm;
+            uint8_t mw0;
+            fa_gl = 0; fa_page = 6; fmg_cur[6] = 3; fturn(EN_SELECT, 1);
+            if (fa_page != 7) { printf("FX select reaches PRESET (%u)\n", (unsigned)fa_page); return 1; }
+            fmg_cur[7] = 3; fturn(EN_SELECT, 1);
+            if (fa_page != 0) { printf("PRESET select wraps to CTRL (%u)\n", (unsigned)fa_page); return 1; }
+            fa_gl = 0; fa_page = 3; fpress(B_EDIT); fframes(64);
+            if (!fa_pset_pop) { printf("EDIT on FILT opens PRESET SETTINGS\n"); return 1; }
+            fturn(EN_K1, -1); fframes(64);
+            if (TSEL->p[P_LEVEL] == lv) { printf("PRESET VOLUME knob does not move (%d -> %d, pop %u, page %u)\n", (int)lv, (int)TSEL->p[P_LEVEL], (unsigned)fa_pset_pop, (unsigned)fa_page); return 1; }
+            bm = fm_bend_mode;
+            fmg_cur[7] = 2; fturn(EN_ALGO, 1); fframes(64);
+            if (fm_bend_mode == bm) { printf("PRESET PITCH BEND does not move\n"); return 1; }
+            mw0 = TSEL->mw;
+            fturn(EN_K1 + 3, 1); fframes(64);
+            if (TSEL->mw == mw0) { printf("PRESET MOD WHEEL does not move\n"); return 1; }
+            ui.force = 1; fa_draw(); dump(dir, 30);
+            fpress(B_EDIT); fframes(64);
+            if (fa_pset_pop) { printf("EDIT closes PRESET SETTINGS\n"); return 1; }
+            fm_bend_mode = bm; TSEL->mw = mw0; TSEL->p[P_LEVEL] = (int16_t)lv;
+        }
         /* GLOBAL: SUPPORT FMINI-1!! is row 5 (after ABOUT): ALGORITHM opens the QR screen, any key goes back to it */
-        fa_gl = 1; fa_gl_row = 3; fturn(EN_SELECT, 1);
-        if (fa_gl_row != 4) { printf("support row\n"); return 1; }
+        fa_gl = 1; fa_gl_row = 2; fturn(EN_SELECT, 1);
+        if (fa_gl_row != 3) { printf("support row\n"); return 1; }
         fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
-        if (fa_gl_row != 0) { printf("GLOBAL wraps at 6 (%d)\n", fa_gl_row); return 1; }
-        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
+        if (fa_gl_row != 0) { printf("GLOBAL wraps at 5 (%d)\n", fa_gl_row); return 1; }
+        fa_gl = 1; fa_gl_row = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 6) { printf("support opens (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 43);
         fa_buttons(1u << panel.btn[B_EDIT]);
-        if (fa_gl != 1 || fa_gl_row != 4) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 3) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
         fa_gl = 6; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("support ALGO back (%d)\n", fa_gl); return 1; }
         fa_gl = 4; fa_gl_row = 4;
@@ -883,11 +908,6 @@ int main(int argc, char **argv)
             if (fa_gl != 4) { printf("monitor key back (%d)\n", fa_gl); return 1; }
             fa_gl_row = 4;
         }
-        /* GLO: PITCH BEND draws at once, ABOUT closes with either encoder */
-        fa_gl = 1; fa_gl_row = 3; fm_bend_mode = 0;
-        sig = fa_signature();
-        fturn(EN_ALGO, 1);
-        if (fm_bend_mode != 1 || fa_signature() == sig) { printf("bend redraw\n"); return 1; }
         /* GLO: TUNING (410..470 Hz, 440 = 0 cents) and TRANSPOSE (-12..+12) are global: the keys' note and the pitch follow */
         fa_gl = 1; fa_gl_row = 1; fa_tune_hz = 440; glo_tune_c = 0;
         fa_sq = 0; fa_sv = 0; fa_ar = 0; ui.force = 1; fa_draw(); dump(dir, 930);   /* GLO: TUNING, TRANSPOSE, ABOUT */
@@ -943,8 +963,6 @@ int main(int argc, char **argv)
         if (fa_clk != 2 || song.g[G_CLOCK] != 2) { printf("clock back to TRS (%d)\n", song.g[G_CLOCK]); return 1; }
         fa_cfg_dirty = 1; fa_cfg_save(); fa_clk = 0; fa_cfg_load();
         if (fa_clk != 2) { printf("clock kept (%d)\n", fa_clk); return 1; }
-        fa_clk = 0; fa_gl = 1; fa_gl_row = 3; fturn(EN_ALGO, 1);
-        if (fa_gl != 1 || fa_clk) { printf("pitch bend row\n"); return 1; }
         {   /* MIDI CLOCK: Start / Stop / Continue come from the chosen input only (the engine's clock, through events_block) */
             song.playing = 0; fm1_ms = 9000;
             fa_clk = 1; fa_clk_apply();
@@ -966,7 +984,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -1020,12 +1038,12 @@ int main(int argc, char **argv)
                 }
                 {   /* the TYPE knob: A-SYNC second in the order (its gauge), and the TIME keeps its length across the change */
                     int8_t fp = fmg_force_page; uint8_t fx0 = fmg_fx;
-                    song.g[G_DTIME] = 0; song.g[G_DRREV] = 65; fmg_force_page = 8; fmg_fx = 2;
-                    fmg_turn(8, 1, 1, EN_K1 + 1);
+                    song.g[G_DTIME] = 0; song.g[G_DRREV] = 65; fmg_force_page = 9; fmg_fx = 2;
+                    fmg_turn(9, 1, 1, EN_K1 + 1);
                     if (song.g[G_DTIME] != 7 || song.g[G_DRREV] < 0 || song.g[G_DRREV] > 11 || fmg_ratio(&GP[G_DTIME], 7) != 142) {
                         printf("A-SYNC: the type knob (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
                     }
-                    fmg_turn(8, 1, -1, EN_K1 + 1);
+                    fmg_turn(9, 1, -1, EN_K1 + 1);
                     if (song.g[G_DTIME] != 0 || song.g[G_DRREV] < 10 || song.g[G_DRREV] > 127) {
                         printf("A-SYNC: back to ANALOG (%d, time %d)\n", song.g[G_DTIME], song.g[G_DRREV]); return 1;
                     }
@@ -1079,12 +1097,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 4) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 5) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 4) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);

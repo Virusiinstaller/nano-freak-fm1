@@ -63,6 +63,9 @@ static uint32_t fb_factory_rec(uint32_t k, uint8_t *rec)
     n = fr_put(rec, FB_SLOT, n, FR_PATCH, patch, FG_SIZE);
     n = fr_put(rec, FB_SLOT, n, FR_EXTRA, (const uint8_t *)&x, sizeof x);
     n = fr_put(rec, FB_SLOT, n, FR_PARAM, par, sizeof par);
+    {   static const uint8_t PS[2] = {0, 0};             /* the factory's PITCH BEND (0 = +-2) and MOD WHEEL (0) */
+        n = fr_put(rec, FB_SLOT, n, FR_PSET, PS, sizeof PS);
+    }
     return n;
 }
 
@@ -164,6 +167,20 @@ static void fb_extra(uint32_t k, fmini_x_t *x)
         memcpy(x, d, sizeof *x);
     else
         memset(x, 0, sizeof *x);
+}
+
+/* slot k's PITCH BEND range and MOD WHEEL position (the FR_PSET block; 0 and 0 when it is not there, as the factory's are) */
+static void fb_pset(uint32_t k, uint8_t *bend, uint8_t *wheel)
+{
+    uint8_t rec[FB_SLOT];
+    uint32_t n = fb_read(k, rec), l = 0;
+    const uint8_t *d = 0;
+    *bend = 0;
+    *wheel = 0;
+    if (fr_find(rec, n, FR_PSET, &d, &l) && l == 2u) {
+        *bend = (uint8_t)(d[0] & 3u);
+        *wheel = (uint8_t)(d[1] & 127u);
+    }
 }
 
 #if FELUCCA_FLASH

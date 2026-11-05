@@ -2206,7 +2206,7 @@ static void draw_graph(void)
         case GR_FMENV:
             if (fop_ok()) graph_fm6env(t, c);
             break;
-        case GR_FMG0: case GR_FMG1: case GR_FMG2: case GR_FMG3: case GR_FMG4: case GR_FMG5: case GR_FMG6:
+        case GR_FMG0: case GR_FMG1: case GR_FMG2: case GR_FMG3: case GR_FMG4: case GR_FMG5: case GR_FMG6: case GR_FMG7:
             if (fmg_ok()) graph_fmini(t, c);
             break;
         default:

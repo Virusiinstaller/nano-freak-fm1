@@ -16,9 +16,9 @@
 #endif
 static void ml_knob(const track_t *t, uint32_t id);              /* (midi_learn.c) */
 static uint8_t fmg_gdirty;                                        /* a global (FK_GLB) changed: fmini_app.c saves it */
-static uint8_t fmg_cur[11];                                        /* the cursor of each page: 0..3 the knobs, 4.. extras */
+static uint8_t fmg_cur[12];                                        /* the cursor of each page: 0..3 the knobs, 4.. extras */
 
-enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT };   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
+enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE };   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
 typedef struct {
     const char *lb;                                               /* card label (<= 6) */
     uint8_t kind, a, b;                                           /* a: byte index or param id; b: switch bit / names */
@@ -27,7 +27,7 @@ typedef struct {
 enum { FN_RANGE, FN_WAVE };
 #define FMG_NF 9u
 static uint8_t fmg_fx;                                            /* FMini-1: the FX pop-up open (1..4: REVERB DELAY CHORUS DRIVE), 0 = none */
-#define FMG_NPG 11u                                               /* the seven pages, then the four FX pop-ups' (7 + fmg_fx - 1) */
+#define FMG_NPG 12u                                               /* the seven pages, PRESET SETTINGS (7), then the four FX pop-ups' (7 + fmg_fx) */
 static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[FMG_NPG] = {
     {"CONTROLLERS", FELUCCA_FMINI_ONLY ? 9 : 8, {{"TUNE", FK_BYTE, FG_TUNE, 0, ICON_TUNE}, {"GLIDE", FK_GLIDE, FG_GLID, 0, ICON_GLIDE},
                         {"MOD MIX", FK_BYTE, FG_MMIX, 0, ICON_MOD}, {"LFO RATE", FK_PAR, P_LRATE, 0, ICON_RATE},
@@ -49,11 +49,15 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
     {"FILTER CONTOUR", 4, {{"ATTACK", FK_PAR, P_E3, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_E4, 0, ICON_DECAY},
                        {"SUSTAIN", FK_PAR, P_E5, 0, ICON_SUSTAIN}, {"AMOUNT", FK_PAR, P_E2, 0, ICON_SWEEP}}},
     {"LOUDNESS CONTOUR", 4, {{"ATTACK", FK_PAR, P_ATK, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_DEC, 0, ICON_DECAY},
-                         {"SUSTAIN", FK_PAR, P_SUS, 0, ICON_SUSTAIN}, {"LEVEL", FK_PAR, P_LEVEL, 0, ICON_LEVEL}}},
+                         {"SUSTAIN", FK_PAR, P_SUS, 0, ICON_SUSTAIN}, {"LEVEL", FK_NONE, 0, 0, ICON_LEVEL}}},
     {"EFFECTS", 8, {{"REVERB", FK_PAR, P_REV, 0, ICON_REVERB}, {"DELAY", FK_PAR, P_DLY, 0, ICON_DELAY},
                     {"CHORUS", FK_PAR, P_CHOR, 0, ICON_CHORUS}, {"DRIVE", FK_PAR, P_DIST, 0, ICON_DRIVE},
                     {"EDIT", FK_EDIT, 0, 0, ICON_REVERB}, {"EDIT", FK_EDIT, 1, 0, ICON_DELAY},
                     {"EDIT", FK_EDIT, 2, 0, ICON_CHORUS}, {"EDIT", FK_EDIT, 3, 0, ICON_DRIVE}}},
+    /* PRESET SETTINGS (1.25.0): the page after FX, and the EDIT pop-up on FILT: VOLUME (the LEVEL that was A.ENV's),
+     * MODE (MONO / POLY, as CTRL's VOICES), PITCH BEND and MOD WHEEL, both kept in the preset */
+    {"PRESET SETTINGS", 4, {{"VOLUME", FK_PAR, P_LEVEL, 0, ICON_LEVEL}, {"MODE", FK_VOICE, P_VOICE, 0, ICON_LEVEL},
+                            {"PITCH BEND", FK_BEND, 0, 0, ICON_SWEEP}, {"MOD WHEEL", FK_WHEEL, 0, 0, ICON_MOD}}},
     /* the FX pop-ups: four knobs each (K1..K4) */
     {"REVERB", 4, {{"MIX", FK_PAR, P_REV, 0, ICON_REVERB}, {"TYPE", FK_GLB, G_RTYPE, 0, ICON_REVERB},
                    {"DECAY", FK_GLB, G_RSIZE, 0, ICON_REVERB}, {"TONE", FK_GLB, G_RDAMP, 0, ICON_REVERB}}},
@@ -66,11 +70,12 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
 };
 static const char *const FMG_RANGE[6] = {"LO", "32'", "16'", "8'", "4'", "2'"};
 static const char *const FMG_WAVE[6] = {"TRI", "SHARK", "SAW", "SQR", "PLS W", "PLS N"};
+static const char *const FMG_BEND[4] = {"+/-2", "+/-12", "+2/-12", "+2/-24"};   /* PITCH BEND: fm_bend_mode (seq.c) */
 
-static int fmg_page(uint32_t g) { return g >= GR_FMG0 && g <= GR_FMG6; }
+static int fmg_page(uint32_t g) { return g >= GR_FMG0 && g <= GR_FMG7; }
 static int fmg_ok(void) { return TSEL->eng_req % NENGINES == ENGI_FMINI; }
 static int8_t fmg_force_page = -1;                               /* FELUCCA_FMINI_ONLY: fmini_app.c's page */
-static uint32_t fmg_pg(void) { return fmg_force_page >= 0 ? (uint32_t)fmg_force_page % FMG_NPG : (cur_page()->graph - GR_FMG0) % 7u; }
+static uint32_t fmg_pg(void) { return fmg_force_page >= 0 ? (uint32_t)fmg_force_page % FMG_NPG : (cur_page()->graph - GR_FMG0) % 8u; }
 static uint32_t fmg_count(uint32_t pg) { return FMG_PAGE[pg % FMG_NPG].n; }
 static const fmgf_t *fmg_field(uint32_t pg, uint32_t i) { return &FMG_PAGE[pg % FMG_NPG].f[i % FMG_NF]; }
 /* the control under the page's cursor */
@@ -294,6 +299,14 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
             motion_capture(t, P_VOICE, t->p[P_VOICE]);
         }
         break;
+    case FK_BEND:                                     /* PITCH BEND: the preset's range (fm_bend_mode), a step a detent */
+        fm_bend_mode = (uint8_t)clamp((int32_t)fm_bend_mode + (s > 0 ? 1 : -1), 0, 3);
+        break;
+    case FK_WHEEL:                                    /* MOD WHEEL: the track's position (t->mw, as CC1 sets it); saved with the preset */
+        t->mw = (uint8_t)clamp((int32_t)t->mw + fmg_acc(role, s, 127), 0, 127);
+        break;
+    case FK_NONE:                                     /* A.ENV's LEVEL: no function (VOLUME is on PRESET SETTINGS) */
+        break;
     case FK_INS:                                      /* the track's INSERT: a phaser on / off */
         t->p[P_ITYPE] = (int16_t)(s > 0 ? IT_PHASER : 0);
         t->p[P_IMIX] = 127;
@@ -364,6 +377,8 @@ static void fmg_range(uint32_t pg, uint32_t i, int32_t *lo, int32_t *hi)
         *lo = GP[f->a].min;
         *hi = GP[f->a].max;
     }
+    if (f->kind == FK_BEND)
+        *hi = 3;
     if (f->kind == FK_PAR) {
         *lo = track_desc(TSEL, f->a)->min;
         *hi = track_desc(TSEL, f->a)->max;
@@ -434,6 +449,19 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
         return;
     case FK_EDIT:
         str_cpy(val, "EDIT", 12);
+        return;
+    case FK_BEND:
+        v = vo >= 0 ? vo : (int32_t)fm_bend_mode;
+        str_cpy(val, FMG_BEND[clamp(v, 0, 3)], 12);
+        *ratio = clamp(v, 0, 3) * 1000 / 3;
+        return;
+    case FK_WHEEL:
+        v = vo >= 0 ? vo : (int32_t)t->mw;
+        fmt_int(val, v);
+        *ratio = clamp(v, 0, 127) * 1000 / 127;
+        return;
+    case FK_NONE:
+        str_cpy(val, "--", 12);
         return;
     case FK_SW:
     case FK_BYP:
