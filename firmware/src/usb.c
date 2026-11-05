@@ -295,7 +295,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
     12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 1: line, 2 ch (L R) */      \
     9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                    /* output terminal 2: USB streaming, from 1 */ \
     12, 0x24, 2, 3, 0x01, 0x01, 0, 2, 0x03, 0x00, 0, 0,    /* input terminal 3: USB streaming, 2 ch (playback) */ \
-    9, 0x24, 3, 4, 0x01, 0x03, 0, 3, 0,                    /* output terminal 4: speaker, from 3 */
+    9, 0x24, 3, 4, 0x01, 0x03, 0, 3, 3,                    /* output terminal 4: speaker, from 3; name: string 3 (FM-1 Audio) */
 #define D_AS(s)                                                                                      \
     9, 4, (s), 0, 0, 1, 2, 0, 0,                           /* audio streaming, alt 0: no bandwidth */    \
     9, 4, (s), 1, 1, 1, 2, 0, 0,                           /* alt 1: the stream */                      \
@@ -423,6 +423,8 @@ static const uint8_t STR2[] = {30, 3, 'F', 0, 'M', 0, 'i', 0, 'n', 0, 'i', 0, '-
 static const uint8_t STR2[] = {20, 3, 'F', 0, 'M', 0, '-', 0, '1', 0, ' ', 0, 'M', 0, 'i', 0, 'd', 0, 'i', 0};   /* FM-1 Midi (the MIDI / audio device's name) */
 #endif
 
+static const uint8_t STR3[] = {22, 3, 'F', 0, 'M', 0, '-', 0, '1', 0, ' ', 0, 'A', 0, 'u', 0, 'd', 0, 'i', 0, 'o', 0};   /* the audio output's name (the speaker terminal) */
+
 static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
 {
     switch (wvalue >> 8) {
@@ -448,6 +450,12 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
             *d = STR2;
             *l = sizeof STR2;
             return 1;
+#if FELUCCA_UAC_OUT
+        case 3:
+            *d = STR3;
+            *l = sizeof STR3;
+            return 1;
+#endif
         default:
             return 0;
         }
