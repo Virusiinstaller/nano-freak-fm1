@@ -194,11 +194,12 @@ static volatile uint32_t mi_w, mi_r, mo_w, mo_r;
 static volatile uint8_t midi_in_overflow;               /* audio ISR discards a broken stream and releases notes */
 
 #define MON_N 25u                                   /* the MIDI monitor (fmini_app.c): the last 25 messages in, USB and TRS */
-static volatile uint32_t mon_pkt[MON_N], mon_n;
+static volatile uint32_t mon_pkt[MON_N], mon_n, mon_trs;   /* mon_trs: the TRS messages counted (the header's TRS n) */
 static volatile uint8_t mon_src[MON_N];
 uint32_t midi_mon_total(void) { return mon_n < MON_N ? mon_n : MON_N; }   /* the messages kept (at most MON_N) */
 uint32_t midi_mon_seq(void) { return mon_n; }          /* every message counted (the screen redraws when it moves) */
-void midi_mon_clear(void) { mon_n = 0; }               /* the monitor closed: its messages go (main loop; the ISR's next one is at most 1 off) */
+uint32_t midi_mon_trs(void) { return mon_trs; }
+void midi_mon_clear(void) { mon_n = 0; mon_trs = 0; }               /* the monitor closed: its messages go (main loop; the ISR's next one is at most 1 off) */
 uint32_t midi_mon_get(uint32_t age, uint32_t *src)     /* age 0 = the newest */
 {
     uint32_t i = (mon_n - 1u - age) % MON_N;
@@ -212,6 +213,8 @@ static int midi_enqueue(uint32_t pkt, uint32_t source)
     mon_pkt[mon_n % MON_N] = pkt;
     mon_src[mon_n % MON_N] = (uint8_t)source;
     mon_n++;
+    if (source == 2u)
+        mon_trs++;
     if (midi_in_overflow)
         return 0;
     if (mi_w - mi_r >= MQ) {

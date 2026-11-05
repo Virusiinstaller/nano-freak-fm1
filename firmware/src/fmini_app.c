@@ -1342,6 +1342,7 @@ uint32_t midi_mon_total(void);
 uint32_t midi_mon_get(uint32_t age, uint32_t *src);
 uint32_t midi_mon_rx(void);
 uint32_t midi_mon_seq(void);
+uint32_t midi_mon_trs(void);
 void midi_mon_clear(void);
 static void fa_mon_dialog(void)
 {
@@ -1351,8 +1352,8 @@ static void fa_mon_dialog(void)
     fa_frame("MIDI MONITOR");
     fmt_int(nb, (int32_t)midi_mon_rx());                  /* the diagnosis: USB packets taken, MIDI messages queued */
     str_cpy(hd + str_len(hd), nb, 12);
-    str_cpy(hd + str_len(hd), "  MIDI ", 10);
-    fmt_int(nb, (int32_t)total);
+    str_cpy(hd + str_len(hd), "  TRS ", 10);
+    fmt_int(nb, (int32_t)midi_mon_trs());
     str_cpy(hd + str_len(hd), nb, 12);
     fa_ctext(120, 48, &AF_S, hd, FA_MU);
     if (!total)
