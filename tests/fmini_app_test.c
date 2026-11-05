@@ -815,15 +815,15 @@ int main(int argc, char **argv)
         fturn(EN_SELECT, -1);
         if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
         /* GLOBAL: SUPPORT FMINI-1!! is row 5 (after ABOUT): ALGORITHM opens the QR screen, any key goes back to it */
-        fa_gl = 1; fa_gl_row = 4; fturn(EN_SELECT, 1);
-        if (fa_gl_row != 5) { printf("support row\n"); return 1; }
-        fturn(EN_SELECT, 1);
+        fa_gl = 1; fa_gl_row = 3; fturn(EN_SELECT, 1);
+        if (fa_gl_row != 4) { printf("support row\n"); return 1; }
+        fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
         if (fa_gl_row != 0) { printf("GLOBAL wraps at 6 (%d)\n", fa_gl_row); return 1; }
-        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
         if (fa_gl != 6) { printf("support opens (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 43);
         fa_buttons(1u << panel.btn[B_EDIT]);
-        if (fa_gl != 1 || fa_gl_row != 5) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 4) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
         fa_gl = 6; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("support ALGO back (%d)\n", fa_gl); return 1; }
         fa_gl = 4; fa_gl_row = 4;
@@ -949,7 +949,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -1064,12 +1064,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 4) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 4) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 5) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);

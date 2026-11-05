@@ -1018,7 +1018,7 @@ static uint32_t fa_sound_keys(void)
 #define FA_NPG 47u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+6+4+4+8; CTRL's VOICES has no CC) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
-static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 PITCH BEND, 4 ABOUT;
+static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 PITCH BEND, 4 SUPPORT, 5 ABOUT;
                                                            * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK */
 static uint16_t fa_tune_hz = 440;                         /* TUNING: the reference A, 410 .. 470 Hz (the global glo_tune_c) */
 /* the TUNING in cents from A 440, for 410 .. 470 Hz: round(1200 * log2(hz / 440)) */
@@ -1378,14 +1378,29 @@ static void fa_mon_dialog(void)
 
 /* SUPPORT FMINI-1!! (GLOBAL, row 5): a black screen with the Ko-fi QR code (25 x 25 modules, bit 24 = column 0) */
 static const uint32_t FA_KOFI_QR[25] = {0x1FD507Fu, 0x104F941u, 0x175CE5Du, 0x175D75Du, 0x175355Du, 0x1046941u, 0x1FD557Fu, 0x0005700u, 0x1E5799Du, 0x0D85AB2u, 0x11DF907u, 0x1EAC249u, 0x194D6B7u, 0x050B410u, 0x0B7E830u, 0x178A527u, 0x03755FAu, 0x001C71Cu, 0x1FC8F5Fu, 0x1046F1Bu, 0x1748DF1u, 0x1754193u, 0x175C666u, 0x105BCB3u, 0x1FD2283u};
+/* the largest font whose text fits in 228 px (the screen is 240 wide) */
+static const aafont_t *fa_fit(const char *s)
+{
+    if (text_w(&AF_L, s) <= 228)
+        return &AF_L;
+    if (text_w(&AF_M, s) <= 228)
+        return &AF_M;
+    if (text_w(&AF_N, s) <= 228)
+        return &AF_N;
+    if (text_w(&AF_X, s) <= 228)
+        return &AF_X;
+    return &AF_S;
+}
 static void fa_support_dialog(void)
 {
     const int32_t qx = (240 - 83) / 2, qy = 100;          /* the code: 25 modules of 3 px and a 2-module quiet zone */
+    const char *title = "Enjoying this software?", *body = "Support its development";
+    const aafont_t *ft = fa_fit(title), *fb = fa_fit(body);
     int32_t r, c;
     cv_rect(0, 0, 240, 240, FA_RGB(0, 0, 0));
-    fa_ctext(120, 24, &AF_M, "Enjoying this software?", FA_OR);
-    fa_ctext(120, 62, &AF_S, "Support its development", FA_RGB(255, 255, 255));
-    fa_ctext(120, 78, &AF_S, "with a donation.", FA_RGB(255, 255, 255));
+    fa_ctext(120, 14, ft, title, FA_OR);
+    fa_ctext(120, 52, fb, body, FA_RGB(255, 255, 255));
+    fa_ctext(120, 52 + fa_cap_h(fb) + 6, fb, "with a donation.", FA_RGB(255, 255, 255));
     cv_rect(qx, qy, 83, 83, FA_RGB(255, 255, 255));
     for (r = 0; r < 25; r++) {
         c = 0;
@@ -1400,7 +1415,7 @@ static void fa_support_dialog(void)
             cv_rect(qx + 6 + st * 3, qy + 6 + r * 3, (c - st) * 3, 3, FA_RGB(0, 0, 0));
         }
     }
-    fa_ctext(120, 190, &AF_S, "ko-fi.com/ruppert", FA_RGB(255, 255, 255));
+    fa_ctext(120, 190, fa_fit("ko-fi.com/ruppert"), "ko-fi.com/ruppert", FA_RGB(255, 255, 255));
 }
 
 static void fa_gl_dialog(void)
@@ -1424,8 +1439,8 @@ static void fa_gl_dialog(void)
             fa_line(96, "TRANSPOSE", tr, fa_gl_row == 2u);
         }
         fa_line(113, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 3u);
-        fa_line(130, "ABOUT", ">", fa_gl_row == 4u);
-        fa_line(147, "SUPPORT FMINI-1!!", ">", fa_gl_row == 5u);
+        fa_line(130, "SUPPORT FMINI-1", ">", fa_gl_row == 4u);
+        fa_line(147, "ABOUT", ">", fa_gl_row == 5u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
@@ -1988,7 +2003,7 @@ static void fa_buttons(uint32_t pressed)
     uint32_t i;
     if (fa_gl == 6u && pressed) {                         /* SUPPORT: any key goes back to GLOBAL */
         fa_gl = 1u;
-        fa_gl_row = 5u;
+        fa_gl_row = 4u;
         return;
     }
     if (fa_gl == 5u && pressed) {                         /* MIDI MONITOR: any key goes back to MIDI SETTINGS, and does nothing else */
@@ -2023,7 +2038,7 @@ static void fa_buttons(uint32_t pressed)
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_row = 4u;
+                fa_gl_row = 5u;
                 fa_gl = 3u;
             }
         }
@@ -2040,7 +2055,7 @@ static void fa_buttons(uint32_t pressed)
         } else if (fa_gl == 2u)
             fa_gl = 4u;                                    /* MIDI CC -> MIDI SETTINGS (its row kept) */
         else if (fa_gl == 4u || fa_gl == 3u) {             /* MIDI SETTINGS / ABOUT -> GLOBAL */
-            fa_gl_row = fa_gl == 3u ? 4u : 0u;
+            fa_gl_row = fa_gl == 3u ? 5u : 0u;
             fa_gl = 1;
         } else
             fa_gl_close();
@@ -2305,7 +2320,7 @@ static void fa_input(void)
         (void)panel_enc(EN_SELECT);
         if (panel_enc(EN_ALGO) != 0) {
             fa_gl = 1u;
-            fa_gl_row = 5u;
+            fa_gl_row = 4u;
         }
         return;
     }
@@ -2347,7 +2362,7 @@ static void fa_input(void)
                     for (k = 0; k < 16u; k++)              /* the bend held now follows the new range */
                         midi_expression_channel(k);
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 5u)
+                } else if (fa_gl_row == 4u)
                     fa_gl = 6u;                            /* SUPPORT: the QR code screen */
                 else
                     fa_gl = 3u;                            /* ABOUT */
