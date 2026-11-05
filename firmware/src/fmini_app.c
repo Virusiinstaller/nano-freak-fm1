@@ -1258,7 +1258,19 @@ static void fa_clk_apply(void)
     song.g[G_CLOCK] = (int16_t)fa_clk;
 }
 /* MIDI MONITOR (MIDI SETTINGS, row 4): the last messages that arrive, the newest at the bottom; any key or ALGORITHM goes back */
-#define MON_SHOW 8u
+#define MON_SHOW 8u                                   /* the lines on the screen; the monitor keeps 25 (usb.c MON_N) */
+static uint32_t fa_mon_off;                           /* the scroll: 0 = the newest at the bottom, n = n messages older */
+static uint32_t fa_mon_max(void)
+{
+    uint32_t t = midi_mon_total();
+    return t > MON_SHOW ? t - MON_SHOW : 0u;
+}
+static void fa_mon_close(void)                         /* back to MIDI SETTINGS, the messages gone */
+{
+    midi_mon_clear();
+    fa_mon_off = 0;
+    fa_gl = 4u;
+}
 static void fa_hex(char *d, uint32_t v)
 {
     static const char HX[] = "0123456789ABCDEF";
@@ -1329,6 +1341,7 @@ static void fa_mon_line(uint32_t pkt, uint32_t src, char *l, char *r)
 uint32_t midi_mon_total(void);
 uint32_t midi_mon_get(uint32_t age, uint32_t *src);
 uint32_t midi_mon_rx(void);
+void midi_mon_clear(void);
 static void fa_mon_dialog(void)
 {
     char l[16], r[24];
@@ -1343,14 +1356,24 @@ static void fa_mon_dialog(void)
     fa_ctext(120, 48, &AF_S, hd, FA_MU);
     if (!total)
         fa_ctext(120, 110, &AF_S, "WAITING FOR MIDI", FA_MU);
-    for (k = 0; k < MON_SHOW && k < total; k++) {
-        uint32_t src, pkt = midi_mon_get(k, &src);
-        int32_t y = 171 - 15 * (int32_t)k;                /* the newest at the bottom, the older above it */
+    if (fa_mon_off > fa_mon_max())
+        fa_mon_off = fa_mon_max();
+    for (k = 0; k < MON_SHOW && fa_mon_off + k < total; k++) {   /* row k = the message fa_mon_off + k back; the newest at the bottom */
+        uint32_t src, age = fa_mon_off + k, pkt = midi_mon_get(age, &src);
+        int32_t y = 171 - 15 * (int32_t)k;
         fa_mon_line(pkt, src, l, r);
-        fa_ltext(20, y, &AF_S, l, k == 0u ? FA_OR : FA_CR);
-        fa_rtext(216, y, &AF_S, r, k == 0u ? FA_OR : FA_CR);
+        fa_ltext(20, y, &AF_S, l, age == 0u ? FA_OR : FA_CR);
+        fa_rtext(210, y, &AF_S, r, age == 0u ? FA_OR : FA_CR);
     }
-    fa_ctext(120, 190, &AF_S, "ANY KEY OR ALGO = BACK", FA_MU);
+    if (total > MON_SHOW) {                               /* the scroll bar: the track, and the thumb where the window is */
+        int32_t th = (int32_t)(124u * MON_SHOW / total), tp;
+        if (th < 8)
+            th = 8;
+        tp = 56 + (int32_t)((124 - th) * (fa_mon_max() - fa_mon_off) / (fa_mon_max() ? fa_mon_max() : 1u));
+        cv_rect(220, 56, 3, 124, FA_MU);
+        cv_rect(220, tp, 3, th, FA_OR);
+    }
+    fa_ctext(120, 190, &AF_S, "SELECT: SCROLL   ALGO/KEY: BACK", FA_MU);
 }
 
 static void fa_gl_dialog(void)
@@ -1934,7 +1957,7 @@ static void fa_buttons(uint32_t pressed)
     static const uint8_t PG_BTN[5] = {B_LFO, B_EDIT, B_SCL, B_FX, B_ENV};   /* (GLO: global, ARP, SEQ, REC, PLAY: their own) */
     uint32_t i;
     if (fa_gl == 5u && pressed) {                         /* MIDI MONITOR: any key goes back to MIDI SETTINGS, and does nothing else */
-        fa_gl = 4u;
+        fa_mon_close();
         return;
     }
     if (fa_tp && pressed) {                               /* TAP TEMPO: EDIT taps; any other button closes it, and does nothing else */
@@ -2240,13 +2263,18 @@ static void fa_input(void)
             }
         return;
     }
-    if (fa_gl == 5u) {                                    /* MIDI MONITOR: ALGORITHM goes back to MIDI SETTINGS */
+    if (fa_gl == 5u) {                                    /* MIDI MONITOR: SELECT scrolls, ALGORITHM goes back to MIDI SETTINGS */
         for (k = 0; k < 4u; k++)
             (void)panel_enc(EN_K1 + k);
         (void)panel_enc(EN_PRESET);
-        (void)panel_enc(EN_SELECT);
+        if ((s = panel_enc(EN_SELECT)) != 0) {
+            if (s > 0 && fa_mon_off < fa_mon_max())
+                fa_mon_off++;                             /* clockwise: older */
+            else if (s < 0 && fa_mon_off > 0)
+                fa_mon_off--;
+        }
         if (panel_enc(EN_ALGO) != 0)
-            fa_gl = 4u;
+            fa_mon_close();
         return;
     }
     if (fa_gl) {                                          /* the GLO pop-up (the page's knobs wait) */
@@ -2297,8 +2325,10 @@ static void fa_input(void)
                     fa_clk_apply();
                     panic_req |= 1u;                       /* the clock changes: no note may hang */
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 4u)
-                    fa_gl = 5u;                            /* MIDI MONITOR */
+                } else if (fa_gl_row == 4u) {
+                    fa_gl = 5u;                            /* MIDI MONITOR: its window at the newest */
+                    fa_mon_off = 0;
+                }
             }
         } else if (fa_gl == 2u) {
             if ((s = panel_enc(EN_SELECT)) != 0)

@@ -831,8 +831,24 @@ int main(int argc, char **argv)
             events_block(CTL);                             /* the two messages are played here, not left in the ring */
             trk_all_off(&trk[0]);
             ui.force = 1; fa_draw(); dump(dir, 41);
+            /* 25 kept, the oldest go; SELECT scrolls to older (clamped at 25 - 8 = 17 back), with the scroll bar drawn */
+            {   uint32_t i;
+                for (i = 0; i < 30u; i++)
+                    midi_enqueue(0x9u | 0x90u << 8 | (uint32_t)(40u + i) << 16 | 90u << 24, 1u);
+                events_block(CTL); trk_all_off(&trk[0]);
+                if (midi_mon_total() != 25u) { printf("monitor keeps 25 (%u)\n", (unsigned)midi_mon_total()); return 1; }
+                fa_mon_off = 0;
+                fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
+                if (fa_mon_off != 2) { printf("monitor scroll (%u)\n", (unsigned)fa_mon_off); return 1; }
+                for (i = 0; i < 40; i++) fturn(EN_SELECT, 1);
+                if (fa_mon_off != 17) { printf("monitor scroll clamps at 17 (%u)\n", (unsigned)fa_mon_off); return 1; }
+                fturn(EN_SELECT, -1);
+                if (fa_mon_off != 16) { printf("monitor scroll back (%u)\n", (unsigned)fa_mon_off); return 1; }
+                ui.force = 1; fa_draw(); dump(dir, 42);
+            }
             fturn(EN_ALGO, -1);
             if (fa_gl != 4) { printf("monitor ALGO back (%d)\n", fa_gl); return 1; }
+            if (midi_mon_total() != 0) { printf("monitor cleared on close (%u)\n", (unsigned)midi_mon_total()); return 1; }
             fa_gl = 5; fa_buttons(1u << panel.btn[B_EDIT]);
             if (fa_gl != 4) { printf("monitor key back (%d)\n", fa_gl); return 1; }
             fa_gl_row = 4;
