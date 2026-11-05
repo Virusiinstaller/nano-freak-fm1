@@ -193,9 +193,23 @@ static volatile uint32_t fm1_ms;                    /* also declared by core.h; 
 static volatile uint32_t mi_w, mi_r, mo_w, mo_r;
 static volatile uint8_t midi_in_overflow;               /* audio ISR discards a broken stream and releases notes */
 
+#define MON_N 8u                                    /* the MIDI monitor (fmini_app.c): the last messages in, USB and TRS */
+static volatile uint32_t mon_pkt[MON_N], mon_n;
+static volatile uint8_t mon_src[MON_N];
+uint32_t midi_mon_total(void) { return mon_n; }
+uint32_t midi_mon_get(uint32_t age, uint32_t *src)     /* age 0 = the newest */
+{
+    uint32_t i = (mon_n - 1u - age) % MON_N;
+    *src = mon_src[i];
+    return mon_pkt[i];
+}
+
 static int midi_enqueue(uint32_t pkt, uint32_t source)
 {
     uint32_t at = mi_w % MQ;
+    mon_pkt[mon_n % MON_N] = pkt;
+    mon_src[mon_n % MON_N] = (uint8_t)source;
+    mon_n++;
     if (midi_in_overflow)
         return 0;
     if (mi_w - mi_r >= MQ) {

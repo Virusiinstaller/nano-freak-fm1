@@ -813,7 +813,25 @@ int main(int argc, char **argv)
         fturn(EN_ALGO, -1); fturn(EN_ALGO, -1); fturn(EN_ALGO, -1);
         if (fm_midi_src != 0) { printf("src min\n"); return 1; }
         fturn(EN_SELECT, -1);
-        if (fa_gl_row != 3) { printf("rows wrap\n"); return 1; }
+        if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
+        /* MIDI MONITOR (row 4): the last messages in, newest first; ALGORITHM or any key goes back to MIDI SETTINGS */
+        {   uint32_t before = midi_mon_total(), src = 0, pkt;
+            fturn(EN_ALGO, 1);
+            if (fa_gl != 5) { printf("monitor opens (%d)\n", fa_gl); return 1; }
+            midi_enqueue(0x9u | 0x90u << 8 | 60u << 16 | 100u << 24, 1u);
+            midi_enqueue(0xBu | 0xB0u << 8 | 74u << 16 | 127u << 24, 2u);
+            if (midi_mon_total() != before + 2) { printf("monitor counts\n"); return 1; }
+            pkt = midi_mon_get(0, &src);
+            if (pkt != (0xBu | 0xB0u << 8 | 74u << 16 | 127u << 24) || src != 2) { printf("monitor newest\n"); return 1; }
+            events_block(CTL);                             /* the two messages are played here, not left in the ring */
+            trk_all_off(&trk[0]);
+            ui.force = 1; fa_draw(); dump(dir, 41);
+            fturn(EN_ALGO, -1);
+            if (fa_gl != 4) { printf("monitor ALGO back (%d)\n", fa_gl); return 1; }
+            fa_gl = 5; fa_buttons(1u << panel.btn[B_EDIT]);
+            if (fa_gl != 4) { printf("monitor key back (%d)\n", fa_gl); return 1; }
+            fa_gl_row = 4;
+        }
         /* GLO: PITCH BEND draws at once, ABOUT closes with either encoder */
         fa_gl = 1; fa_gl_row = 3; fm_bend_mode = 0;
         sig = fa_signature();

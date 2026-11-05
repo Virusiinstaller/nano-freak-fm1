@@ -1257,6 +1257,94 @@ static void fa_clk_apply(void)
 {
     song.g[G_CLOCK] = (int16_t)fa_clk;
 }
+/* MIDI MONITOR (MIDI SETTINGS, row 4): the last messages that arrive, newest first; any key or ALGORITHM goes back */
+#define MON_SHOW 8u
+static void fa_hex(char *d, uint32_t v)
+{
+    static const char HX[] = "0123456789ABCDEF";
+    d[0] = HX[(v >> 4) & 15u];
+    d[1] = HX[v & 15u];
+    d[2] = 0;
+}
+static void fa_mon_line(uint32_t pkt, uint32_t src, char *l, char *r)
+{
+    uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0xFFu, d2 = (pkt >> 24) & 0xFFu, kind = st & 0xF0u;
+    uint32_t nb = st >= 0xF8u ? 0u : (kind == 0xC0u || kind == 0xD0u) ? 1u : 2u, ch = (st & 15u) + 1u;
+    char h[4];
+    l[0] = src == 2u ? 'T' : 'U';
+    l[1] = ' ';
+    l[2] = 0;
+    fa_hex(h, st);
+    str_cpy(l + str_len(l), h, 4);
+    if (nb >= 1u) {
+        str_cpy(l + str_len(l), " ", 2);
+        fa_hex(h, d1);
+        str_cpy(l + str_len(l), h, 4);
+    }
+    if (nb == 2u) {
+        str_cpy(l + str_len(l), " ", 2);
+        fa_hex(h, d2);
+        str_cpy(l + str_len(l), h, 4);
+    }
+    r[0] = 0;
+    if (st >= 0xF8u) {
+        str_cpy(r, st == 0xF8u ? "CLOCK" : st == 0xFAu ? "START" : st == 0xFBu ? "CONT" : st == 0xFCu ? "STOP" : "SYSTEM", 24);
+        return;
+    }
+    switch (kind) {
+    case 0x80u: case 0x90u:
+        str_cpy(r, kind == 0x80u || d2 == 0u ? "NOTE OFF " : "NOTE ON ", 24);
+        fmt_int(r + str_len(r), (int32_t)d1);
+        if (kind == 0x90u && d2) {
+            str_cpy(r + str_len(r), " V", 4);
+            fmt_int(r + str_len(r), (int32_t)d2);
+        }
+        break;
+    case 0xA0u:
+        str_cpy(r, "POLY ", 8);
+        fmt_int(r + str_len(r), (int32_t)d1);
+        break;
+    case 0xB0u:
+        str_cpy(r, "CC ", 8);
+        fmt_int(r + str_len(r), (int32_t)d1);
+        str_cpy(r + str_len(r), " = ", 6);
+        fmt_int(r + str_len(r), (int32_t)d2);
+        break;
+    case 0xC0u:
+        str_cpy(r, "PC ", 8);
+        fmt_int(r + str_len(r), (int32_t)d1);
+        break;
+    case 0xD0u:
+        str_cpy(r, "AFTER ", 8);
+        fmt_int(r + str_len(r), (int32_t)d1);
+        break;
+    default:                                          /* 0xE0: the bend, 14 bits */
+        str_cpy(r, "BEND ", 8);
+        fmt_int(r + str_len(r), (int32_t)(d1 | d2 << 7));
+        break;
+    }
+    str_cpy(r + str_len(r), " C", 4);
+    fmt_int(r + str_len(r), (int32_t)ch);
+}
+uint32_t midi_mon_total(void);
+uint32_t midi_mon_get(uint32_t age, uint32_t *src);
+static void fa_mon_dialog(void)
+{
+    char l[16], r[24];
+    uint32_t total = midi_mon_total(), k;
+    fa_frame("MIDI MONITOR");
+    if (!total)
+        fa_ctext(120, 110, &AF_S, "WAITING FOR MIDI", FA_MU);
+    for (k = 0; k < MON_SHOW && k < total; k++) {
+        uint32_t src, pkt = midi_mon_get(k, &src);
+        int32_t y = 66 + 15 * (int32_t)k;
+        fa_mon_line(pkt, src, l, r);
+        fa_ltext(20, y, &AF_S, l, k == 0u ? FA_OR : FA_CR);
+        fa_rtext(216, y, &AF_S, r, k == 0u ? FA_OR : FA_CR);
+    }
+    fa_ctext(120, 190, &AF_S, "ANY KEY OR ALGO = BACK", FA_MU);
+}
+
 static void fa_gl_dialog(void)
 {
     char b[24];
@@ -1290,6 +1378,7 @@ static void fa_gl_dialog(void)
         fa_line(79, "MIDI CHANNEL", b, fa_gl_row == 1u);
         fa_line(96, "MIDI CC", ">", fa_gl_row == 2u);
         fa_line(113, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 3u);
+        fa_line(130, "MIDI MONITOR", ">", fa_gl_row == 4u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else {                                              /* MIDI CC: a window of six lines on the list, a scroll bar */
         uint32_t top = fa_cc_i < 3u ? 0u : fa_cc_i - 3u, k;
@@ -1513,6 +1602,8 @@ static void fa_scene(void)
     }
     if (fb_rs_state() == FB_RS_ASK || fb_rs == FB_RS_OK)
         fa_restore_dialog();                              /* the restore question / its progress: over everything */
+    else if (fa_gl == 5u)
+        fa_mon_dialog();
     else if (fa_gl == 1u || fa_gl == 2u || fa_gl == 4u)
         fa_gl_dialog();
     else if (fa_sc)
@@ -1556,6 +1647,8 @@ static uint32_t fa_signature(void)
     for (i = 0; i < P_COUNT; i++)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
     h = (h ^ fa_base ^ (uint32_t)fa_pp_on() << 8 ^ (uint32_t)fa_cpu_on() << 9) * 16777619u;
+    if (fa_gl == 5u)                                      /* the monitor redraws with each message */
+        h = (h ^ midi_mon_total()) * 16777619u;
     h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19) * 16777619u;
     h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
     for (i = 0; i < FA_NCC; i++)
@@ -1832,6 +1925,10 @@ static void fa_buttons(uint32_t pressed)
 {
     static const uint8_t PG_BTN[5] = {B_LFO, B_EDIT, B_SCL, B_FX, B_ENV};   /* (GLO: global, ARP, SEQ, REC, PLAY: their own) */
     uint32_t i;
+    if (fa_gl == 5u && pressed) {                         /* MIDI MONITOR: any key goes back to MIDI SETTINGS, and does nothing else */
+        fa_gl = 4u;
+        return;
+    }
     if (fa_tp && pressed) {                               /* TAP TEMPO: EDIT taps; any other button closes it, and does nothing else */
         if (pressed == 1u << panel.btn[B_EDIT])
             fa_tp_tap();
@@ -2135,6 +2232,15 @@ static void fa_input(void)
             }
         return;
     }
+    if (fa_gl == 5u) {                                    /* MIDI MONITOR: ALGORITHM goes back to MIDI SETTINGS */
+        for (k = 0; k < 4u; k++)
+            (void)panel_enc(EN_K1 + k);
+        (void)panel_enc(EN_PRESET);
+        (void)panel_enc(EN_SELECT);
+        if (panel_enc(EN_ALGO) != 0)
+            fa_gl = 4u;
+        return;
+    }
     if (fa_gl) {                                          /* the GLO pop-up (the page's knobs wait) */
         for (k = 0; k < 4u; k++)
             (void)panel_enc(EN_K1 + k);
@@ -2164,7 +2270,7 @@ static void fa_input(void)
             }
         } else if (fa_gl == 4u) {                         /* MIDI SETTINGS */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 4u + (s > 0 ? 1u : 3u)) % 4u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     static const uint8_t SRC[3] = {0, 1, 3};
@@ -2183,7 +2289,8 @@ static void fa_input(void)
                     fa_clk_apply();
                     panic_req |= 1u;                       /* the clock changes: no note may hang */
                     fa_cfg_dirty = 1;
-                }
+                } else if (fa_gl_row == 4u)
+                    fa_gl = 5u;                            /* MIDI MONITOR */
             }
         } else if (fa_gl == 2u) {
             if ((s = panel_enc(EN_SELECT)) != 0)
