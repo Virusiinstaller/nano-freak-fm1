@@ -1018,8 +1018,8 @@ static uint32_t fa_sound_keys(void)
 #define FA_NPG 47u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+6+4+4+8; CTRL's VOICES has no CC) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
-static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 ABOUT;
-                                                           * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK, 4 PITCH BEND */
+static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 PITCH BEND, 4 ABOUT;
+                                                           * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK */
 static uint16_t fa_tune_hz = 440;                         /* TUNING: the reference A, 410 .. 470 Hz (the global glo_tune_c) */
 /* the TUNING in cents from A 440, for 410 .. 470 Hz: round(1200 * log2(hz / 440)) */
 static const int16_t FA_TUNE_C[61] = {-122, -118, -114, -110, -105, -101, -97, -93, -89, -85, -81, -76, -72, -68, -64, -60, -56, -52, -48, -44, -40, -36, -32, -28, -24, -20, -16, -12, -8, -4, 0, 4, 8, 12, 16, 20, 23, 27, 31, 35, 39, 43, 47, 50, 54, 58, 62, 66, 69, 73, 77, 81, 84, 88, 92, 96, 99, 103, 107, 111, 114};
@@ -1277,7 +1277,8 @@ static void fa_gl_dialog(void)
             fa_line(79, "TUNING", tn, fa_gl_row == 1u);
             fa_line(96, "TRANSPOSE", tr, fa_gl_row == 2u);
         }
-        fa_line(113, "ABOUT", ">", fa_gl_row == 3u);
+        fa_line(113, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 3u);
+        fa_line(130, "ABOUT", ">", fa_gl_row == 4u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
@@ -1289,7 +1290,6 @@ static void fa_gl_dialog(void)
         fa_line(79, "MIDI CHANNEL", b, fa_gl_row == 1u);
         fa_line(96, "MIDI CC", ">", fa_gl_row == 2u);
         fa_line(113, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 3u);
-        fa_line(130, "PITCH BEND", FA_BEND[fm_bend_mode & 3u], fa_gl_row == 4u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else {                                              /* MIDI CC: a window of six lines on the list, a scroll bar */
         uint32_t top = fa_cc_i < 3u ? 0u : fa_cc_i - 3u, k;
@@ -1860,7 +1860,7 @@ static void fa_buttons(uint32_t pressed)
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_row = 3u;
+                fa_gl_row = 4u;
                 fa_gl = 3u;
             }
         }
@@ -1876,9 +1876,9 @@ static void fa_buttons(uint32_t pressed)
             fa_gl_row = 0u;
         } else if (fa_gl == 2u)
             fa_gl = 4u;                                    /* MIDI CC -> MIDI SETTINGS (its row kept) */
-        else if (fa_gl == 4u || fa_gl == 3u) {
-            fa_gl = 1;                                     /* MIDI SETTINGS / ABOUT -> GLOBAL */
-            fa_gl_row = fa_gl_row == 3u ? 3u : 0u;
+        else if (fa_gl == 4u || fa_gl == 3u) {             /* MIDI SETTINGS / ABOUT -> GLOBAL */
+            fa_gl_row = fa_gl == 3u ? 4u : 0u;
+            fa_gl = 1;
         } else
             fa_gl_close();
         return;
@@ -2141,7 +2141,7 @@ static void fa_input(void)
         (void)panel_enc(EN_PRESET);
         if (fa_gl == 1u) {                                /* GLOBAL: MIDI SETTINGS, TUNING, TRANSPOSE, ABOUT */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 4u + (s > 0 ? 1u : 3u)) % 4u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     fa_gl = 4u;                            /* MIDI SETTINGS: its first line */
@@ -2154,12 +2154,17 @@ static void fa_input(void)
                     glo_transpose = clamp(glo_transpose + (s > 0 ? 1 : -1), -12, 12);
                     panic_req |= 1u;                       /* the notes held now sound elsewhere: none may hang */
                     fa_cfg_dirty = 1;
+                } else if (fa_gl_row == 3u) {               /* PITCH BEND: the range, 0 .. 3 */
+                    fm_bend_mode = (uint8_t)clamp((int32_t)fm_bend_mode + (s > 0 ? 1 : -1), 0, 3);
+                    for (k = 0; k < 16u; k++)              /* the bend held now follows the new range */
+                        midi_expression_channel(k);
+                    fa_cfg_dirty = 1;
                 } else
                     fa_gl = 3u;                            /* ABOUT */
             }
         } else if (fa_gl == 4u) {                         /* MIDI SETTINGS */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 4u + (s > 0 ? 1u : 3u)) % 4u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     static const uint8_t SRC[3] = {0, 1, 3};
@@ -2177,12 +2182,6 @@ static void fa_input(void)
                     fa_clk = (uint8_t)((fa_clk + 3u + (s > 0 ? 1u : 2u)) % 3u);
                     fa_clk_apply();
                     panic_req |= 1u;                       /* the clock changes: no note may hang */
-                    fa_cfg_dirty = 1;
-                } else {
-                    uint32_t ch;
-                    fm_bend_mode = (uint8_t)clamp((int32_t)fm_bend_mode + (s > 0 ? 1 : -1), 0, 3);
-                    for (ch = 0; ch < 16u; ch++)           /* the bend held now follows the new range */
-                        midi_expression_channel(ch);
                     fa_cfg_dirty = 1;
                 }
             }

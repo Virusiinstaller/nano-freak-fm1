@@ -813,9 +813,9 @@ int main(int argc, char **argv)
         fturn(EN_ALGO, -1); fturn(EN_ALGO, -1); fturn(EN_ALGO, -1);
         if (fm_midi_src != 0) { printf("src min\n"); return 1; }
         fturn(EN_SELECT, -1);
-        if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
+        if (fa_gl_row != 3) { printf("rows wrap\n"); return 1; }
         /* GLO: PITCH BEND draws at once, ABOUT closes with either encoder */
-        fa_gl = 4; fa_gl_row = 4; fm_bend_mode = 0;
+        fa_gl = 1; fa_gl_row = 3; fm_bend_mode = 0;
         sig = fa_signature();
         fturn(EN_ALGO, 1);
         if (fm_bend_mode != 1 || fa_signature() == sig) { printf("bend redraw\n"); return 1; }
@@ -853,7 +853,7 @@ int main(int argc, char **argv)
             if (held != 0) { printf("note past 127 sounds\n"); return 1; }
         }
         glo_transpose = 0;
-        /* GLO order: MIDI IN, CHANNEL, MIDI CC, MIDI TEMPO SYNC, PITCH BEND, TUNING, TRANSPOSE, ABOUT */
+        /* GLO order: MIDI SETTINGS (MIDI IN, CHANNEL, MIDI CC, MIDI CLOCK), TUNING, TRANSPOSE, PITCH BEND, ABOUT */
         fa_gl = 4; fa_gl_row = 1; fturn(EN_SELECT, 1);
         if (fa_gl_row != 2) { printf("MIDI CC is row 2\n"); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 40);
@@ -874,8 +874,8 @@ int main(int argc, char **argv)
         if (fa_clk != 2 || song.g[G_CLOCK] != 2) { printf("clock back to TRS (%d)\n", song.g[G_CLOCK]); return 1; }
         fa_cfg_dirty = 1; fa_cfg_save(); fa_clk = 0; fa_cfg_load();
         if (fa_clk != 2) { printf("clock kept (%d)\n", fa_clk); return 1; }
-        fa_clk = 0; fa_gl = 4; fa_gl_row = 4; fturn(EN_ALGO, 1);
-        if (fa_gl != 4 || fa_clk) { printf("pitch bend row\n"); return 1; }
+        fa_clk = 0; fa_gl = 1; fa_gl_row = 3; fturn(EN_ALGO, 1);
+        if (fa_gl != 1 || fa_clk) { printf("pitch bend row\n"); return 1; }
         {   /* MIDI CLOCK: Start / Stop / Continue come from the chosen input only (the engine's clock, through events_block) */
             song.playing = 0; fm1_ms = 9000;
             fa_clk = 1; fa_clk_apply();
@@ -897,7 +897,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 3; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -1012,12 +1012,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 3) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 4) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 3) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 4) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);
