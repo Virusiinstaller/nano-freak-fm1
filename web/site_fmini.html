@@ -200,6 +200,15 @@
   @media (max-width: 560px) { #install .card { padding: 14px; } }
   #install .steps { margin-bottom: 12px; }
   #install #go { padding: 13px 20px; }
+  @media (min-width: 900px) {   /* the install block on one screen: steps and button left, notes and details right */
+    #install .card { display: grid; grid-template-columns: 1.3fr 1fr; column-gap: 32px; row-gap: 12px; align-items: start; }
+    #install .steps { grid-column: 1; grid-row: 1; margin: 0; }
+    #install #go { grid-column: 1; grid-row: 2; }
+    #install .busywarn { grid-column: 1; grid-row: 3; margin: 0; }
+    #install .prog { grid-column: 1; grid-row: 4; margin: 0; }
+    #install .side { grid-column: 2; grid-row: 1 / span 4; display: flex; flex-direction: column; gap: 12px; }
+    #install .side .note { margin: 0; }
+  }
   .meter { position: relative; height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
   .fill { height: 100%; width: 0; border-radius: 999px; background: var(--or); transition: width .25s ease; position: relative; }
   body.busy .fill::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, rgba(255,255,255,.25) 0 10px, rgba(255,255,255,0) 10px 22px);
@@ -376,6 +385,7 @@
         </ul>
       </div>
 
+      <div class="side">
       <p class="note" data-t="intro"></p>
       <p class="note warn" data-t="warn"></p>
       <p class="note" data-t="direct"></p>
@@ -387,6 +397,7 @@
         <p class="fwother"><button id="fwpick" type="button" data-t="fw_pick"></button><input type="file" id="fwfile" accept=".fwsc" hidden></p>
         <pre id="log"></pre>
       </details>
+      </div>
     </div>
   </section>
 </main>
