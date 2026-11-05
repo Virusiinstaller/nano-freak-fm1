@@ -1854,11 +1854,11 @@ static void fa_home(void)
 /* SELECT: one control on; past a page's last control the next page's first (the other way: the last) */
 static void fa_select(int32_t s)
 {
-    uint32_t pg = fa_page, n = fmg_count(pg);
+    uint32_t pg = fa_page, n = pg == 6u ? 4u : fmg_count(pg);   /* FX: the four knobs; the EDIT slots 4..7 are not on the face */
     int32_t c = (int32_t)fmg_curi(pg) + (s > 0 ? 1 : -1);
     if (c < 0) {
         fa_page = (uint8_t)((pg + FA_NPAGE - 1u) % FA_NPAGE);
-        fmg_cur[fa_page] = (uint8_t)(fmg_count(fa_page) - 1u);
+        fmg_cur[fa_page] = (uint8_t)((fa_page == 6u ? 4u : fmg_count(fa_page)) - 1u);
     } else if (c >= (int32_t)n) {
         fa_page = (uint8_t)((pg + 1u) % FA_NPAGE);
         fmg_cur[fa_page] = 0;

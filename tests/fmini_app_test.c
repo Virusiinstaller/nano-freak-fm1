@@ -814,6 +814,13 @@ int main(int argc, char **argv)
         if (fm_midi_src != 0) { printf("src min\n"); return 1; }
         fturn(EN_SELECT, -1);
         if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
+        /* FX: SELECT goes through its four knobs and on to the next page (the EDIT slots 4..7 are not on the face) */
+        fa_gl = 0; fa_page = 6; fmg_cur[6] = 3; fturn(EN_SELECT, 1);
+        if (fa_page != 0) { printf("FX select leaves at the fourth knob (%u)\n", (unsigned)fa_page); return 1; }
+        fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, -1);
+        if (fa_page != 5 || fmg_curi(5) != fmg_count(5) - 1u) { printf("FX select back (%u)\n", (unsigned)fa_page); return 1; }
+        fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, 1); fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
+        if (fmg_curi(6) != 3u) { printf("FX select reaches 4 knobs (%u)\n", (unsigned)fmg_curi(6)); return 1; }
         /* GLOBAL: SUPPORT FMINI-1!! is row 5 (after ABOUT): ALGORITHM opens the QR screen, any key goes back to it */
         fa_gl = 1; fa_gl_row = 3; fturn(EN_SELECT, 1);
         if (fa_gl_row != 4) { printf("support row\n"); return 1; }
@@ -966,15 +973,13 @@ int main(int argc, char **argv)
         fa_gl = 3; fturn(EN_SELECT, 1);
         if (fa_gl != 1) { printf("about SELECT\n"); return 1; }
         fa_gl = 0;
-        {   /* FX: the cursor walks onto the four EDIT buttons; ALGORITHM opens each pop-up, K1..K4 edit its four values */
+        {   /* FX: FX opens each pop-up (the EDIT buttons are not on the face, SELECT stops at the four knobs); K1..K4 edit its four values */
             static const uint8_t PMAP[4][4] = {{P_REV, G_RTYPE, G_RSIZE, G_RDAMP}, {P_DLY, G_DTIME, G_DRREV, G_DFDBK},
                                                {P_CHOR, G_ENGGO, G_CDEPTH, G_CRATE}, {P_DIST, G_INFO, G_DRLVL, G_MIDI}};
             uint32_t q, k;
             fa_ar = 0; fa_page = 6; fmg_cur[6] = 3; fmg_fx = 0;
             for (q = 0; q < 4u; q++) {
-                fturn(EN_SELECT, 1); fframes(64);
-                if (fmg_cur[6] != 4u + q) { printf("FX cursor %u -> %u\n", q, fmg_cur[6]); return 1; }
-                fturn(EN_ALGO, 1); fframes(64);
+                for (k = 0; k <= q; k++) { fpress(B_FX); fframes(64); }   /* FX once per pop-up: the q-th one */
                 if (fmg_fx != q + 1u) { printf("EDIT %u opens pop-up %u\n", q, fmg_fx); return 1; }
                 for (k = 0; k < 4u; k++) {
                     int32_t b4 = k == 0u ? TSEL->p[PMAP[q][0]] : song.g[PMAP[q][k]];
@@ -990,7 +995,7 @@ int main(int argc, char **argv)
                 ui.force = 1; fa_draw(); dump(dir, 20 + (int)q);
                 fpress(B_FX);                              /* FX again: the next pop-up (after the last, the page) */
                 if (fmg_fx != (q < 3u ? q + 2u : 0u)) { printf("FX cycles %u -> %u\n", q, fmg_fx); return 1; }
-                fmg_fx = 0; fmg_cur[6] = (uint8_t)(4u + q);
+                fmg_fx = 0; fmg_cur[6] = 3;
             }
             {   /* A-SYNC: shown after ANALOG; its TIME is the ARP RATE's note values (0..9), synced to the tempo */
                 uint32_t sv = song.g[G_DTIME], sr = song.g[G_DRREV];
