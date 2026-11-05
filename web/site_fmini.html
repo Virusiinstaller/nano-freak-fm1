@@ -169,13 +169,13 @@
   /* install */
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 32px; margin-top: 44px; }
   @media (max-width: 560px) { .card { padding: 20px; } }
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; list-style: none; margin: 0 0 30px; padding: 0; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; list-style: none; margin: 0 0 18px; padding: 0; }
   .steps b { display: flex; align-items: center; gap: 10px; font-size: 16px; }
   .steps b i { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--or); color: #1a0e05; font: 800 13px/1 var(--sans); font-style: normal; }
-  .steps span.d { display: block; color: var(--dim); font-size: 14.5px; line-height: 1.5; margin-top: 8px; }
-  @media (max-width: 700px) { .steps { grid-template-columns: 1fr; gap: 18px; } }
+  .steps span.d { display: block; color: var(--dim); font-size: 14.5px; line-height: 1.5; margin-top: 5px; }
+  @media (max-width: 700px) { .steps { grid-template-columns: 1fr; gap: 12px; } }
 
-  #go { width: 100%; font: 800 18px/1 var(--sans); color: #1a0e05; border: 0; border-radius: 12px; padding: 22px 20px; cursor: pointer; background: var(--or); transition: transform .08s, background .15s; }
+  #go { width: 100%; font: 800 18px/1 var(--sans); color: #1a0e05; border: 0; border-radius: 12px; padding: 16px 20px; cursor: pointer; background: var(--or); transition: transform .08s, background .15s; }
   #go small { font: 600 .62em/1 var(--mono); opacity: .75; margin-left: 4px; }
   #go:hover:not(:disabled) { background: var(--or2); }
   #go:active:not(:disabled) { transform: translateY(1px); }
@@ -193,7 +193,7 @@
   body.busy .busywarn { display: block; }
   body.busy #go { background: var(--surface2); color: var(--or2); }
 
-  .prog { margin-top: 22px; }
+  .prog { margin-top: 14px; }
   .meter { position: relative; height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
   .fill { height: 100%; width: 0; border-radius: 999px; background: var(--or); transition: width .25s ease; position: relative; }
   body.busy .fill::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, rgba(255,255,255,.25) 0 10px, rgba(255,255,255,0) 10px 22px);
@@ -214,8 +214,8 @@
   #phases li.done::before { background: #7a4a22; }
   body.finished #phases li.done::before { background: var(--ok); }
 
-  .note { color: var(--dim); font-size: 14.5px; margin: 18px 0 0; }
-  .fwother { margin: 10px 0 0; }
+  .note { color: var(--dim); font-size: 14.5px; margin: 10px 0 0; }
+  .fwother { margin: 6px 0 0; }
   #fwpick { background: transparent; color: var(--dim); border: 1px solid var(--line); font-size: 13px; padding: 6px 10px; cursor: pointer; }
   .note.warn { color: #ffb37a; }
   details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
