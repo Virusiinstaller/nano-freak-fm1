@@ -115,7 +115,7 @@ static void ed_fmini_reset(const uint8_t *a, uint32_t n)
  * Without FELUCCA_UAC_OUT the alt, playing and the counters are 0. */
 static void ed_fmini_usbdiag(void)
 {
-    uint32_t v[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, k, j;
+    uint32_t v[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, k, j;
     uint8_t alt = 0, play = 0;
 #if FELUCCA_UAC_OUT
     alt = uac_out_alt;
@@ -130,9 +130,10 @@ static void ed_fmini_usbdiag(void)
     v[7] = pb_rep;
     v[8] = (uint32_t)(pb_w - pb_r);
     v[9] = pb_ovr;
+    v[10] = pb_crc;
 #endif
     ed_b(1u); ed_b(alt); ed_b(play);
-    for (k = 0; k < 10u; k++)
+    for (k = 0; k < 11u; k++)
         for (j = 0; j < 5u; j++)
             ed_b(v[k] >> (7u * j));
 }

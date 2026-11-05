@@ -163,7 +163,7 @@ const TX = {
     noedit: "Este firmware não parece ser o FMini-1. O editor é só para o FMini-1.",
     oldfw: "Este FMini-1 tem um firmware antigo. Atualize pelo instalador atual e conecte de novo.",
     getlink: "Abrir o instalador atual",
-    fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar", usbTitle: "Áudio USB de saída: contadores", usbAlt: "Interface de saída ativa (alt)", usbPlay: "Tocando agora", usbSetIf: "Vezes que o Windows selecionou a saída", usbIrq: "Interrupções do endpoint 3", usbPkts: "Pacotes recebidos", usbFrames: "Quadros guardados", usbDrops: "Pacotes descartados (fila cheia)", usbDry: "Blocos sem quadro (fila vazia)", usbSkip: "Quadros descartados (fila acima da faixa)", usbRep: "Quadros repetidos (fila abaixo da faixa)", usbFill: "Fila agora (quadros, de 0 a 512)", usbOvr: "Pacotes com overrun / erro de dados", usbYes: "sim", usbNo: "não",
+    fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar", usbTitle: "Áudio USB de saída: contadores", usbAlt: "Interface de saída ativa (alt)", usbPlay: "Tocando agora", usbSetIf: "Vezes que o Windows selecionou a saída", usbIrq: "Interrupções do endpoint 3", usbPkts: "Pacotes recebidos", usbFrames: "Quadros guardados", usbDrops: "Pacotes descartados (fila cheia)", usbDry: "Blocos sem quadro (fila vazia)", usbSkip: "Quadros descartados (fila acima da faixa)", usbRep: "Quadros repetidos (fila abaixo da faixa)", usbFill: "Fila agora (quadros, de 0 a 512)", usbOvr: "Pacotes com overrun (não lidos a tempo)", usbCrc: "Pacotes com erro de dados", usbYes: "sim", usbNo: "não",
     noext: "Atualização disponível: instale o FMini-1 v1.6.1 ou mais novo para editar a oitava e guardar tempo, oitava e efeitos na biblioteca.",
     noenv: "Atualização necessária: este firmware não tem o editor de osciladores e chaves. Instale a versão mais nova pelo site para editar tudo.",
     nonames: "Atualização disponível: este firmware envia só os nomes dos %n primeiros presets. Instale o FMini-1 v1.7.2 ou mais novo para ver todos.",
@@ -187,7 +187,7 @@ const TX = {
     noedit: "This firmware does not look like the FMini-1. The editor is for the FMini-1 only.",
     oldfw: "This FMini-1 runs an old firmware. Update it with the current installer and connect again.",
     getlink: "Open the current installer",
-    fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close", usbTitle: "USB audio out: counters", usbAlt: "Playback interface alt setting", usbPlay: "Playing now", usbSetIf: "Times Windows selected the output", usbIrq: "Endpoint 3 interrupts", usbPkts: "Packets received", usbFrames: "Frames stored", usbDrops: "Packets dropped (ring full)", usbDry: "Blocks without a frame (ring empty)", usbSkip: "Frames dropped (fill above the band)", usbRep: "Frames repeated (fill below the band)", usbFill: "Fill now (frames, 0 to 512)", usbOvr: "Packets with overrun / data error", usbYes: "yes", usbNo: "no",
+    fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close", usbTitle: "USB audio out: counters", usbAlt: "Playback interface alt setting", usbPlay: "Playing now", usbSetIf: "Times Windows selected the output", usbIrq: "Endpoint 3 interrupts", usbPkts: "Packets received", usbFrames: "Frames stored", usbDrops: "Packets dropped (ring full)", usbDry: "Blocks without a frame (ring empty)", usbSkip: "Frames dropped (fill above the band)", usbRep: "Frames repeated (fill below the band)", usbFill: "Fill now (frames, 0 to 512)", usbOvr: "Packets with overrun (not read in time)", usbCrc: "Packets with data error", usbYes: "yes", usbNo: "no",
     noext: "Update available: install FMini-1 v1.6.1 or newer to edit the octave and keep tempo, octave and effects in the library.",
     noenv: "Update needed: this firmware has no oscillator / switch editing. Install the newest version from the site to edit everything.",
     nonames: "Update available: this firmware sends only the names of the first %n presets. Install FMini-1 v1.7.2 or newer to see them all.",
@@ -509,9 +509,9 @@ async function connect() {
 }
 /* USB diagnostics (command 89, firmware 1.14.3): the playback counters in a pop-up */
 function usbDiagShow(r) {
-  if (!r || r.length < 3 + 50 || r[0] !== 1) { msg(T("oldfw"), true); return; }
+  if (!r || r.length < 3 + 55 || r[0] !== 1) { msg(T("oldfw"), true); return; }
   const cnt = (k) => { let v = 0; for (let j = 4; j >= 0; j--) v = v * 128 + (r[3 + 5 * k + j] & 127); return v; };
-  const names = ["usbSetIf", "usbIrq", "usbPkts", "usbFrames", "usbDrops", "usbDry", "usbSkip", "usbRep", "usbFill", "usbOvr"];
+  const names = ["usbSetIf", "usbIrq", "usbPkts", "usbFrames", "usbDrops", "usbDry", "usbSkip", "usbRep", "usbFill", "usbOvr", "usbCrc"];
   const box = document.createElement("div");
   box.id = "usbpop";
   box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px";

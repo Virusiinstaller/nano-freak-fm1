@@ -1526,10 +1526,10 @@ static int restore_protocol(void)
         request(ED_FMINI_RESET, kk, 2);
         bad += check("  .. a slot past 199 is refused (rc 1)", host_wire[7] == 1u);
     }
-    {   /* USBDIAG (89): version 1, alt, playing, then 10 counters of 5 bytes; nothing played yet, so all 0 */
+    {   /* USBDIAG (89): version 1, alt, playing, then 11 counters of 5 bytes; nothing played yet, so all 0 */
         uint32_t nw = request(ED_FMINI_USBDIAG, 0, 0), k, j, zero = 1;
         bad += check("USBDIAG: the reply is command 89, version 1, 3 + 45 payload bytes",
-                     nw == 5u + 3u + 50u + 1u && host_wire[4] == ED_FMINI_USBDIAG && host_wire[5] == 1u);
+                     nw == 5u + 3u + 55u + 1u && host_wire[4] == ED_FMINI_USBDIAG && host_wire[5] == 1u);
         for (k = 0; k < 9u; k++)
             for (j = 0; j < 5u; j++)
                 zero &= host_wire[8u + 5u * k + j] == 0u;
