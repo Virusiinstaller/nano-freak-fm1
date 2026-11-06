@@ -27,7 +27,7 @@
 #define FA_BOX FA_RGB(0x0F, 0x0E, 0x0D)
 #define FA_LINE FA_RGB(0x3A, 0x35, 0x30)
 #define FA_RULE FA_RGB(0x4A, 0x44, 0x3D)
-#define FA_NPAGE 8u
+#define FA_NPAGE 7u
 
 static uint8_t fa_page;                                  /* 0..6 */
 static uint8_t fa_env_last;                              /* ENV: the page it opened last (F.ENV or A.ENV) */
@@ -35,8 +35,7 @@ static uint32_t fa_sig_prev = 0xFFFFFFFFu;
 static uint16_t fa_knob_bmp[38 * 38];                    /* the baked knob: 0 = transparent */
 static uint8_t fa_knob_ok;
 
-static const char *const FA_TAB[FA_NPAGE] = {"CTRL", "OSC", "MIX", "FILT", "F.ENV", "A.ENV", "FX", "PRESET"};
-static uint8_t fa_pset_pop;                                   /* EDIT again on FILT: the PRESET SETTINGS pop-up (fmg page 7) */
+static const char *const FA_TAB[FA_NPAGE] = {"CTRL", "OSC", "MIX", "FILT", "F.ENV", "A.ENV", "FX"};
 
 /* ---------------------------------------------------------- colours --- */
 static uint16_t fa_mix(uint16_t a, uint16_t b, uint32_t t)   /* a + (b - a) * t / 256 per channel */
@@ -513,7 +512,7 @@ static void fa_pop_knob(uint32_t pg, uint32_t i, int32_t cx, int32_t cy, int hot
 }
 static void fa_fx_dialog(void)
 {
-    uint32_t pg = fa_pset_pop ? 7u : 7u + fmg_fx, i;
+    uint32_t pg = 7u + fmg_fx, i;
     const uint16_t bgd = FA_RGB(0x1B, 0x19, 0x17);
     cv_rect(12, 42, 216, 164, FA_OR);
     cv_rect(14, 44, 212, 160, bgd);
@@ -521,7 +520,7 @@ static void fa_fx_dialog(void)
     cv_rect(20, 66, 200, 1, FA_RULE);
     for (i = 0; i < 4u; i++)
         fa_pop_knob(pg, i, 39 + (int32_t)i * 54, 112, fmg_cur[pg] == i);
-    fa_ctext(120, 190, &AF_X, fa_pset_pop ? "K1-K4  SELECT  ALGO  EDIT=CLOSE" : fmg_fx == 2u ? "K1-K4  SCL=TAP  FX=NEXT" : "K1-K4  SELECT  ALGO  FX=NEXT", FA_MU);
+    fa_ctext(120, 190, &AF_X, fmg_fx == 2u ? "K1-K4  SCL=TAP  FX=NEXT" : "K1-K4  SELECT  ALGO  FX=NEXT", FA_MU);
 }
 
 static void fa_wave_boxes(uint32_t pg, uint32_t cur)
@@ -1426,9 +1425,30 @@ static void fa_support_dialog(void)
     fa_ctext(120, 190, fa_fit("ko-fi.com/ruppert"), "ko-fi.com/ruppert", FA_RGB(255, 255, 255));
 }
 
+static void fa_pset_rows(void)                           /* PRESET SETTINGS: its four options as a list, GLOBAL's style */
+{
+    static const int32_t Y[4] = {62, 79, 96, 113};
+    uint32_t i;
+    for (i = 0; i < 4u; i++) {
+        const char *lb = "", *un = "";
+        char val[16];
+        int32_t ratio = 0;
+        uint32_t ic = 0;
+        val[0] = '\0';
+        fmg_card_at(7u, i, -1, &lb, val, &un, &ratio, &ic);
+        fa_line(Y[i], lb, val, fmg_cur[7] == i);
+    }
+}
+
 static void fa_gl_dialog(void)
 {
     char b[24];
+    if (fa_gl == 7u) {                                    /* PRESET SETTINGS (over FILT) */
+        fa_frame("PRESET SETTINGS");
+        fa_pset_rows();
+        fa_ctext(120, 199, &AF_S, "SELECT  ALGO  EDIT=BACK", FA_MU);
+        return;
+    }
     if (fa_gl == 1u) {
         fa_frame("GLOBAL");
         fa_line(62, "MIDI SETTINGS", ">", fa_gl_row == 0u);
@@ -1635,7 +1655,7 @@ static void fa_scene(void)
         cv_text_on(lx, 3, &AF_S, "1", FA_OR, FA_RGB(0x0E, 0x0D, 0x0C));
     }
     {
-        static const uint8_t TW[FA_NPAGE] = {20, 18, 18, 20, 24, 24, 16, 30};
+        static const uint8_t TW[FA_NPAGE] = {24, 22, 20, 22, 30, 30, 18};
         int32_t tx = 60;
         for (i = 0; i < FA_NPAGE; i++) {
             uint16_t bgc = i == pg ? FA_OR : FA_RGB(0x1E, 0x1B, 0x19);
@@ -1687,7 +1707,7 @@ static void fa_scene(void)
         fa_support_dialog();
     else if (fa_gl == 5u)
         fa_mon_dialog();
-    else if (fa_gl == 1u || fa_gl == 2u || fa_gl == 4u)
+    else if (fa_gl == 1u || fa_gl == 2u || fa_gl == 4u || fa_gl == 7u)
         fa_gl_dialog();
     else if (fa_sc)
         fa_sc_dialog();
@@ -1697,7 +1717,7 @@ static void fa_scene(void)
         fa_ar_dialog();
     else if (fa_sv)
         fa_sv_conf ? fa_confirm_dialog() : fa_dialog();
-    else if (fmg_fx || fa_pset_pop)
+    else if (fmg_fx)
         fa_fx_dialog();
     else if (fa_msg_on()) {
         int32_t mw = text_w(&AF_M, fa_msg) + 20;
@@ -1741,7 +1761,7 @@ static uint32_t fa_signature(void)
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_DRREV] << 7 ^ (uint32_t)song.g[G_CRATE] << 14 ^ (uint32_t)song.g[G_DRLVL] << 21) * 16777619u;   /* FX: DECAY TIME RATE TONE */
     for (i = 0; i < 8u; i++)                                 /* the pop-ups' others, and which pop-up is open */
         h = (h ^ (uint32_t)song.g[FA_GID2[i]]) * 16777619u;
-    h = (h ^ fmg_fx ^ (uint32_t)fa_pset_pop << 4) * 16777619u;
+    h = (h ^ fmg_fx) * 16777619u;
     h = (h ^ fa_sv_slot ^ (uint32_t)fa_sv_pos << 8 ^ (uint32_t)(fa_sv_conf | fa_sv_yes << 1) << 12 ^ (uint32_t)t->user << 16 ^ (uint32_t)fa_msg_on() << 24) * 16777619u;
     for (i = 0; i < 12u; i++)
         h = (h ^ (uint8_t)fa_sv_name[i]) * 16777619u;
@@ -2194,14 +2214,14 @@ static void fa_buttons(uint32_t pressed)
     }
     for (i = 0; i < 5u; i++)
         if ((pressed >> panel.btn[PG_BTN[i]]) & 1u) {
-            if (PG_BTN[i] == B_EDIT && fa_page == 3u) {   /* EDIT again on FILT: the PRESET SETTINGS pop-up, EDIT closes it */
-                fa_pset_pop = (uint8_t)!fa_pset_pop;
+            if (PG_BTN[i] == B_EDIT && fa_page == 3u) {   /* EDIT on FILT: PRESET SETTINGS, the list; EDIT again closes it */
+                fa_gl = fa_gl == 7u ? 0u : 7u;
+                fmg_cur[7] = 0u;
                 fa_sv = 0;
                 fa_ar = 0;
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_close();
                 continue;
             }
             if (PG_BTN[i] == B_FX && fa_page == 6u) {     /* FX again: round the four pop-ups, then back to the page */
@@ -2217,7 +2237,6 @@ static void fa_buttons(uint32_t pressed)
                 continue;
             }
             fmg_fx = 0;
-            fa_pset_pop = 0;
             fa_sv = 0;                                    /* a page button cancels the dialog */
             fa_ar = 0;
             fa_sc = 0;
@@ -2326,10 +2345,10 @@ static void fa_input(void)
     fa_cc_poll();                                         /* the CCs the MIDI inputs brought */
     if (fa_gl || fa_sq || fa_ar || fa_sv || fa_page != 6u)
         fmg_fx = 0;
-    if (fa_gl || fa_sq || fa_ar || fa_sv || fa_page != 3u)
-        fa_pset_pop = 0;                                  /* PRESET SETTINGS lives on FILT alone */                                       /* the FX pop-up lives on the FX page alone, under no other dialog */
-    if (fmg_fx || fa_pset_pop) {                          /* an FX pop-up, or PRESET SETTINGS: K1..K4 its four knobs, SELECT / ALGO as on a page */
-        uint32_t pg = fa_pset_pop ? 7u : 7u + fmg_fx;
+    if (fa_page != 3u && fa_gl == 7u)
+        fa_gl = 0u;                                       /* PRESET SETTINGS lives on FILT alone */
+    if (fmg_fx) {                                         /* an FX pop-up: K1..K4 its four knobs, SELECT / ALGO as on a page */
+        uint32_t pg = 7u + fmg_fx;
         fmg_force_page = (int8_t)pg;
         if ((s = panel_enc(EN_SELECT)) != 0)
             fmg_cur[pg] = (uint8_t)((fmg_cur[pg] + 4u + (s > 0 ? 1u : 3u)) % 4u);
@@ -2430,6 +2449,11 @@ static void fa_input(void)
                 fa_cc[fa_cc_i] = (uint8_t)c;
                 fa_cfg_dirty = 1;
             }
+        } else if (fa_gl == 7u) {                         /* PRESET SETTINGS: SELECT moves the option, ALGO changes it */
+            if ((s = panel_enc(EN_SELECT)) != 0)
+                fmg_cur[7] = (uint8_t)((fmg_cur[7] + 4u + (s > 0 ? 1u : 3u)) % 4u);
+            if ((s = panel_enc(EN_ALGO)) != 0)
+                fmg_turn(7u, fmg_cur[7], s, EN_ALGO);
         } else {                                            /* ABOUT: either encoder goes back */
             if (panel_enc(EN_SELECT) != 0 || panel_enc(EN_ALGO) != 0)
                 fa_gl = 1;
@@ -2549,7 +2573,7 @@ static void fa_leds(void)
     for (k = 0; k < 27u; k++)
         led_put(nd, 14u + k, 1);                            /* every key's glow too: the keys lit when held or sounding stand over it */
     {
-        static const uint8_t PG_LED[FA_NPAGE] = {B_LFO, B_SCL, B_SCL, B_EDIT, B_ENV, B_ENV, B_FX, B_EDIT};
+        static const uint8_t PG_LED[FA_NPAGE] = {B_LFO, B_SCL, B_SCL, B_EDIT, B_ENV, B_ENV, B_FX};
         led_put(nl, panel.btn[PG_LED[fa_page]], 1);          /* the page's button */
         led_put(nl, panel.btn[B_HOME], fa_page == FA_HOME_PAGE);   /* FILT is HOME's: HOME and EDIT both light */
     }

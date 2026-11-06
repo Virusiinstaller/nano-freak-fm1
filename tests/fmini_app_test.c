@@ -817,33 +817,32 @@ int main(int argc, char **argv)
         if (fa_gl_row != 4) { printf("rows wrap\n"); return 1; }
         /* FX: SELECT goes through its four knobs and on to the next page (the EDIT slots 4..7 are not on the face) */
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 3; fturn(EN_SELECT, 1);
-        if (fa_page != 7) { printf("FX select leaves at the fourth knob (%u)\n", (unsigned)fa_page); return 1; }   /* PRESET SETTINGS is next */
+        if (fa_page != 0) { printf("FX select leaves at the fourth knob (%u)\n", (unsigned)fa_page); return 1; }
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, -1);
         if (fa_page != 5 || fmg_curi(5) != fmg_count(5) - 1u) { printf("FX select back (%u)\n", (unsigned)fa_page); return 1; }
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, 1); fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
         if (fmg_curi(6) != 3u) { printf("FX select reaches 4 knobs (%u)\n", (unsigned)fmg_curi(6)); return 1; }
-        {   /* PRESET SETTINGS (1.25.0): the page after FX; EDIT again on FILT opens it as a pop-up; its four knobs are VOLUME,
-             * MODE, PITCH BEND and MOD WHEEL; EDIT closes the pop-up */
+        {   /* PRESET SETTINGS: a pop-up list (GLOBAL's style) on EDIT over FILT; not a page. Rows: VOLUME, MODE,
+             * PITCH BEND, MOD WHEEL. SELECT moves the row, ALGORITHM changes it, EDIT closes it */
             int32_t lv = TSEL->p[P_LEVEL];
             uint8_t bm;
             uint8_t mw0;
             fa_gl = 0; fa_page = 6; fmg_cur[6] = 3; fturn(EN_SELECT, 1);
-            if (fa_page != 7) { printf("FX select reaches PRESET (%u)\n", (unsigned)fa_page); return 1; }
-            fmg_cur[7] = 3; fturn(EN_SELECT, 1);
-            if (fa_page != 0) { printf("PRESET select wraps to CTRL (%u)\n", (unsigned)fa_page); return 1; }
+            if (fa_page != 0) { printf("FX select wraps to CTRL (%u): PRESET is no tab\n", (unsigned)fa_page); return 1; }
             fa_gl = 0; fa_page = 3; fpress(B_EDIT); fframes(64);
-            if (!fa_pset_pop) { printf("EDIT on FILT opens PRESET SETTINGS\n"); return 1; }
-            fturn(EN_K1, -1); fframes(64);
-            if (TSEL->p[P_LEVEL] == lv) { printf("PRESET VOLUME knob does not move (%d -> %d, pop %u, page %u)\n", (int)lv, (int)TSEL->p[P_LEVEL], (unsigned)fa_pset_pop, (unsigned)fa_page); return 1; }
+            if (fa_gl != 7) { printf("EDIT on FILT opens PRESET SETTINGS\n"); return 1; }
+            fmg_cur[7] = 0; fturn(EN_ALGO, -1); fframes(64);
+            if (TSEL->p[P_LEVEL] == lv) { printf("PRESET VOLUME does not change (%d)\n", (int)lv); return 1; }
+            fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
             bm = fm_bend_mode;
-            fmg_cur[7] = 2; fturn(EN_ALGO, 1); fframes(64);
-            if (fm_bend_mode == bm) { printf("PRESET PITCH BEND does not move\n"); return 1; }
-            mw0 = TSEL->mw;
-            fturn(EN_K1 + 3, 1); fframes(64);
-            if (TSEL->mw == mw0) { printf("PRESET MOD WHEEL does not move\n"); return 1; }
+            fturn(EN_ALGO, 1); fframes(64);
+            if (fm_bend_mode == bm) { printf("PRESET PITCH BEND does not change\n"); return 1; }
+            fturn(EN_SELECT, 1); mw0 = TSEL->mw;
+            fturn(EN_ALGO, 1); fframes(64);
+            if (TSEL->mw == mw0) { printf("PRESET MOD WHEEL does not change\n"); return 1; }
             ui.force = 1; fa_draw(); dump(dir, 30);
             fpress(B_EDIT); fframes(64);
-            if (fa_pset_pop) { printf("EDIT closes PRESET SETTINGS\n"); return 1; }
+            if (fa_gl == 7) { printf("EDIT closes PRESET SETTINGS\n"); return 1; }
             fm_bend_mode = bm; TSEL->mw = mw0; TSEL->p[P_LEVEL] = (int16_t)lv;
         }
         /* GLOBAL: SUPPORT FMINI-1!! is row 5 (after ABOUT): ALGORITHM opens the QR screen, any key goes back to it */
