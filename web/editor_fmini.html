@@ -269,7 +269,7 @@ const PAGES = [
     { t: "Detune", c: [ { k: "byte", b: FG.F2, lb: "DET 2", def: 64 }, { k: "byte", b: FG.F3, lb: "DET 3", def: 64 } ] } ] },
   { id: "MIX", groups: [
     { t: "Mixer", c: [
-      { k: "byte", b: FG.L1, lb: "OSC 1" }, { k: "byte", b: FG.L2, lb: "OSC 2" }, { k: "byte", b: FG.L3, lb: "OSC 3" }, { k: "byte", b: FG.LN, lb: "NOISE" } ] },
+      { k: "byte", b: FG.L1, lb: "OSC 1" }, { k: "byte", b: FG.L2, lb: "OSC 2" }, { k: "byte", b: FG.L3, lb: "OSC 3" }, { k: "byte", b: FG.LN, lb: "NOISE" }, { k: "par", p: P.LEVEL, lb: "VOLUME" } ] },
     { t: "Inputs", c: [
       { k: "sw", b: FG.SW1, bit: FS.O1, lb: "OSC 1", cls: "blue" }, { k: "sw", b: FG.SW1, bit: FS.O2, lb: "OSC 2", cls: "blue" },
       { k: "sw", b: FG.SW1, bit: FS.O3, lb: "OSC 3", cls: "blue" }, { k: "sw", b: FG.SW1, bit: FS.NZ, lb: "NOISE", cls: "blue" },
@@ -279,10 +279,10 @@ const PAGES = [
       { k: "par", pe: 0, lb: "CUTOFF" }, { k: "par", pe: 1, lb: "EMPHASIS" }, { k: "par", pe: 2, lb: "CONTOUR" }, { k: "byte", b: FG.KBD, lb: "KBD CTRL" } ] } ] },
   { id: "F.ENV", groups: [
     { t: "Filter contour", c: [
-      { k: "par", pe: 3, lb: "ATTACK" }, { k: "par", pe: 4, lb: "DECAY" }, { k: "par", pe: 5, lb: "SUSTAIN" }, { k: "par", pe: 2, lb: "AMOUNT" } ] } ] },
+      { k: "par", pe: 3, lb: "ATTACK" }, { k: "par", pe: 4, lb: "DECAY" }, { k: "par", pe: 5, lb: "SUSTAIN" } ] } ] },
   { id: "A.ENV", groups: [
     { t: "Loudness contour", c: [
-      { k: "par", p: P.ATK, lb: "ATTACK" }, { k: "par", p: P.DEC, lb: "DECAY" }, { k: "par", p: P.SUS, lb: "SUSTAIN" }, { k: "par", p: P.LEVEL, lb: "LEVEL" } ] } ] },
+      { k: "par", p: P.ATK, lb: "ATTACK" }, { k: "par", p: P.DEC, lb: "DECAY" }, { k: "par", p: P.SUS, lb: "SUSTAIN" }, { k: "par", p: P.REL, lb: "RELEASE" } ] } ] },
   { id: "FX", groups: [
     { t: "Reverb", c: [ { k: "par", p: P.REV, lb: "MIX" }, { k: "sel", g: G.RTYPE, lb: "TYPE" }, { k: "glb", g: G.RSIZE, lb: "DECAY" }, { k: "glb", g: G.RDAMP, lb: "TONE" } ] },
     { t: "Delay", c: [ { k: "par", p: P.DLY, lb: "MIX" }, { k: "sel", g: G.DTIME, lb: "TYPE" }, { k: "glb", g: G.DRREV, lb: "TIME" }, { k: "glb", g: G.DFDBK, lb: "FEEDBK" } ] },
