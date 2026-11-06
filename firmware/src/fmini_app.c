@@ -363,14 +363,15 @@ static void fa_graph(uint32_t pg)
         }
         fa_ltext(70, 198, &AF_X, (fmg_byte(FG_SW2) & FT_HP) ? "24 DB/OCT LADDER HIGH PASS" : "24 DB/OCT LADDER LOW PASS", FA_MU);
     } else {                                                /* a contour: attack, decay, sustain, release */
-        int32_t a = 5 + k[0] * 25 / 1000, dd = 5 + k[1] * 30 / 1000, su = k[2] * 2 / 10 - 100;
+        /* the RELEASE (k[3]) is the release's length: 5..27 of the 100 units (the same scale as the DECAY's 5..35) */
+        int32_t a = 5 + k[0] * 25 / 1000, dd = 5 + k[1] * 30 / 1000, su = k[2] * 2 / 10 - 100, rl = 5 + k[3] * 22 / 1000;
         pt[0] = 0; pt[1] = -100;
         pt[2] = (int16_t)a; pt[3] = 100;
         pt[4] = (int16_t)(a + dd); pt[5] = (int16_t)su;
-        pt[6] = (int16_t)(a + dd + 20); pt[7] = (int16_t)su;
-        pt[8] = (int16_t)(a + dd + 35); pt[9] = -100;
+        pt[6] = (int16_t)(a + dd + 8); pt[7] = (int16_t)su;
+        pt[8] = (int16_t)(a + dd + 8 + rl); pt[9] = -100;
         fa_poly(pt, 5, 19, 150, 202, 38, FA_OR);
-        fa_ltext(18, 198, &AF_X, "ATTACK DECAY SUSTAIN", FA_MU);
+        fa_ltext(18, 198, &AF_X, "ATTACK DECAY SUSTAIN RELEASE", FA_MU);
     }
 }
 
