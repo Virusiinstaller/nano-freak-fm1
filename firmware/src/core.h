@@ -19,9 +19,11 @@
 /* FMini-1 firmware version: the one the device shows and INFO reports (tag 0x49). Bump it on every firmware change. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 2u
-#define FMINI_VER_PATCH 12u
-#define FMINI_VERSION "v2.2.12"
+#define FMINI_VER_PATCH 13u
+#define FMINI_VERSION "v2.2.13"
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
+/* FMINI: the filter contour's RELEASE index (0..127): the explicit value, or the DECAY when none was set (the older presets) */
+#define FMINI_FREL(t) (((t)->frel & 0x80) ? ((t)->frel & 127) : ((t)->p[P_E4] & 127))
 /* FMini-1 GLOBAL (the GLO list, not the preset): TUNING, the reference A in cents from A 440 (-122 .. +114), and TRANSPOSE,
  * semitones -12 .. +12. They apply to every note (voice.c trk_note_on / trk_note_off: keys, MIDI, SEQ, ARP) and to the pitch
  * (eng_fmini.c). Defined in voice.c. */
@@ -382,6 +384,7 @@ typedef struct track {
     uint8_t xp_n, xp_note[4], xp_vel[4];   /* note-ons during the fade, played on the new engine */
     /* modulation matrix (mod.c): MIDI performance controllers of the track's channel, 0..127 */
     uint8_t mw, at;              /* CC1 mod wheel, channel aftertouch */
+    uint8_t frel;                /* FMINI: the filter contour's RELEASE: bit 7 = set (explicit), low 7 bits the value; 0 = as the DECAY */
     uint8_t ex_off;              /* 127 - CC11 expression (0: full, the MIDI default) */
     uint8_t m_vel, m_key, m_vi;  /* the latest note-on: velocity, note, voice index (per-block destinations) */
     uint8_t sp_alt;              /* SPREAD: the side the next voice starts on (alternating, voice.c voice_start) */

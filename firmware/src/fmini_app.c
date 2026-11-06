@@ -1158,8 +1158,6 @@ static void fa_ctl_name(uint32_t n, const char **tag, char *name)
         str_cpy(name, "GLIDE TIME", 16);
     else if (pg == 0u && i == 6u)
         str_cpy(name, "GLIDE ON", 16);
-    else if (pg == 5u && i == 3u)
-        str_cpy(name, "VOLUME", 16);
     else if (pg == 6u && i >= 4u)
         str_cpy(name, i == 4u ? "REVERB DECAY" : i == 5u ? "DELAY TIME" : i == 6u ? "CHORUS RATE" : "DRIVE TONE", 16);
 }
@@ -1190,8 +1188,10 @@ static void fa_ctl_apply(uint32_t n, uint32_t v)
     case FK_PAR:
         midi_cc_set(t, f->a, v);
         break;
-    case FK_NONE:                                         /* A.ENV's LEVEL slot: its CC 7 is VOLUME, which is on PRESET SETTINGS now */
-        midi_cc_set(t, P_LEVEL, v);
+    case FK_NONE:
+        break;
+    case FK_FREL:                                         /* the filter contour's RELEASE: a CC is its value, from now on explicit */
+        t->frel = (uint8_t)(0x80u | (v & 127u));
         break;
     case FK_NAME:
         fmg_write(f->a, v * 6u / 128u);
@@ -1903,11 +1903,18 @@ static void fa_factory_extras(track_t *t, uint32_t n)
     if (n >= FMINI_NSLOT)
         return;
     fb_extra(n, x);                             /* the slot's record (saved or factory) */
-    {   uint8_t bnd, wh;                        /* the preset's PITCH BEND range and MOD WHEEL position */
-        fb_pset(n, &bnd, &wh);
+    {   uint8_t bnd, wh, frl, arl;              /* the preset's PITCH BEND range, MOD WHEEL position and RELEASEs */
+        uint32_t l = fb_pset(n, &bnd, &wh, &frl, &arl);
         t->mw = wh;
         if (t == &trk[0])
             fm_bend_mode = bnd;
+        if (l >= 4u) {                          /* the saved releases */
+            t->frel = (uint8_t)(0x80u | frl);
+            t->p[P_REL] = (int16_t)arl;
+        } else {                                /* an older preset: the RELEASEs are its DECAY, as they always sounded */
+            t->frel = 0;
+            t->p[P_REL] = t->p[P_DEC];
+        }
     }
     t->p[P_AMODE] = x->arp[0] ? x->arp[1] : 0;
     t->p[P_ARATE] = x->arp[2];
@@ -1980,7 +1987,8 @@ static int fa_save_slot(uint32_t k, const char *name)
     n = fr_put(rec, FB_SLOT, n, FR_PATCH, patch, FG_SIZE);
     n = fr_put(rec, FB_SLOT, n, FR_EXTRA, (const uint8_t *)&x, sizeof x);
     n = fr_put(rec, FB_SLOT, n, FR_PARAM, par, sizeof par);
-    {   const uint8_t ps[2] = {(uint8_t)(fm_bend_mode & 3u), (uint8_t)(t->mw & 127u)};   /* the bend range and the wheel as they are now */
+    {   const uint8_t ps[4] = {(uint8_t)(fm_bend_mode & 3u), (uint8_t)(t->mw & 127u), (uint8_t)FMINI_FREL(t),
+                               (uint8_t)(t->p[P_REL] & 127)};   /* the bend range and the wheel as they are now */
         n = fr_put(rec, FB_SLOT, n, FR_PSET, ps, sizeof ps);
     }
     if (!n)

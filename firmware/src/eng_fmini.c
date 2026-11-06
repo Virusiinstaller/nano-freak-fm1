@@ -359,7 +359,7 @@ static void fmini_note_on(track_t *t, voice_t *v)
 }
 
 /* the contour, once a block: stage 1 attack, 2 decay to the sustain, 3 release (the DECAY time); level Q23 */
-static int32_t fmini_contour(const int16_t *p, voice_t *v)
+static int32_t fmini_contour(const int16_t *p, voice_t *v, int32_t kr)
 {
     uint32_t st = (uint32_t)v->s[7] >> 24;
     int32_t e = v->s[7] & 0xFFFFFF, sus = (int32_t)p[P_E5] << 16, k = (int32_t)ENV_EXP[p[P_E4] & 127];
@@ -380,7 +380,7 @@ static int32_t fmini_contour(const int16_t *p, voice_t *v)
         e += mulq16(sus - e, (uint32_t)k);                  /* the DECAY time is the drop from the peak to the SUSTAIN level, whatever it is */
         break;
     case 3:
-        e -= mulq16(e, (uint32_t)k);
+        e -= mulq16(e, (uint32_t)kr);                       /* the RELEASE: its own time (E4 when the preset has none) */
         break;
     default:
         break;
@@ -419,7 +419,7 @@ static void fmini_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     uint32_t ph0 = v->ph[0], ph1 = v->ph[1], ph2 = v->ph[2];
     if (n > CTL)
         n = CTL;
-    env15 = fmini_contour(p, v);
+    env15 = fmini_contour(p, v, (int32_t)ENV_EXP[FMINI_FREL(t)]);
 
     /* modulation: the LFO (a square when FT_SQR) or noise held for the block, MOD deep */
     lfo = mulq15(t->lfo_val, t->lfo_fade);

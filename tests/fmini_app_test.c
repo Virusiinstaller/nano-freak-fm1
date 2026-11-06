@@ -70,7 +70,14 @@ int main(int argc, char **argv)
         for (k = 0; k < 16; k++) {
             int pg2 = pgs[k / 4], kn = k % 4;
             uint32_t before = 0, after = 0, i;
-            if (pg2 == 5 && kn == 3) continue;             /* A.ENV's LEVEL: no function now (VOLUME is on PRESET SETTINGS) */
+            if (pg2 == 4 && kn == 3) {                     /* F.ENV's RELEASE: the filter contour's release, not a parameter slot */
+                uint32_t r0 = FMINI_FREL(TSEL);
+                fa_gl = 0; fa_page = 4; fmg_cur[4] = 3; fframes(8);
+                fmg_force_page = 4; fmg_knob(3, 6);
+                if (FMINI_FREL(TSEL) == r0) { printf("F.ENV RELEASE knob does not move (%u -> %u, frel %u, pg %u, fmgpg %u, ok %d)\n", (unsigned)r0, (unsigned)FMINI_FREL(TSEL), (unsigned)TSEL->frel, (unsigned)fa_page, (unsigned)fmg_pg(), (int)fmg_ok()); return 1; }
+                continue;
+            }
+            if (pg2 == 5 && kn == 3) continue;             /* (A.ENV's RELEASE is P_REL: the loop below moves it) */
             fa_page = (uint8_t)pg2;
             for (i = 0; i < FG_SIZE; i++) before = before * 31u + fmini_patch[0][i];
             for (i = 0; i < P_COUNT; i++) before = before * 31u + (uint32_t)TSEL->p[i];
@@ -430,10 +437,12 @@ int main(int argc, char **argv)
             for (i = 0; i < FG_SIZE; i++) h0 = h0 * 31u + fmini_patch[0][i];
             for (i = 0; i < P_COUNT; i++) h0 = h0 * 31u + (uint32_t)TSEL->p[i];
             for (i = 0; i < G_COUNT; i++) h0 = h0 * 31u + (uint32_t)song.g[i];
+            h0 = h0 * 31u + TSEL->frel;
             fa_ctl_apply(n, 127);
             for (i = 0; i < FG_SIZE; i++) h1 = h1 * 31u + fmini_patch[0][i];
             for (i = 0; i < P_COUNT; i++) h1 = h1 * 31u + (uint32_t)TSEL->p[i];
             for (i = 0; i < G_COUNT; i++) h1 = h1 * 31u + (uint32_t)song.g[i];
+            h1 = h1 * 31u + TSEL->frel;
             if (h0 == h1) { const char *tg; char nm[16]; fa_ctl_name(n, &tg, nm); printf("control %u (%s %s) ignores its CC\n", n, tg, nm); bad++; }
         }
         if (bad) return 1;
@@ -1205,7 +1214,7 @@ int main(int argc, char **argv)
                 t0->p[P_ATK] = 40;
                 t0->p[P_DEC] = dq ? 90 : 60;
                 t0->p[P_SUS] = 64;
-                t0->p[P_REL] = rr ? 127 : 0;                 /* no longer matters */
+                t0->p[P_REL] = rr ? 127 : 0;                 /* the RELEASE: its own time now */
                 esync_coef(t0);
                 vv.stage = 1;
                 while (vv.stage == 1 && n++ < 100000) env_tick(t0, &vv);
@@ -1219,11 +1228,11 @@ int main(int argc, char **argv)
                 vv.active = 1;
                 while (vv.active && n < 200000) { env_tick(t0, &vv); n++; }
                 if (rr == 0) { rel[dq] = n; dec_ticks[dq] = nd; }
-                else if (n != rel[dq]) { printf("adsr: the REL param still changes the release (%d vs %d)\n", n, (int)rel[dq]); return 1; }
+                else if (n == rel[dq]) { printf("adsr: the REL param does not change the release (%d vs %d)\n", n, (int)rel[dq]); return 1; }
             }
         }
-        if (!(rel[1] > rel[0] * 2) || !(dec_ticks[1] > dec_ticks[0] * 2)) {
-            printf("adsr: DECAY must set both: release %d/%d decay %d/%d\n", (int)rel[0], (int)rel[1], (int)dec_ticks[0], (int)dec_ticks[1]);
+        if (rel[1] != rel[0] || !(dec_ticks[1] > dec_ticks[0] * 2)) {   /* the DECAY sets the decay, not the release (REL does) */
+            printf("adsr: DECAY must set only the decay: release %d/%d decay %d/%d\n", (int)rel[0], (int)rel[1], (int)dec_ticks[0], (int)dec_ticks[1]);
             return 1;
         }
     }
@@ -1242,6 +1251,8 @@ int main(int argc, char **argv)
         while (vv.env > (1 << 20) && nd < 4000000) { env_tick(t0, &vv); nd++; }   /* -24 dB: heard until then */
         sec = (double)nd * CTL / FS;
         if (sec < 11.0 || sec > 13.5) { printf("decay at max: %.2f s\n", sec); return 1; }
+        t0->p[P_REL] = 127;                                  /* the RELEASE at its max: as long as the DECAY's */
+        esync_coef(t0);
         vv.stage = 3; vv.env = 1 << 24; vv.active = 1; nd = 0;
         while (vv.env > (1 << 20) && nd < 4000000) { env_tick(t0, &vv); nd++; }
         sec = (double)nd * CTL / FS;
@@ -1256,12 +1267,12 @@ int main(int argc, char **argv)
         t0->p[P_E3] = 127; t0->p[P_E4] = 127; t0->p[P_E5] = 0;
         vv.gate = 1;
         vv.s[7] = 1 << 24;                                   /* stage 1 from 0 */
-        do { e = fmini_contour(t0->p, &vv); n++; } while (((uint32_t)vv.s[7] >> 24) == 1u && n < 2000000);
+        do { e = fmini_contour(t0->p, &vv, (int32_t)ENV_EXP[t0->p[P_E4] & 127]); n++; } while (((uint32_t)vv.s[7] >> 24) == 1u && n < 2000000);
         sec = (double)n * CTL / FS;
         if (sec < 11.0 || sec > 13.0) { printf("filter attack at max: %.2f s\n", sec); return 1; }
         vv.gate = 0;
         n = 0;
-        do { e = fmini_contour(t0->p, &vv); n++; } while (e > 2048 && n < 4000000);   /* -24 dB (Q15) */
+        do { e = fmini_contour(t0->p, &vv, (int32_t)ENV_EXP[t0->p[P_E4] & 127]); n++; } while (e > 2048 && n < 4000000);   /* -24 dB (Q15) */
         sec = (double)n * CTL / FS;
         if (((uint32_t)vv.s[7] >> 24) != 3u || sec < 11.0 || sec > 14.5) { printf("filter release at max DECAY: %.2f s (st %u)\n", sec, (unsigned)((uint32_t)vv.s[7] >> 24)); return 1; }
     }

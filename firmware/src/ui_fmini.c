@@ -18,7 +18,7 @@ static void ml_knob(const track_t *t, uint32_t id);              /* (midi_learn.
 static uint8_t fmg_gdirty;                                        /* a global (FK_GLB) changed: fmini_app.c saves it */
 static uint8_t fmg_cur[12];                                        /* the cursor of each page: 0..3 the knobs, 4.. extras */
 
-enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE };   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
+enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE, FK_FREL };   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
 typedef struct {
     const char *lb;                                               /* card label (<= 6) */
     uint8_t kind, a, b;                                           /* a: byte index or param id; b: switch bit / names */
@@ -47,9 +47,9 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                    {"CONTOUR", FK_PAR, P_E2, 0, ICON_SWEEP}, {"KBD CTRL", FK_BYTE, FG_KBD, 0, ICON_KEYTRACK},
                    {"LP/HP", FK_SW, FG_SW2, FT_HP, ICON_CUTOFF}, {"FILT. MOD", FK_SW, FG_SW1, FS_MFLT, ICON_MOD}}},   /* LP/HP under CUTOFF; FILT. MOD under it (MOD FLT's bit) */
     {"FILTER CONTOUR", 4, {{"ATTACK", FK_PAR, P_E3, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_E4, 0, ICON_DECAY},
-                       {"SUSTAIN", FK_PAR, P_E5, 0, ICON_SUSTAIN}, {"AMOUNT", FK_PAR, P_E2, 0, ICON_SWEEP}}},
+                       {"SUSTAIN", FK_PAR, P_E5, 0, ICON_SUSTAIN}, {"RELEASE", FK_FREL, 0, 0, ICON_DECAY}}},
     {"LOUDNESS CONTOUR", 4, {{"ATTACK", FK_PAR, P_ATK, 0, ICON_ATTACK}, {"DECAY", FK_PAR, P_DEC, 0, ICON_DECAY},
-                         {"SUSTAIN", FK_PAR, P_SUS, 0, ICON_SUSTAIN}, {"LEVEL", FK_NONE, 0, 0, ICON_LEVEL}}},
+                         {"SUSTAIN", FK_PAR, P_SUS, 0, ICON_SUSTAIN}, {"RELEASE", FK_PAR, P_REL, 0, ICON_DECAY}}},
     {"EFFECTS", 8, {{"REVERB", FK_PAR, P_REV, 0, ICON_REVERB}, {"DELAY", FK_PAR, P_DLY, 0, ICON_DELAY},
                     {"CHORUS", FK_PAR, P_CHOR, 0, ICON_CHORUS}, {"DRIVE", FK_PAR, P_DIST, 0, ICON_DRIVE},
                     {"EDIT", FK_EDIT, 0, 0, ICON_REVERB}, {"EDIT", FK_EDIT, 1, 0, ICON_DELAY},
@@ -305,7 +305,10 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
     case FK_WHEEL:                                    /* MOD WHEEL: the track's position (t->mw, as CC1 sets it); saved with the preset */
         t->mw = (uint8_t)clamp((int32_t)t->mw + fmg_acc(role, s, 127), 0, 127);
         break;
-    case FK_NONE:                                     /* A.ENV's LEVEL: no function (VOLUME is on PRESET SETTINGS) */
+    case FK_NONE:
+        break;
+    case FK_FREL:                                     /* the filter contour's RELEASE: an explicit value from now on */
+        t->frel = (uint8_t)(0x80u | (uint32_t)clamp((int32_t)FMINI_FREL(t) + fmg_acc(role, s, 127), 0, 127));
         break;
     case FK_INS:                                      /* the track's INSERT: a phaser on / off */
         t->p[P_ITYPE] = (int16_t)(s > 0 ? IT_PHASER : 0);
@@ -463,6 +466,13 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
     case FK_NONE:
         str_cpy(val, "--", 12);
         return;
+    case FK_FREL: {                                   /* shown as the DECAY's time: the same scale */
+        const param_desc_t *d = track_desc(TSEL, P_E4);
+        v = vo >= 0 ? vo : (int32_t)FMINI_FREL(t);
+        param_format(d, v, val, unit);
+        *ratio = fmg_ratio(d, v);
+        return;
+    }
     case FK_SW:
     case FK_BYP:
     case FK_INS:

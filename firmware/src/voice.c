@@ -627,7 +627,7 @@ static int32_t env_tick(track_t *t, voice_t *v)
         break;
     case 3:
 #if FELUCCA_FMINI_ONLY
-        v->env -= mulq16(v->env, T_ESYNC(t)[1]);        /* the DECAY knob is also the release time (no REL knob) */
+        v->env -= mulq16(v->env, T_ESYNC(t)[2]);        /* the RELEASE (P_REL, its own time up to the DECAY's) */
 #else
         v->env -= mulq16(v->env, T_ESYNC(t)[2]);
 #endif
