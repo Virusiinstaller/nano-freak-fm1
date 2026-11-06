@@ -368,9 +368,11 @@ static void fa_graph(uint32_t pg)
         pt[0] = 0; pt[1] = -100;
         pt[2] = (int16_t)a; pt[3] = 100;
         pt[4] = (int16_t)(a + dd); pt[5] = (int16_t)su;
-        pt[6] = (int16_t)(a + dd + 8); pt[7] = (int16_t)su;
-        pt[8] = (int16_t)(a + dd + 8 + rl); pt[9] = -100;
-        fa_poly(pt, 5, 19, 150, 202, 38, FA_OR);
+        pt[6] = (int16_t)(a + dd + 16); pt[7] = (int16_t)su;
+        pt[8] = (int16_t)(a + dd + 16 + rl); pt[9] = -100;
+        {   int32_t tot = pt[8] > 100 ? pt[8] : 100;    /* over 100 units (a long release): the whole curve narrows to fit */
+            fa_poly(pt, 5, 19, 150, 202 * 100 / tot, 38, FA_OR);
+        }
         fa_ltext(18, 198, &AF_X, "ATTACK DECAY SUSTAIN RELEASE", FA_MU);
     }
 }
