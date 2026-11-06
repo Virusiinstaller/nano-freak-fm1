@@ -18,7 +18,7 @@ static void ml_knob(const track_t *t, uint32_t id);              /* (midi_learn.
 static uint8_t fmg_gdirty;                                        /* a global (FK_GLB) changed: fmini_app.c saves it */
 static uint8_t fmg_cur[12];                                        /* the cursor of each page: 0..3 the knobs, 4.. extras */
 
-enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE, FK_FREL };   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
+enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE, FK_FREL, FK_VOL };   /* FK_VOL: PRESET SETTINGS' VOLUME, shown 0..10 (stored as P_LEVEL 0..127) */   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
 typedef struct {
     const char *lb;                                               /* card label (<= 6) */
     uint8_t kind, a, b;                                           /* a: byte index or param id; b: switch bit / names */
@@ -56,7 +56,7 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                     {"EDIT", FK_EDIT, 2, 0, ICON_CHORUS}, {"EDIT", FK_EDIT, 3, 0, ICON_DRIVE}}},
     /* PRESET SETTINGS (1.25.0): the page after FX, and the EDIT pop-up on FILT: VOLUME (the LEVEL that was A.ENV's),
      * MODE (MONO / POLY, as CTRL's VOICES), PITCH BEND and MOD WHEEL, both kept in the preset */
-    {"PRESET SETTINGS", 4, {{"VOLUME", FK_PAR, P_LEVEL, 0, ICON_LEVEL}, {"MODE", FK_VOICE, P_VOICE, 0, ICON_LEVEL},
+    {"PRESET SETTINGS", 4, {{"VOLUME", FK_VOL, P_LEVEL, 0, ICON_LEVEL}, {"MODE", FK_VOICE, P_VOICE, 0, ICON_LEVEL},
                             {"PITCH BEND", FK_BEND, 0, 0, ICON_SWEEP}, {"MOD WHEEL", FK_WHEEL, 0, 0, ICON_MOD}}},
     /* the FX pop-ups: four knobs each (K1..K4) */
     {"REVERB", 4, {{"MIX", FK_PAR, P_REV, 0, ICON_REVERB}, {"TYPE", FK_GLB, G_RTYPE, 0, ICON_REVERB},
@@ -242,6 +242,10 @@ static int32_t fmg_acc(uint32_t role, int32_t s, int32_t range)
 }
 
 /* control i of page pg moved s steps (a knob of the page, or ALGORITHM on the cursor's control) */
+/* VOLUME 0..10 <-> P_LEVEL 0..127: the shown value is the level's nearest tenth, so a patch shows the same number until it is turned */
+static int32_t fmg_vol10(int32_t lv) { return (lv * 10 + 63) / 127; }
+static int32_t fmg_vol_level(int32_t v) { return (v * 127 + 5) / 10; }
+
 static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
 {
     const fmgf_t *f = fmg_field(pg, i);
@@ -318,6 +322,13 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
     case FK_NAME:
         fmg_write(f->a, (uint32_t)clamp((int32_t)fmg_byte(f->a) + s, 0, f->b == FN_WAVE ? 6 : 5));   /* a detent each */
         break;
+    case FK_VOL: {
+        int32_t v = clamp(fmg_vol10(t->p[P_LEVEL]) + s, 0, 10);
+        t->p[P_LEVEL] = (int16_t)fmg_vol_level(v);
+        motion_capture(t, P_LEVEL, t->p[P_LEVEL]);
+        ml_knob(t, P_LEVEL);
+        break;
+    }
     case FK_PAR: {
         const param_desc_t *d = track_desc(TSEL, f->a);
         int16_t *vp = &t->p[f->a];
@@ -415,6 +426,11 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
     *ratio = -1;
     *icon = f->icon;
     switch (f->kind) {
+    case FK_VOL:
+        v = vo >= 0 ? vo : fmg_vol10(t->p[P_LEVEL]);
+        fmt_int(val, v);
+        *ratio = v * 100;
+        return;
     case FK_PAR: {
         const param_desc_t *d = track_desc(TSEL, f->a);
         v = vo >= 0 ? vo : t->p[f->a];

@@ -845,6 +845,13 @@ int main(int argc, char **argv)
                     }
                 }
             if (!found) { printf("no wave selector on CTRL\n"); return 1; }
+            {   /* OSC with SIN on OSC 1: its box shows the sine (a dump for the eye) */
+                uint8_t w0 = fmg_byte(FG_W1);
+                fa_gl = 0; fa_page = 1; fmg_force_page = 1; fmg_write(FG_W1, 6);
+                if (fmg_byte(FG_W1) != 6) { printf("SIN does not take on OSC 1 (%u)\n", (unsigned)fmg_byte(FG_W1)); return 1; }
+                ui.force = 1; fa_draw(); dump(dir, 60);
+                fmg_write(FG_W1, w0);
+            }
             /* a sine, not silent: one oscillator on SIN makes a signal with a clean crest factor (about 1.41) */
             {   uint32_t ph = 0, inc = 0x01000000u;
                 int32_t pk = 0; int64_t sq = 0;
@@ -869,6 +876,11 @@ int main(int argc, char **argv)
             if (fa_gl != 7) { printf("EDIT on FILT opens PRESET SETTINGS\n"); return 1; }
             fmg_cur[7] = 0; fturn(EN_ALGO, -1); fframes(64);
             if (TSEL->p[P_LEVEL] == lv) { printf("PRESET VOLUME does not change (%d)\n", (int)lv); return 1; }
+            { int32_t k; for (k = 0; k < 25; k++) fturn(EN_ALGO, 1); fframes(4);   /* VOLUME tops out at 10 (= level 127) */
+              if (TSEL->p[P_LEVEL] != 127 || fmg_vol10(127) != 10 || fmg_vol10(0) != 0) { printf("PRESET VOLUME range 0..10 (%d)\n", (int)TSEL->p[P_LEVEL]); return 1; }
+              for (k = 0; k < 25; k++) fturn(EN_ALGO, -1); fframes(4);
+              if (TSEL->p[P_LEVEL] != 0) { printf("PRESET VOLUME bottoms at 0 (%d)\n", (int)TSEL->p[P_LEVEL]); return 1; }
+              TSEL->p[P_LEVEL] = (int16_t)lv; }
             fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
             bm = fm_bend_mode;
             fturn(EN_ALGO, 1); fframes(64);

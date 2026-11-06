@@ -164,14 +164,15 @@ static void fa_poly(const int16_t *pt, uint32_t n, int32_t x, int32_t y, int32_t
         cv_line_t(x + pt[2 * i] * w / 100, y + h / 2 - pt[2 * i + 1] * h / 200, x + pt[2 * i + 2] * w / 100,
                   y + h / 2 - pt[2 * i + 3] * h / 200, c, 2);
 }
-static const int16_t FA_WAVE[6][12] = {                 /* TRI SHARK SAW SQR PULSE W PULSE N: x 0..100, y -100..100 */
+static const int16_t FA_WAVE[7][26] = {                 /* TRI SHARK SAW SQR PULSE W PULSE N SIN: x 0..100, y -100..100 */
     {0, 0, 25, 100, 75, -100, 100, 0, -1, -1, -1, -1},
     {0, -100, 40, 100, 60, -20, 100, -100, -1, -1, -1, -1},
     {0, 0, 50, 100, 50, -100, 100, 0, -1, -1, -1, -1},
     {0, -100, 0, 100, 50, 100, 50, -100, 100, -100, -1, -1},
     {0, -100, 0, 100, 33, 100, 33, -100, 100, -100, -1, -1},
-    {0, -100, 0, 100, 12, 100, 12, -100, 100, -100, -1, -1}};
-static const uint8_t FA_WAVE_N[6] = {4, 4, 4, 5, 5, 5};
+    {0, -100, 0, 100, 12, 100, 12, -100, 100, -100, -1, -1},
+    {0, 0, 8, 50, 17, 87, 25, 100, 33, 87, 42, 50, 50, 0, 58, -50, 67, -87, 75, -100, 83, -87, 92, -50, 100, 0}};  /* SIN: one period, 13 points */
+static const uint8_t FA_WAVE_N[7] = {4, 4, 4, 5, 5, 5, 13};
 
 /* ------------------------------------------------------------ scene --- */
 static void fa_num(char *s, int32_t ratio)               /* 0..1000 -> "0.0" .. "10.0" */
@@ -528,10 +529,10 @@ static void fa_fx_dialog(void)
 
 static void fa_wave_boxes(uint32_t pg, uint32_t cur)
 {
-    static const char *const WV[6] = {"TRI", "SHARK", "SAW", "SQR", "PULSE W", "PULSE N"};
+    static const char *const WV[7] = {"TRI", "SHARK", "SAW", "SQR", "PULSE W", "PULSE N", "SIN"};
     uint32_t j;
     for (j = 0; j < 3u; j++) {                             /* each box sits under its oscillator's knob (the columns of fa_scene) */
-        int32_t cx = 36 + (int32_t)j * 56, x = cx - 26, w = clamp((int32_t)fmg_byte(FG_W1 + j), 0, 5);
+        int32_t cx = 36 + (int32_t)j * 56, x = cx - 26, w = clamp((int32_t)fmg_byte(FG_W1 + j), 0, 6);
         int hot = cur == 4u + j;
         cv_rect(x, 146, 52, 36, hot ? FA_OR : FA_LINE);
         cv_rect(x + 1, 147, 50, 34, FA_BOX);

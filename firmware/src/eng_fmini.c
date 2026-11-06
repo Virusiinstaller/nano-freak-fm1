@@ -84,7 +84,7 @@ static int32_t fmini_mn[NTRK];                    /* the modulation noise of thi
 /* the highest value of each byte */
 static uint32_t fmini_max(uint32_t i)
 {
-    static const uint8_t MAXV[FG_NUM] = {5, 5, 5, 5, 5, 5, 127, 127, 127, 127, 127, 127, 127, 7, 127,   /* FG_SW2: FT_GLIDE, FT_SQR, FT_HP */ 127, 127, 127, 127, 15, 127, 15, 127, 127};
+    static const uint8_t MAXV[FG_NUM] = {5, 5, 5, 6, 6, 6, 127, 127, 127, 127, 127, 127, 127, 7, 127,   /* FG_SW2: FT_GLIDE, FT_SQR, FT_HP */ 127, 127, 127, 127, 15, 127, 15, 127, 127};
     return i < FG_NUM ? MAXV[i] : 0u;
 }
 
