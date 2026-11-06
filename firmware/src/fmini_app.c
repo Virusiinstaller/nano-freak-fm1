@@ -1749,6 +1749,7 @@ static uint32_t fa_signature(void)
         h = (h ^ fmini_patch[0][i]) * 16777619u;
     for (i = 0; i < P_COUNT; i++)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
+    h = (h ^ (uint32_t)t->frel ^ (uint32_t)t->mw << 8) * 16777619u;   /* the RELEASE of the filter, the MOD WHEEL: redraw as they move */
     h = (h ^ fa_base ^ (uint32_t)fa_pp_on() << 8 ^ (uint32_t)fa_cpu_on() << 9) * 16777619u;
     if (fa_gl == 5u)                                      /* the monitor redraws with each message and each scroll step */
         h = (h ^ midi_mon_seq() ^ fa_mon_off << 16) * 16777619u;
