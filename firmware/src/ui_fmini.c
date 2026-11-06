@@ -69,7 +69,7 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                   {"TONE", FK_GLB, G_DRLVL, 0, ICON_DRIVE}, {"OUTPUT", FK_GLB, G_MIDI, 0, ICON_DRIVE}}},
 };
 static const char *const FMG_RANGE[6] = {"LO", "32'", "16'", "8'", "4'", "2'"};
-static const char *const FMG_WAVE[6] = {"TRI", "SHARK", "SAW", "SQR", "PLS W", "PLS N"};
+static const char *const FMG_WAVE[7] = {"TRI", "SHARK", "SAW", "SQR", "PLS W", "PLS N", "SIN"};
 static const char *const FMG_BEND[4] = {"+/-2", "+/-12", "+2/-12", "+2/-24"};   /* PITCH BEND: fm_bend_mode (seq.c) */
 
 static int fmg_page(uint32_t g) { return g >= GR_FMG0 && g <= GR_FMG7; }
@@ -316,7 +316,7 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
         motion_capture(t, P_ITYPE, t->p[P_ITYPE]);
         break;
     case FK_NAME:
-        fmg_write(f->a, (uint32_t)clamp((int32_t)fmg_byte(f->a) + s, 0, 5));   /* a detent each */
+        fmg_write(f->a, (uint32_t)clamp((int32_t)fmg_byte(f->a) + s, 0, f->b == FN_WAVE ? 6 : 5));   /* a detent each */
         break;
     case FK_PAR: {
         const param_desc_t *d = track_desc(TSEL, f->a);
@@ -375,7 +375,7 @@ static void fmg_range(uint32_t pg, uint32_t i, int32_t *lo, int32_t *hi)
 {
     const fmgf_t *f = fmg_field(pg, i);
     *lo = 0;
-    *hi = f->kind == FK_SW || f->kind == FK_BYP || f->kind == FK_INS || f->kind == FK_VOICE || f->kind == FK_EDIT ? 1 : f->kind == FK_NAME ? 5 : 127;
+    *hi = f->kind == FK_SW || f->kind == FK_BYP || f->kind == FK_INS || f->kind == FK_VOICE || f->kind == FK_EDIT ? 1 : f->kind == FK_NAME ? (f->b == FN_WAVE ? 6 : 5) : 127;
     if (f->kind == FK_GLB) {
         *lo = GP[f->a].min;
         *hi = GP[f->a].max;
@@ -480,9 +480,9 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
         str_cpy(val, f->a == FS_PINK ? (v ? "PINK" : "WHITE") : f->b == FT_HP ? (v ? "HP" : "LP") : (v ? "ON" : "OFF"), 12);   /* the noise colour, the filter's LP / HP */
         return;
     case FK_NAME:
-        v = clamp(vo >= 0 ? vo : (int32_t)fmg_byte(f->a), 0, 5);
+        v = clamp(vo >= 0 ? vo : (int32_t)fmg_byte(f->a), 0, f->b == FN_WAVE ? 6 : 5);
         str_cpy(val, f->b == FN_RANGE ? FMG_RANGE[v] : FMG_WAVE[v], 12);
-        *ratio = v * 200;
+        *ratio = f->b == FN_WAVE ? v * 1000 / 6 : v * 200;
         return;
     default:
         break;

@@ -29,7 +29,7 @@
 
 enum {                           /* the patch's bytes */
     FG_R1, FG_R2, FG_R3,         /* range: 0 LO, 1 32', 2 16', 3 8', 4 4', 5 2' */
-    FG_W1, FG_W2, FG_W3,         /* wave: 0 TRI, 1 SHARK, 2 SAW, 3 SQR, 4 PLS W, 5 PLS N */
+    FG_W1, FG_W2, FG_W3,         /* wave: 0 TRI, 1 SHARK, 2 SAW, 3 SQR, 4 PLS W, 5 PLS N, 6 SIN */
     FG_F2, FG_F3,                /* OSC 2 / 3 frequency, 64 = 0, +-7 semitones */
     FG_L1, FG_L2, FG_L3, FG_LN,  /* mixer levels 0..127 (a squared curve) */
     FG_SW1,                      /* FS_ bits */
@@ -324,6 +324,12 @@ static void fmini_wave(uint32_t w, uint32_t *php, uint32_t inc, int32_t g, int32
     case 4:
         for (i = 0; i < n; i++) {
             mix[i] += mulq15(osc_pulse(ph, inc, 0x55555555u), g);
+            ph += inc;
+        }
+        break;
+    case 6:                                             /* SIN: the sine table (dsp.c), no harmonics to fold back */
+        for (i = 0; i < n; i++) {
+            mix[i] += mulq15(osc_sine(ph), g);
             ph += inc;
         }
         break;

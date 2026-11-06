@@ -831,6 +831,33 @@ int main(int argc, char **argv)
         if (fa_page != 5 || fmg_curi(5) != fmg_count(5) - 1u) { printf("FX select back (%u)\n", (unsigned)fa_page); return 1; }
         fa_gl = 0; fa_page = 6; fmg_cur[6] = 0; fturn(EN_SELECT, 1); fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
         if (fmg_curi(6) != 3u) { printf("FX select reaches 4 knobs (%u)\n", (unsigned)fmg_curi(6)); return 1; }
+        {   /* SIN (wave 6): the last of OSC's waves, a sine; the wave's selector goes to it, the range's stays at 2' */
+            uint32_t i, found = 0, c;
+            int32_t lo, hi;
+            if (strcmp(FMG_WAVE[6], "SIN") != 0) { printf("SIN is not the last wave name\n"); return 1; }
+            for (c = 0; c < 7u; c++)
+                for (i = 0; i < fmg_count(c); i++) {
+                    const fmgf_t *f = fmg_field(c, i);
+                    if (f->kind == FK_NAME && f->b == FN_WAVE) {
+                        fmg_range(c, i, &lo, &hi);
+                        if (hi != 6) { printf("the wave selector stops at %d, not 6\n", (int)hi); return 1; }
+                        found++;
+                    }
+                }
+            if (!found) { printf("no wave selector on CTRL\n"); return 1; }
+            /* a sine, not silent: one oscillator on SIN makes a signal with a clean crest factor (about 1.41) */
+            {   uint32_t ph = 0, inc = 0x01000000u;
+                int32_t pk = 0; int64_t sq = 0;
+                for (c = 0; c < 4096u; c++) {
+                    int32_t v = osc_sine(ph) ;
+                    if (v < 0) v = -v;
+                    if (v > pk) pk = v;
+                    sq += (int64_t)v * v;
+                    ph += inc;
+                }
+                if (pk < 30000 || pk > 33500) { printf("SIN peak %d\n", (int)pk); return 1; }
+            }
+        }
         {   /* PRESET SETTINGS: a pop-up list (GLOBAL's style) on EDIT over FILT; not a page. Rows: VOLUME, MODE,
              * PITCH BEND, MOD WHEEL. SELECT moves the row, ALGORITHM changes it, EDIT closes it */
             int32_t lv = TSEL->p[P_LEVEL];
