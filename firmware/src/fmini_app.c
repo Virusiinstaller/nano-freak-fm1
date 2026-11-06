@@ -1060,6 +1060,9 @@ static void fa_cfg_load(void)
         fm_midi_src = (uint8_t)(src == 0u || src == 1u ? src : 3u);   /* (2 was Bluetooth) */
         fm_midi_ch = (uint8_t)(ch > 16u ? 0u : ch);
         fm_bend_mode = (uint8_t)(*fa_cfg_byte(4u + FA_NCC) & 3u);
+        {   uint32_t np = *fa_cfg_byte(20u + FA_NCC);   /* NOTE PRIORITY 0 LAST, 1 LOW, 2 HIGH; erased (0xFF): LOW */
+            glo_note_prio = (uint8_t)(np <= 2u ? np : 1u);
+        }
         {   uint32_t b = *fa_cfg_byte(17u + FA_NCC);   /* 0xC0 | clock; an erased byte (0xFF) reads OFF */
             fa_clk = (b & 0xFCu) == 0xC0u && (b & 3u) <= 2u ? (uint8_t)(b & 3u) : 0u;
         }
@@ -1080,6 +1083,7 @@ static void fa_cfg_load(void)
         fm_bend_mode = 0;
         fm_bt = 0;
         fa_clk = 0;
+        glo_note_prio = 1;
         fa_tune_hz = 440;
         glo_tune_c = 0;
         glo_transpose = 0;
@@ -1102,6 +1106,7 @@ static void fa_cfg_save(void)
     *fa_cfg_byte(4u + FA_NCC) = fm_bend_mode;
     *fa_cfg_byte(18u + FA_NCC) = (uint8_t)(fa_tune_hz - 410u);
     *fa_cfg_byte(19u + FA_NCC) = (uint8_t)(glo_transpose + 12);
+    *fa_cfg_byte(20u + FA_NCC) = glo_note_prio;
     *fa_cfg_byte(17u + FA_NCC) = (uint8_t)(0xC0u | fa_clk);
     {
         static const uint8_t GID[4] = {G_RSIZE, G_DRREV, G_CRATE, G_DRLVL};
@@ -1470,8 +1475,9 @@ static void fa_gl_dialog(void)
             fa_line(79, "TUNING", tn, fa_gl_row == 1u);
             fa_line(96, "TRANSPOSE", tr, fa_gl_row == 2u);
         }
-        fa_line(113, "SUPPORT FMINI-1", ">", fa_gl_row == 3u);
-        fa_line(130, "ABOUT", ">", fa_gl_row == 4u);
+        fa_line(113, "NOTE PRIORITY", glo_note_prio == 2u ? "HIGH" : glo_note_prio == 0u ? "LAST" : "LOW", fa_gl_row == 3u);
+        fa_line(130, "SUPPORT FMINI-1", ">", fa_gl_row == 4u);
+        fa_line(147, "ABOUT", ">", fa_gl_row == 5u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
@@ -1758,7 +1764,7 @@ static uint32_t fa_signature(void)
     if (fa_gl == 5u)                                      /* the monitor redraws with each message and each scroll step */
         h = (h ^ midi_mon_seq() ^ fa_mon_off << 16) * 16777619u;
     h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19) * 16777619u;
-    h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
+    h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24 ^ (uint32_t)glo_note_prio << 29) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
     for (i = 0; i < FA_NCC; i++)
         h = (h ^ fa_cc[i]) * 16777619u;
     h = (h ^ fa_tp ^ (uint32_t)fa_clk << 1) * 16777619u;
@@ -2052,7 +2058,7 @@ static void fa_buttons(uint32_t pressed)
     uint32_t i;
     if (fa_gl == 6u && pressed) {                         /* SUPPORT: any key goes back to GLOBAL */
         fa_gl = 1u;
-        fa_gl_row = 3u;
+        fa_gl_row = 4u;
         return;
     }
     if (fa_gl == 5u && pressed) {                         /* MIDI MONITOR: any key goes back to MIDI SETTINGS, and does nothing else */
@@ -2087,7 +2093,7 @@ static void fa_buttons(uint32_t pressed)
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_row = 4u;
+                fa_gl_row = 5u;
                 fa_gl = 3u;
             }
         }
@@ -2104,7 +2110,7 @@ static void fa_buttons(uint32_t pressed)
         } else if (fa_gl == 2u)
             fa_gl = 4u;                                    /* MIDI CC -> MIDI SETTINGS (its row kept) */
         else if (fa_gl == 4u || fa_gl == 3u) {             /* MIDI SETTINGS / ABOUT -> GLOBAL */
-            fa_gl_row = fa_gl == 3u ? 4u : 0u;
+            fa_gl_row = fa_gl == 3u ? 5u : 0u;
             fa_gl = 1;
         } else
             fa_gl_close();
@@ -2381,7 +2387,7 @@ static void fa_input(void)
         (void)panel_enc(EN_SELECT);
         if (panel_enc(EN_ALGO) != 0) {
             fa_gl = 1u;
-            fa_gl_row = 3u;
+            fa_gl_row = 4u;
         }
         return;
     }
@@ -2405,7 +2411,7 @@ static void fa_input(void)
         (void)panel_enc(EN_PRESET);
         if (fa_gl == 1u) {                                /* GLOBAL: MIDI SETTINGS, TUNING, TRANSPOSE, ABOUT */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 6u + (s > 0 ? 1u : 5u)) % 6u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     fa_gl = 4u;                            /* MIDI SETTINGS: its first line */
@@ -2418,7 +2424,14 @@ static void fa_input(void)
                     glo_transpose = clamp(glo_transpose + (s > 0 ? 1 : -1), -12, 12);
                     panic_req |= 1u;                       /* the notes held now sound elsewhere: none may hang */
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 3u)
+                } else if (fa_gl_row == 3u) {               /* NOTE PRIORITY: LOW, HIGH, LAST (the order of the list) */
+                    static const uint8_t NP[3] = {1, 2, 0};
+                    uint32_t k2 = glo_note_prio == 2u ? 1u : glo_note_prio == 0u ? 2u : 0u;
+                    k2 = (uint32_t)((k2 + 3u + (s > 0 ? 1u : 2u)) % 3u);
+                    glo_note_prio = NP[k2];
+                    panic_req |= 1u;                       /* the note sounding may change: none may hang */
+                    fa_cfg_dirty = 1;
+                } else if (fa_gl_row == 4u)
                     fa_gl = 6u;                            /* SUPPORT: the QR code screen */
                 else
                     fa_gl = 3u;                            /* ABOUT */

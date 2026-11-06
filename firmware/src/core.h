@@ -19,8 +19,8 @@
 /* FMini-1 firmware version: the one the device shows and INFO reports (tag 0x49). Bump it on every firmware change. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 2u
-#define FMINI_VER_PATCH 18u
-#define FMINI_VERSION "v2.2.18"
+#define FMINI_VER_PATCH 19u
+#define FMINI_VERSION "v2.2.19"
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
 /* FMINI: the filter contour's RELEASE index (0..127): the explicit value, or the DECAY when none was set (the older presets) */
 #define FMINI_FREL(t) (((t)->frel & 0x80) ? ((t)->frel & 127) : ((t)->p[P_E4] & 127))
@@ -29,6 +29,9 @@ extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the pr
  * (eng_fmini.c). Defined in voice.c. */
 extern int32_t glo_tune_c;
 extern int32_t glo_transpose;
+/* NOTE PRIORITY (GLOBAL): the mono note the stack picks: 0 LAST (the last key played), 1 LOW (the lowest, the default), 2 HIGH.
+ * Defined in voice.c; mono_pick reads it for every mono part. */
+extern uint8_t glo_note_prio;
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
 #ifndef FELUCCA_FM4
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built

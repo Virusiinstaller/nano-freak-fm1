@@ -379,9 +379,9 @@ static uint32_t mono_pick(const track_t *t)
         return 0;
     n = t->mono_stack[t->nmono - 1u];
     for (i = 0; i < t->nmono; i++) {
-        if (t->p[P_PRIO] == 1 && t->mono_stack[i] < n)
+        if (glo_note_prio == 1 && t->mono_stack[i] < n)
             n = t->mono_stack[i];
-        if (t->p[P_PRIO] == 2 && t->mono_stack[i] > n)
+        if (glo_note_prio == 2 && t->mono_stack[i] > n)
             n = t->mono_stack[i];
     }
     return n;
@@ -397,6 +397,7 @@ static void mono_remove(track_t *t, uint32_t note)
 }
 
 int32_t glo_tune_c = 0, glo_transpose = 0;          /* core.h: the GLO list's TUNING and TRANSPOSE */
+uint8_t glo_note_prio = 1;                          /* core.h: the GLO list's NOTE PRIORITY (LOW) */
 
 /* the note as it sounds: TRANSPOSE applied; -1 when it falls outside MIDI's 0..127 (then the note is dropped, on and off alike) */
 static int32_t trk_xnote(uint32_t note)

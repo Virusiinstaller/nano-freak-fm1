@@ -893,18 +893,40 @@ int main(int argc, char **argv)
             if (fa_gl == 7) { printf("EDIT closes PRESET SETTINGS\n"); return 1; }
             fm_bend_mode = bm; TSEL->mw = mw0; TSEL->p[P_LEVEL] = (int16_t)lv;
         }
-        /* GLOBAL: SUPPORT FMINI-1!! is row 5 (after ABOUT): ALGORITHM opens the QR screen, any key goes back to it */
+        /* GLOBAL: NOTE PRIORITY is row 3 (below TRANSPOSE), SUPPORT FMINI-1!! row 4, ABOUT row 5: ALGORITHM opens the QR screen, any key goes back to it */
         fa_gl = 1; fa_gl_row = 2; fturn(EN_SELECT, 1);
-        if (fa_gl_row != 3) { printf("support row\n"); return 1; }
+        if (fa_gl_row != 3) { printf("note priority row\n"); return 1; }
+        fturn(EN_SELECT, 1);
+        if (fa_gl_row != 4) { printf("support row\n"); return 1; }
         fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
-        if (fa_gl_row != 0) { printf("GLOBAL wraps at 5 (%d)\n", fa_gl_row); return 1; }
-        fa_gl = 1; fa_gl_row = 3; fturn(EN_ALGO, 1);
+        if (fa_gl_row != 0) { printf("GLOBAL wraps at 6 (%d)\n", fa_gl_row); return 1; }
+        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
         if (fa_gl != 6) { printf("support opens (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 43);
         fa_buttons(1u << panel.btn[B_EDIT]);
-        if (fa_gl != 1 || fa_gl_row != 3) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 4) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
         fa_gl = 6; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("support ALGO back (%d)\n", fa_gl); return 1; }
+        /* NOTE PRIORITY (row 3, below TRANSPOSE): LOW (default), HIGH, LAST; the mono part plays the note it picks */
+        {   static const uint8_t ORDER[3] = {1, 2, 0};   /* LOW, HIGH, LAST as ALGO steps them */
+            static const uint32_t PICK[3] = {48, 60, 52};  /* keys 60, 48, 52 held in that order: LOW 48, HIGH 60, LAST 52 */
+            uint32_t k;
+            fa_mono(); TSEL->p[P_VOICE] = V_MONO; fframes(2);
+            glo_note_prio = 1; fa_gl = 1; fa_gl_row = 3; fa_cfg_dirty = 0;
+            for (k = 0; k < 3; k++) {
+                uint32_t n;
+                if (glo_note_prio != ORDER[k]) { printf("NOTE PRIORITY step %u (%u)\n", (unsigned)k, (unsigned)glo_note_prio); return 1; }
+                trk_note_on(TSEL, 60, 100); trk_note_on(TSEL, 48, 100); trk_note_on(TSEL, 52, 100);
+                trk_note_off(TSEL, 60); trk_note_off(TSEL, 48); trk_note_off(TSEL, 52);
+                trk_note_on(TSEL, 60, 100); trk_note_on(TSEL, 48, 100); trk_note_on(TSEL, 52, 100);
+                n = TSEL->mono_note;
+                if (n != PICK[k]) { printf("mono note %u with priority %u (want %u)\n", (unsigned)n, (unsigned)glo_note_prio, (unsigned)PICK[k]); return 1; }
+                trk_note_off(TSEL, 60); trk_note_off(TSEL, 48); trk_note_off(TSEL, 52);
+                fframes(4);
+                fa_gl = 1; fa_gl_row = 3; fturn(EN_ALGO, 1);
+            }
+            if (glo_note_prio != 1) { printf("NOTE PRIORITY wraps to LOW (%u)\n", (unsigned)glo_note_prio); return 1; }
+        }
         fa_gl = 4; fa_gl_row = 4;
         /* MIDI MONITOR (row 4): the last messages in, newest first; ALGORITHM or any key goes back to MIDI SETTINGS */
         {   uint32_t before = midi_mon_total(), src = 0, pkt;
@@ -1031,7 +1053,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -1144,12 +1166,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 4) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 4) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 5) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);
