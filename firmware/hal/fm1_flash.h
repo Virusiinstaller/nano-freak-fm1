@@ -148,7 +148,11 @@ RAMINL int fl_wait_ready(uint32_t max_us, uint32_t *took_us)
 
 /* ---- entry points: IRQs OFF, args/buffers in RAM ---- */
 
-static RAMFN uint32_t fl_jedec_ram(void)                 /* expect 0x856014 */
+/* the 1 MiB parts the FM-1 ships with: Puya P25Q80 (0x856014) and UC25HQ80 (0xB36014, AliExpress units).
+ * Same size, same plain SPI NOR commands. */
+#define FL_JEDEC_OK(id) ((id) == 0x856014u || (id) == 0xB36014u)
+
+static RAMFN uint32_t fl_jedec_ram(void)                 /* expect 0x856014 or 0xB36014 (FL_JEDEC_OK) */
 {
     fl_saved_t s; uint32_t id;
     if (fl_enter(&s)) return 0;
