@@ -1,0 +1,116 @@
+# smk37-port.yaml: every decision for the SMK-37 port of FMini-1, in one place.
+#
+# From the fm1-to-smk37 kit (github.com/genkigenki/fm1-to-smk37, AGENTS.md step 0). Change this file first, then
+# the code. Patterns: the kit's docs/06-mapping-patterns.md.
+
+firmware:
+  name: FMini-1             # unchanged on the SMK-37 (no "xxx37"): same name, splash and look
+  upstream: ""              # FMini-1 is the owner's own firmware (a Felucca 1.6.1 tree without shared git history)
+  base: "main 2.5.0 (d8b64c8)"
+  family: felucca           # firmware/hal and firmware/loader are Felucca 1.6.1's (+ FL_JEDEC_OK)
+  board_layer: felucca      # genkigenki/Felucca branch smk37 (b67312c on Felucca 1.6.1 a53ecf4, = hugelton/Felucca#237);
+                            # a trial apply took 42 of its 43 files with about 18 conflict blocks; eng_sample.c is
+                            # gone in FMini-1 (no sample engine), so that part is dropped
+  lost_on_smk:
+    - TRS MIDI IN (and MIDI clock in over TRS): PH8 is a key-matrix row on the SMK; MIDI in over USB stays
+  priorities:
+    - playing the Minimoog: all keys with velocity, wheels, the panel's knobs
+    - sound browsing (the 200 presets)
+    - ARP and SEQ
+
+delivery:
+  mode: own                 # the owner's firmware: builds in this repository, no upstream pull request
+  pr: ""
+  fork: ""                  # branch fmini-smk37 of ruppert/fmini-1
+  package: "fmini-1-smk37-<version>.fwsc, fmini-1-smk37-elite-<version>.fwsc, fmini-1-smk37-mke-<version>.fwsc"
+  usb_name: FMini-1's own (unchanged); every installer's filter includes it
+  data_family: FMINI        # its own store family: other firmwares' data is cleared on a switch
+  copyright: "Guilherme Ruppert"   # in the new SMK files' headers (the layer's own files keep genkigenki's line)
+  storage_note: >
+    The 200 preset slots (13 objects, 26 sectors) do not fit the layer's extra window (0xB1000-0xBAFFF, 10 sectors).
+    FMini-1 has no sample engine, so they go to the SMK's sample window (0xC2000-0xE9FFF), keeping the layer's rule
+    on the stock mapping marker (0xEA000) and every protected range.
+
+models:                     # assumed (question not answered): all three, and the web installer offers them
+  - pro                     # SMK-37 Pro; also Starrykey 37 Play
+  - elite                   # SMK-37 Elite
+  - mke                     # MKE-P37
+installer: site             # the site's installer detects the connected model and writes that model's package
+
+keys:
+  middle: fm1               # keys 5..31 (F3..G5) = the FM-1's 27 keys, velocity from the unit's factory curves
+  outer: extend             # assumed: the 10 outer keys play notes too (a 37-key Minimoog)
+  velocity: factory
+
+pads:
+  pattern: custom           # owner: "Picker + steps"
+  order: reading            # pads 1-8 top row (hardware pads 0..7), 9-16 bottom (8..15)
+  colours: screen           # FMini-1's category colours (bass, lead, pad, pluck, keys, fx) on the picker
+  idle: dim
+  playhead: bright
+  picker:                   # the normal mode
+    enabled: true
+    what: the 16 presets of the current page of the bank; a pad loads its preset, the loaded one bright
+    page: "< >"             # the previous / next 16 presets (outside the menu and the pop-ups)
+  steps:                    # inside the SEQ pop-up
+    what: the SEQ's 16 steps (as the FM-1's white keys are there); the playing step bright
+  velocity: false           # the picker and the steps take no velocity
+  notes: "other pop-ups and grids that use the FM-1's keys as a grid keep the layer's rule (steps 1-8 top row)"
+
+faders:                     # assumed (question not answered)
+  pattern: banks
+  takeover: soft            # a fader acts only once it moves (also after a bank change)
+  bank_button: FADER BANK
+  banks:
+    A: [OSC 1 level, OSC 2 level, OSC 3 level, NOISE level]          # the Minimoog's MIXER
+    B: [CUTOFF, EMPHASIS, CONTOUR AMOUNT, KEYBOARD]                   # the FILTER
+    C: [filter ATTACK, filter DECAY, loudness ATTACK, loudness DECAY] # the CONTOURS
+  screen: bar               # a short overlay with the bank and the value
+
+wheels:                     # assumed (question not answered)
+  pitch:
+    target: bend
+    range_semitones: preset # the preset's PITCH BEND range (fm_bend_mode)
+    applies_to: selected
+  mod:
+    target: as CC1          # what CC1 does on FMini-1 today (vibrato, +-1 semitone at full wheel)
+    detail: "the same path as a MIDI CC1, so the FM-1 and the SMK sound the same from one patch"
+  calibration: auto
+
+rules:
+  no_doubles: true          # (the faders repeat panel knobs: allowed below, they are the reason for the faders)
+  doubles_allowed:
+    - faders A..C repeat the MIX / FILTER / contour knobs of the panel pages
+
+knobs:
+  layout: fm1
+  K1: master
+  K2: select
+  K3: algorithm
+  K4: presets
+  K5: knob 1
+  K6: knob 2
+  K7: knob 3
+  K8: knob 4
+  step: detent
+
+buttons:
+  map: printed
+  names: firmware
+  extra:
+    KNOB BANK: "the menu (as HOME held), as in the Felucca layer"
+    FADER BANK: "faders A -> B -> C (lit off bank A)"
+    "<": "previous page of the page group / the previous 16 presets on the picker"
+    ">": "next page / the next 16 presets"
+
+screen:
+  style: keep               # FMini-1's 240x240 UI unchanged; K5..K8 shown where the FM-1 says K1..K4
+  colours: FMini-1's palette
+
+pedal: none
+
+modes: {}
+
+open_questions:
+  - "mod wheel: keep CC1's vibrato, or the Minimoog way (the wheel scales the patch's MOD amount)?"
+  - "faders, wheels, outer keys and models above were assumed (not answered): confirm or change"
