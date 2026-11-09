@@ -25,7 +25,7 @@ the connected model.
 | Keys C3..E3 and G#5..C6 (the outer 10) | more notes, one each, with velocity |
 | 16 pads | the preset picker: the 16 presets of the page that holds the loaded one, in their category's colour (the loaded one bright); a pad loads its preset (in the SAVE dialog: the slot it writes). In the SEQ pop-up the pads show 16 of its 64 steps (the page of the step that plays, or of the slot a take writes next) |
 | K1 | MASTER (volume) |
-| K2 / K3 / K4 | PRESETS / SELECT / ALGORITHM |
+| K2 / K3 / K4 | PRESETS / SELECT / ALGORITHM (the screen's hints name them K2, K3, K4) |
 | K5..K8 | KNOB 1..4 (the page's four knobs) |
 | PATCH | HOME: the FILT page, the pop-ups close |
 | PARA | EDIT: FILT; again on FILT, PRESET SETTINGS |
@@ -42,12 +42,26 @@ the connected model.
 | FADER BANK | what the faders set: A the A.ENV knobs, B the F.ENV knobs, C the MIX knobs; it opens that page (lit on bank B, F.ENV) |
 | Faders 1..4 | the four knobs of the bank's page; a fader takes over only once it moves |
 | KNOB BANK | (free) |
-| Pitch wheel | pitch bend (the preset's PITCH BEND range); also sent as MIDI |
+| Pitch wheel | pitch bend, by the preset's PITCH BEND range (PRESET SETTINGS); also sent as MIDI |
 | Mod wheel | as MIDI CC1 on the FM-1 (the vibrato); also sent as MIDI |
 | OCTAVE- + OCTAVE+ held at power-on | HARDWARE CALIBRATION: teach the buttons and knobs again |
 
-The SMK-37's TRS jack is a MIDI output and this build does not use it; there is no TRS MIDI IN, so MIDI clock comes
-over USB only.
+## MIDI
+
+The SMK-37's TRS jack is a MIDI output; there is no TRS MIDI IN, so MIDI comes in over USB only (MIDI clock too).
+GLO > MIDI SETTINGS on the SMK-37:
+
+| Line | Options |
+| --- | --- |
+| MIDI OUT | ALL (USB and the TRS jack, the default), USB, TRS |
+| MIDI OUT CH | 1..16 (default 1): the keys, the wheels and the ARP and SEQ notes |
+| MIDI IN CH | ANY (the default), 1..16 |
+| MIDI IN CC | the CC of each control |
+| MIDI CLOCK | OFF, USB |
+| MIDI IN MONITOR | the last messages in |
+
+The TRS output follows the fm1-to-smk37 kit's driver pattern (UART1 TX on PC7) and has not been tried on a unit. The
+jack is said to be type A; if a synth does not answer, try a type B adapter.
 
 ## Build
 

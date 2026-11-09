@@ -69,10 +69,15 @@ static int32_t midi_base(void)
  * OFF: as CH1-4) */
 static uint32_t trk_midi_ch(uint32_t i)
 {
+#if BOARD_SMK37 && FELUCCA_FMINI_ONLY
+    (void)i;
+    return smk_out_ch & 15u;                        /* SMK-37: GLO > MIDI SETTINGS > MIDI OUT CH (smk_midi_out.c) */
+#else
     int32_t b = midi_base();
     if (b == -2)
         return mch_get(i) < 16u ? mch_get(i) : i % NTRK;
     return (b > 0 ? (uint32_t)b : 0u) + i % NTRK;
+#endif
 }
 
 static int drum_track(const track_t *t) { return ENGINES[eng_idx(t->eng_req)] == &ENG_DRUM; }
@@ -1395,12 +1400,20 @@ static void smk_wheels_block(void)
         lm = 0xFF;
     }
     if (b != lb) {
-        const midi_channel_t *c = midi_channel(mc);
-        int32_t range = ((int32_t)c->semis * 100 + c->cents) * 256 / 100;
         uint32_t u = (uint32_t)(b + 8192);
         lb = b;
-        if (!drum_track(&trk[sel]))
-            midi_bend_target[sel] = b * range / (b < 0 ? 8192 : 8191);
+#if FELUCCA_FMINI_ONLY
+        fm_wheel = (int16_t)b;                      /* FMini-1: the preset's PITCH BEND range, as a MIDI bend (midi_control.c
+                                                     * midi_expression); an incoming bend or a later one wins, the last of them */
+        midi_expression(&trk[sel], midi_channel(mc));
+#else
+        {
+            const midi_channel_t *c = midi_channel(mc);
+            int32_t range = ((int32_t)c->semis * 100 + c->cents) * 256 / 100;
+            if (!drum_track(&trk[sel]))
+                midi_bend_target[sel] = b * range / (b < 0 ? 8192 : 8191);
+        }
+#endif
         midi_out_event(0x0Eu | (0xE0u | mc) << 8 | (u & 0x7Fu) << 16 | ((u >> 7) & 0x7Fu) << 24);
     }
     if (m != lm) {

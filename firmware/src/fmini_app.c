@@ -30,14 +30,21 @@
 #define FA_NPAGE 7u
 
 static uint8_t fa_page;                                  /* 0..6 */
-#if BOARD_SMK37                                          /* the four page knobs are K5..K8 on the SMK-37, its SCL button SCALE */
+#if BOARD_SMK37                                          /* the knobs by their SMK-37 names: K2 PRESETS, K3 SELECT, K4 ALGORITHM, the
+                                                          * page's four K5..K8; its SCL button SCALE */
 #define FA_K14 "K5-K8"
 #define FA_K13 "K5-K7"
 #define FA_SCL "SCALE"
+#define FA_SEL "K3"
+#define FA_ALG "K4"
+#define FA_PRS "K2"
 #else
 #define FA_K14 "K1-K4"
 #define FA_K13 "K1-K3"
 #define FA_SCL "SCL"
+#define FA_SEL "SELECT"
+#define FA_ALG "ALGO"
+#define FA_PRS "PRESETS"
 #endif
 static uint8_t fa_env_last;                              /* ENV: the page it opened last (F.ENV or A.ENV) */
 static uint32_t fa_sig_prev = 0xFFFFFFFFu;
@@ -533,7 +540,7 @@ static void fa_fx_dialog(void)
     cv_rect(20, 66, 200, 1, FA_RULE);
     for (i = 0; i < 4u; i++)
         fa_pop_knob(pg, i, 39 + (int32_t)i * 54, 112, fmg_cur[pg] == i);
-    fa_ctext(120, 190, &AF_X, fmg_fx == 2u ? FA_K14 "  " FA_SCL "=TAP  FX=NEXT" : FA_K14 "  SELECT  ALGO  FX=NEXT", FA_MU);
+    fa_ctext(120, 190, &AF_X, fmg_fx == 2u ? FA_K14 "  " FA_SCL "=TAP  FX=NEXT" : FA_K14 "  " FA_SEL "  " FA_ALG "  FX=NEXT", FA_MU);
 }
 
 static void fa_wave_boxes(uint32_t pg, uint32_t cur)
@@ -659,7 +666,7 @@ static void fa_dialog(void)
             x += cw;
         }
     }
-    fa_pc_text(120, 146, &AF_S, "PRESETS SLOT   SELECT/ALGO NAME", FA_MU, bgd);
+    fa_pc_text(120, 146, &AF_S, FA_PRS " SLOT   " FA_SEL "/" FA_ALG " NAME", FA_MU, bgd);
     fa_pc_text(120, 170, &AF_S, "SAVE = NEXT   ANY PAGE = CANCEL", FA_MU, bgd);
 }
 
@@ -687,7 +694,7 @@ static void fa_confirm_dialog(void)
             cv_rect(BX[i] + 2, 132, 76, 32, bgd);
         fa_pc_text(BX[i] + 40, 139, &AF_L, BL[i], sel ? bgd : FA_CR, bgd);
     }
-    fa_pc_text(120, 176, &AF_S, "ALGO: YES / NO   SAVE: OK", FA_MU, bgd);
+    fa_pc_text(120, 176, &AF_S, FA_ALG ": YES / NO   SAVE: OK", FA_MU, bgd);
 }
 
 /* RESTORE: the editor asks to write all the presets. NO is the default; ALGORITHM turns it to YES, SAVE on YES accepts
@@ -726,7 +733,7 @@ static void fa_restore_dialog(void)
             cv_rect(BX[i] + 2, 120, 76, 32, bgd);
         fa_pc_text(BX[i] + 40, 127, &AF_L, BL[i], sel ? bgd : FA_CR, bgd);
     }
-    fa_pc_text(120, 176, &AF_S, "ALGO: YES / NO   SAVE: OK", FA_MU, bgd);
+    fa_pc_text(120, 176, &AF_S, FA_ALG ": YES / NO   SAVE: OK", FA_MU, bgd);
 }
 
 /* ARP: a pop-up like SAVE's. KNOB 1..4 are MODE, RATE, OCT, GATE; SELECT picks a line (the fifth is the tempo) and
@@ -780,7 +787,7 @@ static void fa_ar_dialog(void)
             fmt_int(val, song.g[G_BPM]);
         fa_line(62 + (int32_t)i * 22, FA_AR_LB[i], val, i == fa_ar_row);
     }
-    fa_ctext(120, 196, &AF_S, "SELECT  ALGO  " FA_K14 "  ARP=CLOSE", FA_MU);
+    fa_ctext(120, 196, &AF_S, FA_SEL "  " FA_ALG "  " FA_K14 "  ARP=CLOSE", FA_MU);
 }
 
 /* the ARP button: a tap turns it on / off (on another screen, while it is on, a tap only opens the pop-up); held HOLD on / off.
@@ -873,7 +880,7 @@ static void fa_tp_draw(void)
     fa_ctext(120, 70, &AF_L, b, FA_OR);
     fa_ctext(120, 108, &AF_S, "BPM", FA_MU);
     fa_ctext(120, 136, &AF_S, "TAP TEMPO: button EDIT", FA_CR);
-    fa_ctext(120, 153, &AF_X, "ALGO=TEMPO  OTHER KEY=CLOSE", FA_MU);
+    fa_ctext(120, 153, &AF_X, FA_ALG "=TEMPO  OTHER KEY=CLOSE", FA_MU);
 }
 /* the SEQ settings pop-up: ALGORITHM turns the line SELECT picked; the TEMPO line opens TAP TEMPO (as the ARP's) */
 static void fa_sc_turn(uint32_t row, int32_t s)
@@ -903,7 +910,7 @@ static void fa_sc_dialog(void)
             fmt_int(val, song.g[G_BPM]);
         fa_line(70 + (int32_t)i * 28, FA_SC_LB[i], val, i == fa_sc_row);
     }
-    fa_ctext(120, 196, &AF_S, "SELECT  ALGO  " FA_K13 "  SEQ=CLOSE", FA_MU);
+    fa_ctext(120, 196, &AF_S, FA_SEL "  " FA_ALG "  " FA_K13 "  SEQ=CLOSE", FA_MU);
 }
 
 static void fa_seq_note(track_t *t, uint32_t note)
@@ -998,8 +1005,8 @@ static void fa_seq_dialog(void)
     fa_ltext(20, 200, &AF_M, b, fa_sq_rec ? FA_RED : song.playing ? FA_OR : FA_MU);
     fmt_int(b, song.g[G_BPM]);
     fa_rtext(220, 200, &AF_M, b, FA_CR);
-    fa_ctext(120, 214, &AF_X, fa_sq_rec ? "SELECT: REST / BACK" : "HOLD REC TO CLEAR", FA_MU);
-    fa_ctext(120, 225, &AF_X, "REC  PLAY  ALGO=TEMPO  SEQ=CLOSE", FA_MU);
+    fa_ctext(120, 214, &AF_X, fa_sq_rec ? FA_SEL ": REST / BACK" : "HOLD REC TO CLEAR", FA_MU);
+    fa_ctext(120, 225, &AF_X, "REC  PLAY  " FA_ALG "=TEMPO  SEQ=CLOSE", FA_MU);
     if (fa_sq_title_on()) {                               /* SEQ just opened: the word, for 0.5 s */
         cv_rect(60, 96, 120, 26, FA_OR);
         cv_rect(62, 98, 116, 22, bg);
@@ -1032,12 +1039,28 @@ static uint32_t fa_sound_keys(void)
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
 static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 SUPPORT, 4 ABOUT;
-                                                           * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK */
+                                                           * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK;
+                                                           * on the SMK-37 (FA_MS_*): 0 MIDI OUT, 1 MIDI OUT CH, 2 MIDI IN CH, 3 MIDI IN CC,
+                                                           * 4 MIDI CLOCK, 5 MIDI IN MONITOR (MIDI IN is always USB: its TRS jack is an OUT) */
 static uint16_t fa_tune_hz = 440;                         /* TUNING: the reference A, 410 .. 470 Hz (the global glo_tune_c) */
 /* the TUNING in cents from A 440, for 410 .. 470 Hz: round(1200 * log2(hz / 440)) */
 static const int16_t FA_TUNE_C[61] = {-122, -118, -114, -110, -105, -101, -97, -93, -89, -85, -81, -76, -72, -68, -64, -60, -56, -52, -48, -44, -40, -36, -32, -28, -24, -20, -16, -12, -8, -4, 0, 4, 8, 12, 16, 20, 23, 27, 31, 35, 39, 43, 47, 50, 54, 58, 62, 66, 69, 73, 77, 81, 84, 88, 92, 96, 99, 103, 107, 111, 114};
 static uint8_t fa_clk;                                    /* MIDI CLOCK: 0 OFF (internal), 1 USB, 2 TRS: the global CLK */
 static const char *const FA_CLK[3] = {"OFF", "USB", "TRS"};
+#if BOARD_SMK37
+#define FA_NCLK 2u                                        /* SMK-37: OFF, USB (no MIDI IN on its jack) */
+#define FA_MS_N 6u                                        /* MIDI SETTINGS' lines */
+#define FA_MS_CC 3u                                       /* MIDI IN CC */
+#define FA_MS_CLK 4u
+#define FA_MS_MON 5u                                      /* MIDI IN MONITOR */
+static const char *const FA_OUT[3] = {"ALL", "USB", "TRS"};   /* MIDI OUT: smk_midi_out.c smk_out_mode */
+#else
+#define FA_NCLK 3u
+#define FA_MS_N 5u
+#define FA_MS_CC 2u
+#define FA_MS_CLK 3u
+#define FA_MS_MON 4u
+#endif
 static uint8_t fa_cc_i;                                   /* the control highlighted in MIDI CC */
 static uint8_t fa_cc[FA_NCC];                             /* its CC, 0 = none */
 static uint8_t fa_cfg_dirty;
@@ -1073,8 +1096,16 @@ static void fa_cfg_load(void)
             glo_note_prio = (uint8_t)(np <= 2u ? np : 1u);
         }
         {   uint32_t b = *fa_cfg_byte(17u + FA_NCC);   /* 0xC0 | clock; an erased byte (0xFF) reads OFF */
-            fa_clk = (b & 0xFCu) == 0xC0u && (b & 3u) <= 2u ? (uint8_t)(b & 3u) : 0u;
+            fa_clk = (b & 0xFCu) == 0xC0u && (b & 3u) < FA_NCLK ? (uint8_t)(b & 3u) : 0u;
         }
+#if BOARD_SMK37
+        {   uint32_t mo = *fa_cfg_byte(21u + FA_NCC), oc = *fa_cfg_byte(22u + FA_NCC);   /* 0x80 | MIDI OUT, MIDI OUT CH 0..15;
+                                                                                         * anything else (erased): ALL, 1 */
+            smk_out_mode = (uint8_t)((mo & 0xFCu) == 0x80u && (mo & 3u) <= 2u ? mo & 3u : 0u);
+            smk_out_ch = (uint8_t)(oc <= 15u ? oc : 0u);
+        }
+        fm_midi_src = 0;                                    /* MIDI IN: USB, always */
+#endif
         {   uint32_t tb = *fa_cfg_byte(18u + FA_NCC), tr = *fa_cfg_byte(19u + FA_NCC);   /* TUNING 410 + v Hz, TRANSPOSE v - 12; erased (0xFF): 440, 0 */
             fa_tune_hz = (uint16_t)(tb <= 60u ? 410u + tb : 440u);
             glo_transpose = tr <= 24u ? (int32_t)tr - 12 : 0;
@@ -1089,6 +1120,11 @@ static void fa_cfg_load(void)
     } else {
         fm_midi_src = 3;
         fm_midi_ch = 0;
+#if BOARD_SMK37
+        fm_midi_src = 0;                                    /* MIDI IN: USB, always; MIDI OUT ALL on channel 1 */
+        smk_out_mode = 0;
+        smk_out_ch = 0;
+#endif
         fm_bend_mode = 0;
         fm_bt = 0;
         fa_clk = 0;
@@ -1117,6 +1153,10 @@ static void fa_cfg_save(void)
     *fa_cfg_byte(19u + FA_NCC) = (uint8_t)(glo_transpose + 12);
     *fa_cfg_byte(20u + FA_NCC) = glo_note_prio;
     *fa_cfg_byte(17u + FA_NCC) = (uint8_t)(0xC0u | fa_clk);
+#if BOARD_SMK37
+    *fa_cfg_byte(21u + FA_NCC) = (uint8_t)(0x80u | smk_out_mode);
+    *fa_cfg_byte(22u + FA_NCC) = smk_out_ch;
+#endif
     {
         static const uint8_t GID[4] = {G_RSIZE, G_DRREV, G_CRATE, G_DRLVL};
         for (i = 0; i < 4u; i++)
@@ -1372,12 +1412,18 @@ static void fa_mon_dialog(void)
     char l[16], r[24];
     uint32_t total = midi_mon_total(), k;
     char hd[32] = "USB ", nb[12];
+#if BOARD_SMK37
+    fa_frame("MIDI IN MONITOR");
+    fmt_int(nb, (int32_t)midi_mon_rx());                  /* the diagnosis: USB packets taken (no MIDI IN on the jack) */
+    str_cpy(hd + str_len(hd), nb, 12);
+#else
     fa_frame("MIDI MONITOR");
     fmt_int(nb, (int32_t)midi_mon_rx());                  /* the diagnosis: USB packets taken, MIDI messages queued */
     str_cpy(hd + str_len(hd), nb, 12);
     str_cpy(hd + str_len(hd), "  TRS ", 10);
     fmt_int(nb, (int32_t)midi_mon_trs());
     str_cpy(hd + str_len(hd), nb, 12);
+#endif
     fa_ctext(120, 48, &AF_S, hd, FA_MU);
     if (!total)
         fa_ctext(120, 110, &AF_S, "WAITING FOR MIDI", FA_MU);
@@ -1398,7 +1444,7 @@ static void fa_mon_dialog(void)
         cv_rect(220, 56, 3, 124, FA_MU);
         cv_rect(220, tp, 3, th, FA_OR);
     }
-    fa_ctext(120, 190, &AF_S, "SELECT: SCROLL   ALGO/KEY: BACK", FA_MU);
+    fa_ctext(120, 190, &AF_S, FA_SEL ": SCROLL   " FA_ALG "/KEY: BACK", FA_MU);
 }
 
 /* SUPPORT FMINI-1!! (GLOBAL, row 5): a black screen with the Ko-fi QR code (25 x 25 modules, bit 24 = column 0) */
@@ -1464,7 +1510,7 @@ static void fa_gl_dialog(void)
     if (fa_gl == 7u) {                                    /* PRESET SETTINGS (over FILT) */
         fa_frame("PRESET SETTINGS");
         fa_pset_rows();
-        fa_ctext(120, 199, &AF_S, "SELECT  ALGO  EDIT=BACK", FA_MU);
+        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  EDIT=BACK", FA_MU);
         return;
     }
     if (fa_gl == 1u) {
@@ -1487,9 +1533,22 @@ static void fa_gl_dialog(void)
         fa_line(113, "NOTE PRIORITY", glo_note_prio == 2u ? "HIGH" : glo_note_prio == 0u ? "LAST" : "LOW", fa_gl_row == 3u);
         fa_line(130, "SUPPORT FMINI-1", ">", fa_gl_row == 4u);
         fa_line(147, "ABOUT", ">", fa_gl_row == 5u);
-        fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
+        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
+#if BOARD_SMK37
+        fa_line(62, "MIDI OUT", FA_OUT[smk_out_mode % 3u], fa_gl_row == 0u);
+        fmt_int(b, (int32_t)(smk_out_ch & 15u) + 1);
+        fa_line(79, "MIDI OUT CH", b, fa_gl_row == 1u);
+        if (fm_midi_ch)
+            fmt_int(b, fm_midi_ch);
+        else
+            str_cpy(b, "ANY", 4);
+        fa_line(96, "MIDI IN CH", b, fa_gl_row == 2u);
+        fa_line(113, "MIDI IN CC", ">", fa_gl_row == 3u);
+        fa_line(130, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 4u);
+        fa_line(147, "MIDI IN MONITOR", ">", fa_gl_row == 5u);
+#else
         fa_line(62, "MIDI IN", FA_SRC[fm_midi_src == 3u ? 2u : fm_midi_src & 1u], fa_gl_row == 0u);
         if (fm_midi_ch)
             fmt_int(b, fm_midi_ch);
@@ -1499,12 +1558,17 @@ static void fa_gl_dialog(void)
         fa_line(96, "MIDI CC", ">", fa_gl_row == 2u);
         fa_line(113, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 3u);
         fa_line(130, "MIDI MONITOR", ">", fa_gl_row == 4u);
-        fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
+#endif
+        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  GLO=BACK", FA_MU);
     } else {                                              /* MIDI CC: a window of six lines on the list, a scroll bar */
         uint32_t top = fa_cc_i < 3u ? 0u : fa_cc_i - 3u, k;
         if (top + 6u > FA_NCC)
             top = FA_NCC - 6u;
+#if BOARD_SMK37
+        fa_frame("MIDI IN CC");
+#else
         fa_frame("MIDI CC");
+#endif
         for (k = 0; k < 6u; k++) {
             uint32_t n = top + k;
             const char *tag;
@@ -1531,7 +1595,7 @@ static void fa_gl_dialog(void)
             cv_rect(223, ty, 3, th, FA_RGB(0x2A, 0x25, 0x20));
             cv_rect(223, ty + at, 3, thumb, FA_CR);
         }
-        fa_ctext(120, 190, &AF_S, "MIDI LEARN: SEND A CC   ALGO = CC", FA_OR);
+        fa_ctext(120, 190, &AF_S, "MIDI LEARN: SEND A CC   " FA_ALG " = CC", FA_OR);
     }
 }
 
@@ -1777,6 +1841,9 @@ static uint32_t fa_signature(void)
     for (i = 0; i < FA_NCC; i++)
         h = (h ^ fa_cc[i]) * 16777619u;
     h = (h ^ fa_tp ^ (uint32_t)fa_clk << 1) * 16777619u;
+#if BOARD_SMK37
+    h = (h ^ smk_out_mode ^ (uint32_t)smk_out_ch << 2) * 16777619u;   /* MIDI OUT, MIDI OUT CH */
+#endif
     h = (h ^ fa_sv ^ (uint32_t)fa_ar << 4 ^ (uint32_t)fa_ar_row << 5 ^ (uint32_t)song.g[G_BPM] << 8) * 16777619u;
     h = (h ^ (uint32_t)song.g[G_RSIZE] ^ (uint32_t)song.g[G_DRREV] << 7 ^ (uint32_t)song.g[G_CRATE] << 14 ^ (uint32_t)song.g[G_DRLVL] << 21) * 16777619u;   /* FX: DECAY TIME RATE TONE */
     for (i = 0; i < 8u; i++)                                 /* the pop-ups' others, and which pop-up is open */
@@ -2653,8 +2720,24 @@ static void fa_input(void)
             }
         } else if (fa_gl == 4u) {                         /* MIDI SETTINGS */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 5u + (s > 0 ? 1u : 4u)) % 5u);
+                fa_gl_row = (uint8_t)((fa_gl_row + FA_MS_N + (s > 0 ? 1u : FA_MS_N - 1u)) % FA_MS_N);
             if ((s = panel_enc(EN_ALGO)) != 0) {
+#if BOARD_SMK37
+                if (fa_gl_row == 0u) {                      /* MIDI OUT: ALL, USB, TRS */
+                    smk_out_mode = (uint8_t)clamp((int32_t)smk_out_mode + (s > 0 ? 1 : -1), 0, 2);
+                    smk_trs_reset();                       /* (a jack given up tries again) */
+                    panic_req |= 1u;
+                    fa_cfg_dirty = 1;
+                } else if (fa_gl_row == 1u) {               /* MIDI OUT CH: 1..16 */
+                    smk_out_ch = (uint8_t)clamp((int32_t)smk_out_ch + (s > 0 ? 1 : -1), 0, 15);
+                    panic_req |= 1u;                       /* (the notes held end on the channel they started on) */
+                    fa_cfg_dirty = 1;
+                } else if (fa_gl_row == 2u) {               /* MIDI IN CH: ANY, 1..16 */
+                    fm_midi_ch = (uint8_t)clamp((int32_t)fm_midi_ch + (s > 0 ? 1 : -1), 0, 16);
+                    panic_req |= 1u;
+                    fa_cfg_dirty = 1;
+                } else
+#else
                 if (fa_gl_row == 0u) {
                     static const uint8_t SRC[3] = {0, 1, 3};
                     int32_t d = (fm_midi_src == 3u ? 2 : (int32_t)(fm_midi_src & 1u)) + (s > 0 ? 1 : -1);
@@ -2665,14 +2748,16 @@ static void fa_input(void)
                     fm_midi_ch = (uint8_t)clamp((int32_t)fm_midi_ch + (s > 0 ? 1 : -1), 0, 16);
                     panic_req |= 1u;
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 2u) {
+                } else
+#endif
+                if (fa_gl_row == FA_MS_CC) {
                     fa_gl = 2u;                            /* MIDI CC: its list (fa_gl_row stays on it) */
-                } else if (fa_gl_row == 3u) {               /* MIDI CLOCK: OFF, USB, TRS */
-                    fa_clk = (uint8_t)((fa_clk + 3u + (s > 0 ? 1u : 2u)) % 3u);
+                } else if (fa_gl_row == FA_MS_CLK) {        /* MIDI CLOCK: OFF, USB, TRS (the SMK-37: OFF, USB) */
+                    fa_clk = (uint8_t)((fa_clk + FA_NCLK + (s > 0 ? 1u : FA_NCLK - 1u)) % FA_NCLK);
                     fa_clk_apply();
                     panic_req |= 1u;                       /* the clock changes: no note may hang */
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 4u) {
+                } else if (fa_gl_row == FA_MS_MON) {
                     fa_gl = 5u;                            /* MIDI MONITOR: its window at the newest */
                     fa_mon_off = 0;
                 }
