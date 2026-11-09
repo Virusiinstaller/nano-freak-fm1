@@ -119,7 +119,10 @@ buttons:                    # owner, 2026-11-09 (the SMK-37's 18 buttons)
   FADER BANK: "AMP ENV (default) -> FILTER ENV -> MIXER -> Screen Knobs (the page on the screen); a pop-up
     'Faders: <bank>' for 1.2 s; lit off the default"
   KNOB BANK: "K5..K8: FILTER (default) -> LFO (CTRL) -> FX -> Screen Knobs; a pop-up 'Knobs K5-K8: <bank>' for
-    1.2 s; lit off the default; a knob turned shows its page"
+    1.2 s; lit off the default"
+  temporary_page: "a fader or K5..K8 moved shows its bank's page for 1 s after the last move, then the page before
+    comes back; meanwhile the Screen Knobs banks keep that page before; a button brings it back at once"
+  bank_popup: "two lines in AF_N (a step under the preset pop-up), '(default)' on a third line"
   power_on: "the FILT page, as PATCH (FMini-1 already starts on FILT)"
   calibration: "OCTAVE- + OCTAVE+ held at power-on: HARDWARE CALIBRATION (the layer's)"
 

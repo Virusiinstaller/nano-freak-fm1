@@ -26,7 +26,7 @@ the connected model.
 | 16 pads | the preset picker: the 16 presets of the page that holds the loaded one, in their category's colour (the loaded one bright); a pad loads its preset (in the SAVE dialog: the slot it writes). In the SEQ pop-up the pads show 16 of its 64 steps (the page of the step that plays, or of the slot a take writes next) |
 | K1 | MASTER (volume) |
 | K2 / K3 / K4 | PRESETS / SELECT / ALGORITHM (the screen's hints name them K2, K3, K4) |
-| K5..K8 | four knobs, by KNOB BANK: FILT's (the default), CTRL's (LFO), FX's, or the four of the page on the screen (the FM-1's K1..K4); turned, the screen shows their page |
+| K5..K8 | four knobs, by KNOB BANK: FILT's (the default), CTRL's (LFO), FX's, or the four of the page on the screen (the FM-1's K1..K4); turned, the screen shows their page for 1 s, then the page before comes back (and stays the Screen Knobs' page meanwhile) |
 | PATCH | HOME: the FILT page, the pop-ups close |
 | PARA | EDIT: FILT; again on FILT, PRESET SETTINGS |
 | SCALE | SCL: OSC, again MIX; in the delay pop-up, tap tempo |
@@ -40,7 +40,7 @@ the connected model.
 | OCTAVE- / OCTAVE+ | OCT- / OCT+ |
 | < / > | the previous / next preset; held 1 s, ten presets a second |
 | FADER BANK | what the faders set: A.ENV (the default), F.ENV, MIX, or the page on the screen; a pop-up names the bank for 1.2 s; lit off the default |
-| Faders 1..4 | the four knobs of the bank's page; a fader takes over only once it moves (and shows its page, but in the screen bank) |
+| Faders 1..4 | the four knobs of the bank's page; a fader takes over only once it moves, and shows its page for 1 s as K5..K8 do |
 | KNOB BANK | what K5..K8 set: FILTER (the default), LFO, FX, or the page on the screen; a pop-up names the bank for 1.2 s; lit off the default |
 | Pitch wheel | pitch bend, by the preset's PITCH BEND range (PRESET SETTINGS); also sent as MIDI |
 | Mod wheel | as MIDI CC1 on the FM-1 (the vibrato); also sent as MIDI |

@@ -1907,6 +1907,36 @@ static void fa_diag(void)
 
 #if BOARD_SMK37
 /* K1 (the virtual MASTER pot, smk_input.h smk_master) turned: the MASTER VOLUME pop-up, 0..100 with its bar, 1.2 s */
+/* a fader or K5..K8 moved shows its bank's page for 1 s (after the last move), then the page before comes back (the
+ * owner's). Meanwhile "the screen" of the Screen Knobs banks is still that page before (fa_base_page); any button but
+ * the four SMK extras brings it back at once, before the button acts */
+static uint8_t fa_tmp_back = 0xFF, fa_tmp_pg;            /* the page to come back to (0xFF none), the page shown meanwhile */
+static uint32_t fa_tmp_until;
+static int fa_tmp_on(void) { return fa_tmp_back != 0xFFu && fa_page == fa_tmp_pg; }
+static uint32_t fa_base_page(void) { return fa_tmp_on() ? fa_tmp_back : fa_page; }
+static void fa_tmp_end(void)                              /* back to the page before (unless another page was chosen) */
+{
+    if (fa_tmp_on())
+        fa_page = fa_tmp_back;
+    fa_tmp_back = 0xFF;
+}
+static void fa_tmp_show(uint32_t pg)                      /* the bank's page for 1 s; the base page itself: back at once */
+{
+    uint32_t base = fa_base_page();
+    if (pg == base) {
+        fa_tmp_end();
+        return;
+    }
+    fa_tmp_back = (uint8_t)base;
+    fa_tmp_pg = (uint8_t)pg;
+    fa_page = (uint8_t)pg;
+    fa_tmp_until = fm1_ms + 1000u;
+}
+static void fa_tmp_poll(void)
+{
+    if (fa_tmp_back != 0xFFu && (!fa_tmp_on() || (int32_t)(fm1_ms - fa_tmp_until) >= 0))
+        fa_tmp_end();
+}
 static uint32_t fa_mv_until;
 static uint32_t fa_bp_until;                              /* (the bank pop-up's end: below) */
 static int32_t fa_mv_last = -1;
@@ -1923,9 +1953,11 @@ static void fa_mv_poll(void)
 }
 /* FADER BANK / KNOB BANK pressed: a pop-up naming what the faders / K5..K8 now set, two lines, 1.2 s (the owner's) */
 static const char *fa_bp_l1, *fa_bp_l2;
+static uint8_t fa_bp_def;                                 /* the bank shown is the default one */
 static int fa_bp_on(void) { return fa_bp_until && (int32_t)(fm1_ms - fa_bp_until) < 0; }
-static void fa_bp_show(const char *l1, const char *l2)
+static void fa_bp_show(const char *l1, const char *l2, int dflt)
 {
+    fa_bp_def = (uint8_t)(dflt != 0);
     fa_bp_l1 = l1;
     fa_bp_l2 = l2;
     fa_bp_until = fm1_ms + 1200u;
@@ -1938,17 +1970,21 @@ static void fa_bp_draw(void)
     int32_t w1, w2, w;
     if (!fa_bp_on())
         return;
-    w1 = text_w(&AF_M, fa_bp_l1);
-    w2 = text_w(&AF_M, fa_bp_l2);
-    w = (w1 > w2 ? w1 : w2) + 32;
-    if (w < 180)
-        w = 180;
-    if (w > 232)
-        w = 232;
-    cv_rect(120 - w / 2, 82, w, 76, FA_OR);
-    cv_rect(122 - w / 2, 84, w - 4, 72, bg);
-    fa_ctext(120, 96, &AF_M, fa_bp_l1, FA_CR);
-    fa_ctext(120, 126, &AF_M, fa_bp_l2, FA_OR);
+    int dflt = fa_bp_def;                                 /* the default bank: "(default)" on a third line (the owner's) */
+    int32_t y = dflt ? 60 : 70, h = dflt ? 120 : 100;
+    w1 = text_w(&AF_N, fa_bp_l1);                         /* AF_N: a step under the preset pop-up's AF_L (the owner's) */
+    w2 = text_w(&AF_N, fa_bp_l2);
+    w = (w1 > w2 ? w1 : w2) + 40;
+    if (w < 216)
+        w = 216;
+    if (w > 236)
+        w = 236;
+    cv_rect(120 - w / 2, y, w, h, FA_OR);
+    cv_rect(122 - w / 2, y + 2, w - 4, h - 4, bg);
+    fa_ctext(120, y + 16, &AF_N, fa_bp_l1, FA_CR);
+    fa_ctext(120, y + 52, &AF_N, fa_bp_l2, FA_OR);
+    if (dflt)
+        fa_ctext(120, y + 84, &AF_N, "(default)", FA_MU);
 }
 static void fa_mv_draw(void)
 {
@@ -2470,13 +2506,13 @@ static void fa_reload_reset(void)
 #define FA_BANK_SCREEN 3u                                 /* the fourth bank of both: the page on the screen */
 static uint8_t fa_fbank, fa_fbank_new = 1;                /* 0 A.ENV, 1 F.ENV, 2 MIX, 3 the screen */
 static const uint8_t FA_FB_PAGE[3] = {5u, 4u, 2u};
-static const char *const FA_FB_NAME[4] = {"AMP ENV (default)", "FILTER ENV", "MIXER", "Screen Knobs"};
+static const char *const FA_FB_NAME[4] = {"AMP ENV", "FILTER ENV", "MIXER", "Screen Knobs"};
 static uint8_t fa_kbank;                                  /* 0 FILT, 1 CTRL (LFO), 2 FX, 3 the screen */
 static const uint8_t FA_KB_PAGE[3] = {3u, 0u, 6u};
-static const char *const FA_KB_NAME[4] = {"FILTER (default)", "LFO", "FX", "Screen Knobs"};
+static const char *const FA_KB_NAME[4] = {"FILTER", "LFO", "FX", "Screen Knobs"};
 static uint32_t fa_kbank_page(void)                       /* the page K5..K8 set */
 {
-    return fa_kbank >= FA_BANK_SCREEN ? fa_page : FA_KB_PAGE[fa_kbank];
+    return fa_kbank >= FA_BANK_SCREEN ? fa_base_page() : FA_KB_PAGE[fa_kbank];
 }
 
 static uint32_t fa_ctl_of(uint32_t pg, uint32_t i)       /* page pg's control i -> the control number (fa_ctl_apply) */
@@ -2492,7 +2528,7 @@ static uint32_t fa_ctl_of(uint32_t pg, uint32_t i)       /* page pg's control i 
 static void fa_smk_faders(void)
 {
     static uint8_t last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
-    uint32_t i, scr = fa_fbank >= FA_BANK_SCREEN, pg = scr ? fa_page : FA_FB_PAGE[fa_fbank % 3u];
+    uint32_t i, scr = fa_fbank >= FA_BANK_SCREEN, pg = scr ? fa_base_page() : FA_FB_PAGE[fa_fbank % 3u];
     if (fa_fbank_new) {
         fa_fbank_new = 0;
         for (i = 0; i < 4u; i++)
@@ -2507,8 +2543,8 @@ static void fa_smk_faders(void)
         if (v == last[i])
             continue;
         last[i] = (uint8_t)v;
-        if (!scr && !fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc && !fmg_fx && fa_page != pg)
-            fa_goto(pg);
+        if (!fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc && !fmg_fx)
+            fa_tmp_show(pg);                              /* its page for 1 s (Screen Knobs: the page before, at once) */
         fmg_force_page = (int8_t)pg;
         fa_ctl_apply(fa_ctl_of(pg, i), v);
         fmg_force_page = (int8_t)fa_page;
@@ -2524,14 +2560,15 @@ static void fa_smk_input(uint32_t pressed)
     int32_t d = ((pressed >> SMK_BTN_RIGHT) & 1u) ? 1 : ((pressed >> SMK_BTN_LEFT) & 1u) ? -1 : 0;
     smk_pad_ui = 1;
     fa_mv_poll();
+    fa_tmp_poll();
     if ((pressed >> SMK_BTN_FADER_BANK) & 1u) {            /* FADER BANK: A.ENV -> F.ENV -> MIX -> the screen, its pop-up */
         fa_fbank = (uint8_t)((fa_fbank + 1u) % 4u);
         fa_fbank_new = 1;
-        fa_bp_show("Faders:", FA_FB_NAME[fa_fbank]);
+        fa_bp_show("Faders:", FA_FB_NAME[fa_fbank], fa_fbank == 0u);
     }
     if ((pressed >> SMK_BTN_KNOB_BANK) & 1u) {             /* KNOB BANK: FILT -> CTRL (LFO) -> FX -> the screen, its pop-up */
         fa_kbank = (uint8_t)((fa_kbank + 1u) % 4u);
-        fa_bp_show("Knobs K5-K8:", FA_KB_NAME[fa_kbank]);
+        fa_bp_show("Knobs K5-K8:", FA_KB_NAME[fa_kbank], fa_kbank == 0u);
     }
     if (d) {                                              /* < / >: a preset; held, it runs on */
         lr_dir = d;
@@ -2679,6 +2716,10 @@ static void fa_input(void)
     fmg_force_page = (int8_t)fa_page;
     if (!fa_ar && !fa_sq && !fa_sc)
         fa_tp = 0;                                          /* the TAP TEMPO pop-up lives over the ARP or SEQ pop-up alone */
+#if BOARD_SMK37
+    if (pressed & ~((1u << SMK_BTN_KNOB_BANK) | (1u << SMK_BTN_FADER_BANK) | (1u << SMK_BTN_LEFT) | (1u << SMK_BTN_RIGHT)))
+        fa_tmp_end();                                       /* a button: the page a fader or K5..K8 showed goes first */
+#endif
     fa_buttons(pressed);
 #if BOARD_SMK37
     fa_smk_input(pressed);
@@ -2932,8 +2973,15 @@ static void fa_input(void)
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0) {
 #if BOARD_SMK37
-            if (fa_kbank_page() != fa_page)                 /* KNOB BANK: K5..K8 set its page's knobs; the screen shows it */
-                fa_goto(fa_kbank_page());
+            {   /* KNOB BANK: K5..K8 set its page's knobs, shown for 1 s (Screen Knobs: the page before stays theirs) */
+                uint32_t pg = fa_kbank_page();
+                fa_tmp_show(pg);
+                fmg_force_page = (int8_t)pg;
+                fmg_knob(k, s);
+                fmg_cur[pg] = (uint8_t)k;
+                fmg_force_page = (int8_t)fa_page;
+                continue;
+            }
 #endif
             fmg_force_page = (int8_t)fa_page;
             fmg_knob(k, s);
