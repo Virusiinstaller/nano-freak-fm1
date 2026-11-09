@@ -61,12 +61,14 @@ faders:                     # owner, 2026-11-09
   pattern: banks
   takeover: soft            # a fader acts only once it moves (also after a bank change)
   bank_button: FADER BANK
-  banks:                    # each bank = the four knobs of its panel page; FADER BANK also opens that page
-    A: A.ENV page's four knobs
+  banks:                    # each bank = the four knobs of its panel page
+    A: A.ENV page's four knobs (default)
     B: F.ENV page's four knobs
     C: MIX page's four knobs
-  order: A -> B -> C -> A
-  screen: page              # pressing FADER BANK shows the bank's page (A.ENV, F.ENV, MIX); a fader moved: its knob there
+    D: the four knobs of the page on the screen (the FM-1's K1..K4)
+  order: A -> B -> C -> D -> A
+  screen: popup             # owner (2026-11-09): pressing FADER BANK shows a 1.2 s pop-up naming the bank (it no
+                            # longer opens the page); a fader moved in A..C: its page
 
 wheels:                     # assumed (question not answered)
   pitch:
@@ -114,15 +116,18 @@ buttons:                    # owner, 2026-11-09 (the SMK-37's 18 buttons)
   OCTAVE+: OCT+
   "<": "preset -1; held 1 s: repeats, 10 presets a second"
   ">": "preset +1; held 1 s: repeats, 10 presets a second"
-  FADER BANK: "A A.ENV -> B F.ENV -> C MIX, and opens that page on the screen; lit on B (F.ENV)"
-  KNOB BANK: free
+  FADER BANK: "AMP ENV (default) -> FILTER ENV -> MIXER -> Screen Knobs (the page on the screen); a pop-up
+    'Faders: <bank>' for 1.2 s; lit off the default"
+  KNOB BANK: "K5..K8: FILTER (default) -> LFO (CTRL) -> FX -> Screen Knobs; a pop-up 'Knobs K5-K8: <bank>' for
+    1.2 s; lit off the default; a knob turned shows its page"
   power_on: "the FILT page, as PATCH (FMini-1 already starts on FILT)"
   calibration: "OCTAVE- + OCTAVE+ held at power-on: HARDWARE CALIBRATION (the layer's)"
 
 screen:
   style: keep               # FMini-1's 240x240 UI unchanged; the hints name the SMK knobs (owner): K2 for PRESETS,
                             # K3 for SELECT, K4 for ALGO, K5..K8 where the FM-1 says K1..K4; HARDWARE CALIBRATION
-                            # asks for the SMK's printed button and knob names
+                            # asks for the SMK's printed button and knob names; the hints name the buttons GLOBE,
+                            # PARA, BT (REC and PLAY stay)
   colours: FMini-1's palette
 
 pedal: none

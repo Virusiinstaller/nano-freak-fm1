@@ -38,6 +38,9 @@ static uint8_t fa_page;                                  /* 0..6 */
 #define FA_SEL "K3"
 #define FA_ALG "K4"
 #define FA_PRS "K2"
+#define FA_GLO "GLOBE"                                    /* the buttons by their SMK-37 names in the hints */
+#define FA_EDT "PARA"
+#define FA_SAV "BT"
 #else
 #define FA_K14 "K1-K4"
 #define FA_K13 "K1-K3"
@@ -45,6 +48,9 @@ static uint8_t fa_page;                                  /* 0..6 */
 #define FA_SEL "SELECT"
 #define FA_ALG "ALGO"
 #define FA_PRS "PRESETS"
+#define FA_GLO "GLO"
+#define FA_EDT "EDIT"
+#define FA_SAV "SAVE"
 #endif
 static uint8_t fa_env_last;                              /* ENV: the page it opened last (F.ENV or A.ENV) */
 static uint32_t fa_sig_prev = 0xFFFFFFFFu;
@@ -667,7 +673,7 @@ static void fa_dialog(void)
         }
     }
     fa_pc_text(120, 146, &AF_S, FA_PRS " SLOT   " FA_SEL "/" FA_ALG " NAME", FA_MU, bgd);
-    fa_pc_text(120, 170, &AF_S, "SAVE = NEXT   ANY PAGE = CANCEL", FA_MU, bgd);
+    fa_pc_text(120, 170, &AF_S, FA_SAV " = NEXT   ANY PAGE = CANCEL", FA_MU, bgd);
 }
 
 /* SAVE again: the question. NO is the default; ALGORITHM turns it to YES, SAVE on YES writes the slot, SAVE on NO
@@ -694,7 +700,7 @@ static void fa_confirm_dialog(void)
             cv_rect(BX[i] + 2, 132, 76, 32, bgd);
         fa_pc_text(BX[i] + 40, 139, &AF_L, BL[i], sel ? bgd : FA_CR, bgd);
     }
-    fa_pc_text(120, 176, &AF_S, FA_ALG ": YES / NO   SAVE: OK", FA_MU, bgd);
+    fa_pc_text(120, 176, &AF_S, FA_ALG ": YES / NO   " FA_SAV ": OK", FA_MU, bgd);
 }
 
 /* RESTORE: the editor asks to write all the presets. NO is the default; ALGORITHM turns it to YES, SAVE on YES accepts
@@ -733,7 +739,7 @@ static void fa_restore_dialog(void)
             cv_rect(BX[i] + 2, 120, 76, 32, bgd);
         fa_pc_text(BX[i] + 40, 127, &AF_L, BL[i], sel ? bgd : FA_CR, bgd);
     }
-    fa_pc_text(120, 176, &AF_S, FA_ALG ": YES / NO   SAVE: OK", FA_MU, bgd);
+    fa_pc_text(120, 176, &AF_S, FA_ALG ": YES / NO   " FA_SAV ": OK", FA_MU, bgd);
 }
 
 /* ARP: a pop-up like SAVE's. KNOB 1..4 are MODE, RATE, OCT, GATE; SELECT picks a line (the fifth is the tempo) and
@@ -879,7 +885,7 @@ static void fa_tp_draw(void)
     fmt_int(b, song.g[G_BPM]);
     fa_ctext(120, 70, &AF_L, b, FA_OR);
     fa_ctext(120, 108, &AF_S, "BPM", FA_MU);
-    fa_ctext(120, 136, &AF_S, "TAP TEMPO: button EDIT", FA_CR);
+    fa_ctext(120, 136, &AF_S, "TAP TEMPO: button " FA_EDT, FA_CR);
     fa_ctext(120, 153, &AF_X, FA_ALG "=TEMPO  OTHER KEY=CLOSE", FA_MU);
 }
 /* the SEQ settings pop-up: ALGORITHM turns the line SELECT picked; the TEMPO line opens TAP TEMPO (as the ARP's) */
@@ -1510,7 +1516,7 @@ static void fa_gl_dialog(void)
     if (fa_gl == 7u) {                                    /* PRESET SETTINGS (over FILT) */
         fa_frame("PRESET SETTINGS");
         fa_pset_rows();
-        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  EDIT=BACK", FA_MU);
+        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  " FA_EDT "=BACK", FA_MU);
         return;
     }
     if (fa_gl == 1u) {
@@ -1533,7 +1539,7 @@ static void fa_gl_dialog(void)
         fa_line(113, "NOTE PRIORITY", glo_note_prio == 2u ? "HIGH" : glo_note_prio == 0u ? "LAST" : "LOW", fa_gl_row == 3u);
         fa_line(130, "SUPPORT FMINI-1", ">", fa_gl_row == 4u);
         fa_line(147, "ABOUT", ">", fa_gl_row == 5u);
-        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  GLO=BACK", FA_MU);
+        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  " FA_GLO "=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
 #if BOARD_SMK37
@@ -1559,7 +1565,7 @@ static void fa_gl_dialog(void)
         fa_line(113, "MIDI CLOCK", FA_CLK[fa_clk], fa_gl_row == 3u);
         fa_line(130, "MIDI MONITOR", ">", fa_gl_row == 4u);
 #endif
-        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  GLO=BACK", FA_MU);
+        fa_ctext(120, 199, &AF_S, FA_SEL "  " FA_ALG "  " FA_GLO "=BACK", FA_MU);
     } else {                                              /* MIDI CC: a window of six lines on the list, a scroll bar */
         uint32_t top = fa_cc_i < 3u ? 0u : fa_cc_i - 3u, k;
         if (top + 6u > FA_NCC)
@@ -1902,15 +1908,47 @@ static void fa_diag(void)
 #if BOARD_SMK37
 /* K1 (the virtual MASTER pot, smk_input.h smk_master) turned: the MASTER VOLUME pop-up, 0..100 with its bar, 1.2 s */
 static uint32_t fa_mv_until;
+static uint32_t fa_bp_until;                              /* (the bank pop-up's end: below) */
 static int32_t fa_mv_last = -1;
 static uint32_t fa_mv_val(void) { return (uint32_t)smk_master * 100u / 1023u; }
 static int fa_mv_on(void) { return fa_mv_until && (int32_t)(fm1_ms - fa_mv_until) < 0; }
 static void fa_mv_poll(void)
 {
     int32_t v = (int32_t)fa_mv_val();
-    if (fa_mv_last >= 0 && v != fa_mv_last)
+    if (fa_mv_last >= 0 && v != fa_mv_last) {
         fa_mv_until = fm1_ms + 1200u;
+        fa_bp_until = 0;                                  /* (one pop-up at a time: the newest) */
+    }
     fa_mv_last = v;
+}
+/* FADER BANK / KNOB BANK pressed: a pop-up naming what the faders / K5..K8 now set, two lines, 1.2 s (the owner's) */
+static const char *fa_bp_l1, *fa_bp_l2;
+static int fa_bp_on(void) { return fa_bp_until && (int32_t)(fm1_ms - fa_bp_until) < 0; }
+static void fa_bp_show(const char *l1, const char *l2)
+{
+    fa_bp_l1 = l1;
+    fa_bp_l2 = l2;
+    fa_bp_until = fm1_ms + 1200u;
+    fa_mv_until = 0;                                      /* (one pop-up at a time: the newest) */
+    ui.force = 1;
+}
+static void fa_bp_draw(void)
+{
+    const uint16_t bg = FA_RGB(0x1B, 0x19, 0x17);
+    int32_t w1, w2, w;
+    if (!fa_bp_on())
+        return;
+    w1 = text_w(&AF_M, fa_bp_l1);
+    w2 = text_w(&AF_M, fa_bp_l2);
+    w = (w1 > w2 ? w1 : w2) + 32;
+    if (w < 180)
+        w = 180;
+    if (w > 232)
+        w = 232;
+    cv_rect(120 - w / 2, 82, w, 76, FA_OR);
+    cv_rect(122 - w / 2, 84, w - 4, 72, bg);
+    fa_ctext(120, 96, &AF_M, fa_bp_l1, FA_CR);
+    fa_ctext(120, 126, &AF_M, fa_bp_l2, FA_OR);
 }
 static void fa_mv_draw(void)
 {
@@ -1937,6 +1975,7 @@ static void fa_draw(void)
     sig = fa_signature();
 #if BOARD_SMK37
     sig = (sig ^ (fa_mv_on() ? 0x80000000u | fa_mv_val() : 0u)) * 16777619u;   /* (the MASTER VOLUME pop-up) */
+    sig = (sig ^ (fa_bp_on() ? 0x40000000u ^ (uint32_t)(uintptr_t)fa_bp_l2 : 0u)) * 16777619u;   /* (the bank pop-up) */
 #endif
     if (sig == fa_sig_prev && !ui.force)
         return;
@@ -1954,6 +1993,7 @@ static void fa_draw(void)
         fa_scene();
 #if BOARD_SMK37
         fa_mv_draw();
+        fa_bp_draw();
 #endif
 #ifdef FMINI_DIAG
         fa_diag();
@@ -2422,11 +2462,22 @@ static void fa_reload_reset(void)
  * (smk37-port.yaml, the owner's choices) The 16 pads are the UI's (smk_input.h smk_pad_ui): a preset picker, the 16
  * presets of the page that holds the loaded one, in their category's colour (the loaded one full, the others dim), a pad
  * loads its preset; in the SEQ pop-up they show 16 of its 64 slots (the page of the step that plays, or of the slot a
- * take writes next) in the pop-up's colours. FADER BANK: the faders set the four knobs of A.ENV, then F.ENV, then MIX,
- * and the screen shows that page (FADER BANK lit on F.ENV). < / >: the previous / next preset; held 1 s, ten a second.
- * K1 (MASTER) turned: the MASTER VOLUME pop-up. */
-static uint8_t fa_fbank, fa_fbank_new = 1;                /* 0 A.ENV, 1 F.ENV, 2 MIX */
+ * take writes next) in the pop-up's colours. FADER BANK: the faders set the four knobs of A.ENV (the default), F.ENV,
+ * MIX, or the page on the screen (its four knobs, the FM-1's K1..K4); KNOB BANK: K5..K8 set the four knobs of FILT (the
+ * default), CTRL (LFO), FX, or the page on the screen. Each press shows a pop-up naming the bank for 1.2 s; the button
+ * is lit off its default. < / >: the previous / next preset; held 1 s, ten a second. K1 (MASTER) turned: the MASTER
+ * VOLUME pop-up. */
+#define FA_BANK_SCREEN 3u                                 /* the fourth bank of both: the page on the screen */
+static uint8_t fa_fbank, fa_fbank_new = 1;                /* 0 A.ENV, 1 F.ENV, 2 MIX, 3 the screen */
 static const uint8_t FA_FB_PAGE[3] = {5u, 4u, 2u};
+static const char *const FA_FB_NAME[4] = {"AMP ENV (default)", "FILTER ENV", "MIXER", "Screen Knobs"};
+static uint8_t fa_kbank;                                  /* 0 FILT, 1 CTRL (LFO), 2 FX, 3 the screen */
+static const uint8_t FA_KB_PAGE[3] = {3u, 0u, 6u};
+static const char *const FA_KB_NAME[4] = {"FILTER (default)", "LFO", "FX", "Screen Knobs"};
+static uint32_t fa_kbank_page(void)                       /* the page K5..K8 set */
+{
+    return fa_kbank >= FA_BANK_SCREEN ? fa_page : FA_KB_PAGE[fa_kbank];
+}
 
 static uint32_t fa_ctl_of(uint32_t pg, uint32_t i)       /* page pg's control i -> the control number (fa_ctl_apply) */
 {
@@ -2441,7 +2492,7 @@ static uint32_t fa_ctl_of(uint32_t pg, uint32_t i)       /* page pg's control i 
 static void fa_smk_faders(void)
 {
     static uint8_t last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
-    uint32_t i, pg = FA_FB_PAGE[fa_fbank % 3u];
+    uint32_t i, scr = fa_fbank >= FA_BANK_SCREEN, pg = scr ? fa_page : FA_FB_PAGE[fa_fbank % 3u];
     if (fa_fbank_new) {
         fa_fbank_new = 0;
         for (i = 0; i < 4u; i++)
@@ -2456,7 +2507,7 @@ static void fa_smk_faders(void)
         if (v == last[i])
             continue;
         last[i] = (uint8_t)v;
-        if (!fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc && !fmg_fx && fa_page != pg)
+        if (!scr && !fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc && !fmg_fx && fa_page != pg)
             fa_goto(pg);
         fmg_force_page = (int8_t)pg;
         fa_ctl_apply(fa_ctl_of(pg, i), v);
@@ -2473,11 +2524,14 @@ static void fa_smk_input(uint32_t pressed)
     int32_t d = ((pressed >> SMK_BTN_RIGHT) & 1u) ? 1 : ((pressed >> SMK_BTN_LEFT) & 1u) ? -1 : 0;
     smk_pad_ui = 1;
     fa_mv_poll();
-    if ((pressed >> SMK_BTN_FADER_BANK) & 1u) {            /* FADER BANK: A.ENV -> F.ENV -> MIX, and that page */
-        fa_fbank = (uint8_t)((fa_fbank + 1u) % 3u);
+    if ((pressed >> SMK_BTN_FADER_BANK) & 1u) {            /* FADER BANK: A.ENV -> F.ENV -> MIX -> the screen, its pop-up */
+        fa_fbank = (uint8_t)((fa_fbank + 1u) % 4u);
         fa_fbank_new = 1;
-        if (!fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc)
-            fa_goto(FA_FB_PAGE[fa_fbank]);
+        fa_bp_show("Faders:", FA_FB_NAME[fa_fbank]);
+    }
+    if ((pressed >> SMK_BTN_KNOB_BANK) & 1u) {             /* KNOB BANK: FILT -> CTRL (LFO) -> FX -> the screen, its pop-up */
+        fa_kbank = (uint8_t)((fa_kbank + 1u) % 4u);
+        fa_bp_show("Knobs K5-K8:", FA_KB_NAME[fa_kbank]);
     }
     if (d) {                                              /* < / >: a preset; held, it runs on */
         lr_dir = d;
@@ -2877,6 +2931,10 @@ static void fa_input(void)
         fmg_algo(s);
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0) {
+#if BOARD_SMK37
+            if (fa_kbank_page() != fa_page)                 /* KNOB BANK: K5..K8 set its page's knobs; the screen shows it */
+                fa_goto(fa_kbank_page());
+#endif
             fmg_force_page = (int8_t)fa_page;
             fmg_knob(k, s);
             fmg_cur[fa_page] = (uint8_t)k;                  /* the highlight follows the knob last turned */
@@ -2921,7 +2979,8 @@ static void fa_leds(void)
         static const uint8_t Z[LED_BUF];                    /* (no DRUM-grid lanes, no SCALE LEDS on FMini-1) */
         smk_leds(nl, nb, nm, Z, Z);                         /* the 19 button LEDs (ui_input.c) */
         fa_smk_pads();                                      /* the pads: the picker or the SEQ's steps */
-        fm1_led[SMK_BTN_FADER_BANK] = fa_fbank == 1u;       /* FADER BANK lit on F.ENV (the owner's) */
+        fm1_led[SMK_BTN_FADER_BANK] = fa_fbank != 0u;       /* FADER BANK / KNOB BANK lit off their default (the owner's) */
+        fm1_led[SMK_BTN_KNOB_BANK] = fa_kbank != 0u;
     }
 #else
     for (k = 0; k < FM1_NCOL; k++) {
