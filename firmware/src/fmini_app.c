@@ -1832,12 +1832,45 @@ static void fa_diag(void)
 }
 #endif
 
+#if BOARD_SMK37
+/* K1 (the virtual MASTER pot, smk_input.h smk_master) turned: the MASTER VOLUME pop-up, 0..100 with its bar, 1.2 s */
+static uint32_t fa_mv_until;
+static int32_t fa_mv_last = -1;
+static uint32_t fa_mv_val(void) { return (uint32_t)smk_master * 100u / 1023u; }
+static int fa_mv_on(void) { return fa_mv_until && (int32_t)(fm1_ms - fa_mv_until) < 0; }
+static void fa_mv_poll(void)
+{
+    int32_t v = (int32_t)fa_mv_val();
+    if (fa_mv_last >= 0 && v != fa_mv_last)
+        fa_mv_until = fm1_ms + 1200u;
+    fa_mv_last = v;
+}
+static void fa_mv_draw(void)
+{
+    const uint16_t bg = FA_RGB(0x1B, 0x19, 0x17);
+    uint32_t v = fa_mv_val();
+    char b[8];
+    if (!fa_mv_on())
+        return;
+    cv_rect(30, 78, 180, 84, FA_OR);
+    cv_rect(32, 80, 176, 80, bg);
+    fa_ctext(120, 88, &AF_M, "MASTER VOLUME", FA_CR);
+    cv_rect(44, 116, 152, 14, FA_LINE);
+    cv_rect(46, 118, (int32_t)(148u * v / 100u), 10, FA_OR);
+    fmt_int(b, (int32_t)v);
+    fa_ctext(120, 136, &AF_M, b, FA_OR);
+}
+#endif
+
 static void fa_draw(void)
 {
     uint32_t sig;
     uint32_t band;
     fa_cpu_watch();
     sig = fa_signature();
+#if BOARD_SMK37
+    sig = (sig ^ (fa_mv_on() ? 0x80000000u | fa_mv_val() : 0u)) * 16777619u;   /* (the MASTER VOLUME pop-up) */
+#endif
     if (sig == fa_sig_prev && !ui.force)
         return;
     fa_sig_prev = sig;
@@ -1852,6 +1885,9 @@ static void fa_draw(void)
         cv_oy = -(int32_t)band * 120;
         cv_cy0 = 0;
         fa_scene();
+#if BOARD_SMK37
+        fa_mv_draw();
+#endif
 #ifdef FMINI_DIAG
         fa_diag();
 #endif
@@ -2320,7 +2356,8 @@ static void fa_reload_reset(void)
  * presets of the page that holds the loaded one, in their category's colour (the loaded one full, the others dim), a pad
  * loads its preset; in the SEQ pop-up they show 16 of its 64 slots (the page of the step that plays, or of the slot a
  * take writes next) in the pop-up's colours. FADER BANK: the faders set the four knobs of A.ENV, then F.ENV, then MIX,
- * and the screen shows that page. < / >: the previous / next preset; held 1 s, five a second. */
+ * and the screen shows that page (FADER BANK lit on F.ENV). < / >: the previous / next preset; held 1 s, ten a second.
+ * K1 (MASTER) turned: the MASTER VOLUME pop-up. */
 static uint8_t fa_fbank, fa_fbank_new = 1;                /* 0 A.ENV, 1 F.ENV, 2 MIX */
 static const uint8_t FA_FB_PAGE[3] = {5u, 4u, 2u};
 
@@ -2368,10 +2405,10 @@ static void fa_smk_input(uint32_t pressed)
     uint32_t hits, p, cur;
     int32_t d = ((pressed >> SMK_BTN_RIGHT) & 1u) ? 1 : ((pressed >> SMK_BTN_LEFT) & 1u) ? -1 : 0;
     smk_pad_ui = 1;
+    fa_mv_poll();
     if ((pressed >> SMK_BTN_FADER_BANK) & 1u) {            /* FADER BANK: A.ENV -> F.ENV -> MIX, and that page */
         fa_fbank = (uint8_t)((fa_fbank + 1u) % 3u);
         fa_fbank_new = 1;
-        smk_fbank = fa_fbank;                             /* (ui_input.c smk_leds: lit off bank A) */
         if (!fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc)
             fa_goto(FA_FB_PAGE[fa_fbank]);
     }
@@ -2383,7 +2420,7 @@ static void fa_smk_input(uint32_t pressed)
         lr_dir = 0;
     } else if (lr_dir && (int32_t)(fm1_ms - lr_next) >= 0) {
         d = lr_dir;
-        lr_next += 200u;                                  /* five a second */
+        lr_next += 100u;                                  /* ten a second (the owner's) */
         (void)lr_t0;
     }
     if (d && !fa_gl)
@@ -2437,7 +2474,8 @@ static void fa_smk_pads(void)
         uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), now = song.playing ? t->seq_idx % len : 99u, notes = 0, base;
         for (p = 0; p < len; p++)
             notes |= t->step[p].n;
-        base = (fa_sq_rec ? fa_sq_cur : now < NSTEP ? now : 0u) / 16u * 16u;
+        base = (now < NSTEP ? now : fa_sq_rec ? fa_sq_cur : 0u) / 16u * 16u;   /* the bank of 16 follows the step that
+                                                                                 * plays (stopped: the slot a take writes) */
         for (p = 0; p < SMK_NPAD; p++) {
             uint32_t i = base + p;
             if (i >= NSTEP)
@@ -2524,8 +2562,19 @@ static void fa_input(void)
 #if BOARD_SMK37
     fa_smk_input(pressed);
 #endif
-    if ((s = panel_enc(EN_PRESET)) != 0 && !fa_gl)
+    if ((s = panel_enc(EN_PRESET)) != 0 && !fa_gl) {
+#if BOARD_SMK37
+        {   /* SMK-37 (the owner's): the PRESETS knob accelerates, so 000..199 is quick: detents less than 120 ms apart
+             * step 2 each, less than 60 ms apart 5 each */
+            static uint32_t pt;
+            uint32_t dt = fm1_ms - pt;
+            pt = fm1_ms;
+            if (!fa_sv)
+                s *= dt < 60u ? 5 : dt < 120u ? 2 : 1;
+        }
+#endif
         fa_preset(s);
+    }
     fa_track_preset();                                      /* a new preset (the knob, a Program Change, a saved one): the screen stays */
     fa_cc_poll();                                         /* the CCs the MIDI inputs brought */
     if (fa_gl || fa_sq || fa_ar || fa_sv || fa_page != 6u)
@@ -2787,6 +2836,7 @@ static void fa_leds(void)
         static const uint8_t Z[LED_BUF];                    /* (no DRUM-grid lanes, no SCALE LEDS on FMini-1) */
         smk_leds(nl, nb, nm, Z, Z);                         /* the 19 button LEDs (ui_input.c) */
         fa_smk_pads();                                      /* the pads: the picker or the SEQ's steps */
+        fm1_led[SMK_BTN_FADER_BANK] = fa_fbank == 1u;       /* FADER BANK lit on F.ENV (the owner's) */
     }
 #else
     for (k = 0; k < FM1_NCOL; k++) {
