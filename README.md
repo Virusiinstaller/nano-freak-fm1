@@ -34,6 +34,8 @@
 
 Official site: <https://ruppert.github.io/fmini-1/> (with Web Installer)
 
+Supports the new FM-1 versions (with the UC25HQ80 flash chip).
+
 ## 3. Credits
 
 FMini-1 was made by Guilherme Ruppert. It is inspired and partially based on the [Felucca](https://github.com/hugelton/Felucca) project by Leo Kuroshita (Hügelton Instruments).
