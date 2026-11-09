@@ -698,9 +698,12 @@ static void fm1_led_key(uint32_t id, int on)
 }
 
 /* fm1_adc.h stand-ins for main.c: the battery comes from mux C; the FM-1's MASTER pot is knob K1 here, as a
- * virtual pot (0..1023, 24 a detent; starts at 724: master_q12 2048, the level the firmware starts with) */
+ * virtual pot (0..1023, 24 a detent, about 2.3 of the MASTER VOLUME pop-up's 0..100; starts at 724: master_q12 2048,
+ * the level the firmware starts with). FMini-1 2.5.7 (the owner's): a detent turned very slowly (150 ms or more after
+ * the last one) moves exactly one of 0..100 instead, so every value can be reached */
 enum { FM1_ADC_BATT = 3, FM1_ADC_MASTER = 4 };
 #define SMK_ENC_MASTER 0u          /* K1, where the FM-1 has its MASTER pot (top left) */
+#define SMK_MASTER_SLOW_MS 150u
 static int32_t smk_master = 724;
 static void fm1_adc_init(void) {}
 static int32_t fm1_enc_take(uint32_t e);
@@ -709,8 +712,19 @@ static int32_t fm1_adc_read(uint32_t ch)
     if (ch == FM1_ADC_BATT)
         return fm1_in.batt ? (int32_t)fm1_in.batt : -1;
     if (ch == FM1_ADC_MASTER) {
-        smk_master += fm1_enc_take(SMK_ENC_MASTER) * 24;
-        smk_master = smk_master < 0 ? 0 : smk_master > 1023 ? 1023 : smk_master;
+        static uint32_t t_last;
+        int32_t s = fm1_enc_take(SMK_ENC_MASTER);
+        if (s) {
+            uint32_t now = fm1_ticks(), dt = (now - t_last) / (1000u * FM1_TICKS_PER_US);   /* ms since the last detent */
+            t_last = now;
+            if ((s == 1 || s == -1) && dt >= SMK_MASTER_SLOW_MS) {   /* very slow: the next value of 0..100 */
+                int32_t pct = smk_master * 100 / 1023 + s;
+                pct = pct < 0 ? 0 : pct > 100 ? 100 : pct;
+                smk_master = (pct * 1023 + 99) / 100;           /* the lowest pot value showing pct */
+            } else
+                smk_master += s * 24;                           /* as always: linear, 24 a detent */
+            smk_master = smk_master < 0 ? 0 : smk_master > 1023 ? 1023 : smk_master;
+        }
         return smk_master;
     }
     return -1;
