@@ -593,7 +593,8 @@ static uint32_t fa_cur_slot(void)                         /* the slot the track 
     const track_t *t = TSEL;
     return t->p[P_E7] >= 0 && t->p[P_E7] < (int32_t)FMINI_NSLOT ? (uint32_t)t->p[P_E7] : fa_base % FMINI_NSLOT;
 }
-static void fa_sv_fill(void)                              /* the slot's name, as it is now (overwrite) */
+static void fa_sv_fill(void)                              /* the playing slot's name, when the dialog opens (another slot
+                                                           * picked keeps it: 2.5.1) */
 {
     str_cpy(fa_sv_name, ENGINES[ENGI_FMINI]->presets[fa_sv_slot].name, 13);
 }
@@ -682,17 +683,24 @@ static void fa_confirm_dialog(void)
 {
     const uint16_t bgd = FA_RGB(0x1B, 0x19, 0x17);
     char l[4], nm[24];
+    const aafont_t *f = &AF_L;
     uint32_t i;
     static const int32_t BX[2] = {34, 126};              /* NO, YES: the boxes */
     static const char *const BL[2] = {"NO", "YES"};
+    /* the preset that would be lost: the slot's number and its name as it is now, as large as OVERWRITE? (2.5.1, the
+     * owner's); a name too wide for the line drops the number, then takes the next size */
     fa_slot_num(l, fa_sv_slot);
     str_cpy(nm, l, 24);
     str_cpy(nm + str_len(nm), " ", 24 - str_len(nm));
-    str_cpy(nm + str_len(nm), fa_sv_name, 24 - str_len(nm));
+    str_cpy(nm + str_len(nm), ENGINES[ENGI_FMINI]->presets[fa_sv_slot].name, 24 - str_len(nm));
+    if (text_w(f, nm) > 208)
+        str_cpy(nm, ENGINES[ENGI_FMINI]->presets[fa_sv_slot].name, 24);
+    if (text_w(f, nm) > 208)
+        f = &AF_N;
     cv_rect(10, 46, 220, 148, FA_OR);
     cv_rect(12, 48, 216, 144, bgd);
-    fa_pc_text(120, 58, &AF_L, "OVERWRITE?", FA_RED, bgd);
-    fa_pc_text(120, 98, &AF_M, nm, FA_CR, bgd);
+    fa_pc_text(120, 56, &AF_L, "OVERWRITE?", FA_RED, bgd);
+    fa_pc_text(120, f == &AF_L ? 90 : 94, f, nm, FA_CR, bgd);
     for (i = 0; i < 2u; i++) {
         uint8_t sel = (i == 1u) == (fa_sv_yes != 0);
         cv_rect(BX[i], 130, 80, 36, sel ? FA_OR : FA_LINE);
@@ -2211,8 +2219,7 @@ static void fa_preset(int32_t s)
     uint32_t cur, nx;
     if (fa_sv) {
         fa_sv_slot = (uint8_t)((fa_sv_slot + FMINI_NSLOT + (s > 0 ? 1u : FMINI_NSLOT - 1u)) % FMINI_NSLOT);
-        fa_sv_fill();
-        return;
+        return;                                           /* (2.5.1, the owner's: the name stays, only the slot moves) */
     }
     /* every slot is a preset now (0..199, the same way): the one shown, or the patch the track came from (OWN) */
     cur = t->p[P_E7] >= 0 && t->p[P_E7] < (int32_t)FMINI_NSLOT ? (uint32_t)t->p[P_E7] : fa_base % FMINI_NSLOT;
@@ -2606,8 +2613,7 @@ static void fa_smk_input(uint32_t pressed)
             if (k >= FMINI_NSLOT)
                 continue;
             if (fa_sv) {                                  /* the SAVE dialog: the slot it writes */
-                fa_sv_slot = (uint8_t)k;
-                fa_sv_fill();
+                fa_sv_slot = (uint8_t)k;                  /* (the name stays: 2.5.1) */
             } else if (k != cur) {
                 fa_preset((int32_t)k - (int32_t)cur);
             }
