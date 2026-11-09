@@ -1945,6 +1945,15 @@ static int fa_mv_on(void) { return fa_mv_until && (int32_t)(fm1_ms - fa_mv_until
 static void fa_mv_poll(void)
 {
     int32_t v = (int32_t)fa_mv_val();
+    static int32_t cc_last = -1;
+    int32_t c = (int32_t)(smk_master >> 3);                /* K1 (MASTER) on MIDI OUT: its CC, 0..127 */
+    if (c > 127)
+        c = 127;
+    if (c != cc_last) {
+        if (cc_last >= 0)
+            smk_out_cc(SMK_CC_KNOB0, (uint32_t)c);
+        cc_last = c;
+    }
     if (fa_mv_last >= 0 && v != fa_mv_last) {
         fa_mv_until = fm1_ms + 1200u;
         fa_bp_until = 0;                                  /* (one pop-up at a time: the newest) */
@@ -2543,6 +2552,7 @@ static void fa_smk_faders(void)
         if (v == last[i])
             continue;
         last[i] = (uint8_t)v;
+        smk_out_cc(SMK_CC_FADER0 + i, v);                 /* the fader's own CC on MIDI OUT (smk_midi_out.c) */
         if (!fa_gl && !fa_sq && !fa_ar && !fa_sv && !fa_sc && !fmg_fx)
             fa_tmp_show(pg);                              /* its page for 1 s (Screen Knobs: the page before, at once) */
         fmg_force_page = (int8_t)pg;

@@ -60,6 +60,16 @@ GLO > MIDI SETTINGS on the SMK-37:
 | MIDI CLOCK | OFF, USB |
 | MIDI IN MONITOR | the last messages in |
 
+What MIDI OUT sends (USB and / or TRS, as MIDI OUT says):
+
+- the 37 keys: their notes with velocity, on MIDI OUT CH, with the octave (OCTAVE- / OCTAVE+);
+- the 16 pads: notes 36..43 (the bottom row) and 44..51 (the top row) on channel 10, with velocity and note-off; they
+  still pick presets;
+- K1..K8: CC 102..109 on MIDI OUT CH, whatever they do in FMini-1 (each encoder keeps a value 0..127 from 64; K1 is
+  the MASTER's 0..127);
+- faders 1..4: CC 110..113 on MIDI OUT CH, whatever bank they are in;
+- the pitch wheel (pitch bend) and the mod wheel (CC1).
+
 The TRS output follows the fm1-to-smk37 kit's driver pattern (UART1 TX on PC7) and has not been tried on a unit. The
 jack is said to be type A; if a synth does not answer, try a type B adapter.
 

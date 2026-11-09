@@ -106,6 +106,11 @@ static volatile uint8_t smk_pad_piano;
  * in smk_pad_hits (taken by the UI); a release does nothing */
 static volatile uint8_t smk_pad_ui;
 static volatile uint16_t smk_pad_hits;
+/* (FMini-1) the UI-owned pads also go to MIDI OUT: each hit and release, pad << 8 | velocity (0 = release), for the
+ * audio ISR (smk_padmidi_take) */
+#define SMK_PADMQ 32u
+static volatile uint16_t smk_padmq[SMK_PADMQ];
+static volatile uint8_t smk_padmq_w, smk_padmq_r;
 static uint8_t smk_pad_note[SMK_NPAD];   /* the note key a pad pressed (+1; 0 = none): its release ends that one */
 #define SMK_WHITE_OF_PAD(p) (smk_pad_grid ? (p) : (p) < 8u ? (p) + 8u : (p) - 8u)
 
@@ -444,8 +449,13 @@ static void smk__padq(uint32_t pad, uint32_t vel)     /* a pad hit (vel) or rele
     int32_t n0 = smk_pad_piano ? SMK_PIANO_NOTE[pad] : (int32_t)SMK_WHITE_NOTE[SMK_WHITE_OF_PAD(pad)];
     uint32_t n, bit;
     if (smk_pad_ui && !smk_pad_note[pad]) {             /* (a note a pad started before keeps its release) */
+        uint8_t w = smk_padmq_w;
         if (vel)
             smk_pad_hits |= (uint16_t)(1u << pad);
+        if ((uint8_t)(w + 1u) % SMK_PADMQ != smk_padmq_r) {   /* the MIDI OUT copy (a full queue drops it) */
+            smk_padmq[w] = (uint16_t)(pad << 8 | (vel & 0x7Fu));
+            smk_padmq_w = (uint8_t)((w + 1u) % SMK_PADMQ);
+        }
         return;
     }
     if (vel) {
@@ -642,6 +652,16 @@ static uint32_t fm1_input_note_edges(void)
 }
 
 /* the next outer-key event (keybed key << 8 | velocity, 0 = release), -1 if none */
+static int32_t smk_padmidi_take(void)                  /* a UI-owned pad's hit or release, -1 none (the audio ISR) */
+{
+    int32_t v = -1;
+    if (smk_padmq_r != smk_padmq_w) {
+        v = smk_padmq[smk_padmq_r];
+        smk_padmq_r = (uint8_t)((smk_padmq_r + 1u) % SMK_PADMQ);
+    }
+    return v;
+}
+
 static int32_t smk_extkey_take(void)
 {
     int32_t v = -1;

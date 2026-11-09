@@ -14,6 +14,56 @@
 static volatile uint8_t smk_out_mode;                 /* MIDI OUT: 0 ALL (USB and TRS), 1 USB, 2 TRS */
 static volatile uint8_t smk_out_ch;                   /* MIDI OUT CH: 0..15 (shown 1..16) */
 
+/* the controls as a MIDI controller (the owner's, 2026-11-09): K1..K8 and the four faders send fixed CCs on MIDI OUT CH,
+ * whatever they do in FMini-1 (CCs FMini-1's MIDI IN CC list does not use out of the box, so a loop back does nothing);
+ * the 16 pads send notes 36..51 on channel 10 (the bottom row 36..43, the top row 44..51, as drum pads), with their
+ * velocity and release. The keys go as they always did (seq.c key_on, ext_keys_block). The knobs are encoders: each
+ * keeps a value 0..127 (from 64) that its turns move; K1 is the virtual MASTER pot: its 0..127 */
+#define SMK_CC_KNOB0 102u                             /* K1..K8: CC 102..109 */
+#define SMK_CC_FADER0 110u                            /* faders 1..4: CC 110..113 */
+#define SMK_PAD_CH 9u                                 /* channel 10 */
+#define SMK_PAD_NOTE(p) ((p) < 8u ? 44u + (p) : 36u + (p) - 8u)   /* hardware pads 0..7 are the top row */
+static uint8_t smk_knob_v[8] = {64, 64, 64, 64, 64, 64, 64, 64};
+/* the main loop's MIDI OUT messages, to the audio ISR (midi_out_event has one producer: the audio ISR) */
+#define SMK_UQ 64u
+static volatile uint32_t smk_uq[SMK_UQ];
+static volatile uint32_t smk_uq_w, smk_uq_r;
+static void smk_out_ui(uint32_t pkt)                  /* the main loop */
+{
+    uint32_t w = smk_uq_w;
+    if (w - smk_uq_r >= SMK_UQ)
+        return;                                       /* full: dropped */
+    smk_uq[w % SMK_UQ] = pkt;
+    __asm__ volatile("" ::: "memory");
+    smk_uq_w = w + 1u;
+}
+static int smk_out_ui_take(uint32_t *pkt)             /* the audio ISR */
+{
+    uint32_t r = smk_uq_r;
+    if (r == smk_uq_w)
+        return 0;
+    *pkt = smk_uq[r % SMK_UQ];
+    __asm__ volatile("" ::: "memory");
+    smk_uq_r = r + 1u;
+    return 1;
+}
+static void smk_out_cc(uint32_t cc, uint32_t v)       /* the main loop: a CC on MIDI OUT CH */
+{
+    smk_out_ui(0x0Bu | (0xB0u | (smk_out_ch & 15u)) << 8 | (cc & 0x7Fu) << 16 | (v & 0x7Fu) << 24);
+}
+static void smk_out_knob(uint32_t enc, int32_t s)     /* encoder enc (0 = K1 .. 7 = K8) turned s detents (panel_enc) */
+{
+    int32_t v;
+    if (enc >= 8u || !s)
+        return;
+    v = (int32_t)smk_knob_v[enc] + s;
+    v = v < 0 ? 0 : v > 127 ? 127 : v;
+    if ((uint32_t)v == smk_knob_v[enc])
+        return;
+    smk_knob_v[enc] = (uint8_t)v;
+    smk_out_cc(SMK_CC_KNOB0 + enc, (uint32_t)v);
+}
+
 #define TRS_RING 256u
 static volatile uint8_t trs_ring[TRS_RING];
 static volatile uint32_t trs_w, trs_r;               /* the producer (midi_out_event) / the consumer (TIMER5) */

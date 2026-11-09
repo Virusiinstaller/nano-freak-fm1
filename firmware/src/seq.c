@@ -789,6 +789,19 @@ static volatile uint8_t smk_modw;               /* the mod wheel, 0..127 */
 static void ext_keys_block(void)
 {
     int32_t e;
+#if FELUCCA_FMINI_ONLY
+    {   /* MIDI OUT (smk_midi_out.c): the main loop's CCs, then the pads' notes on channel 10 */
+        uint32_t pkt, p, v;
+        while (smk_out_ui_take(&pkt))
+            midi_out_event(pkt);
+        while ((e = smk_padmidi_take()) >= 0) {
+            p = ((uint32_t)e >> 8) & 15u;
+            v = (uint32_t)e & 0x7Fu;
+            midi_out_event((v ? 0x09u | (0x90u | SMK_PAD_CH) << 8 | v << 24 : 0x08u | (0x80u | SMK_PAD_CH) << 8)
+                           | SMK_PAD_NOTE(p) << 16);
+        }
+    }
+#endif
     while ((e = smk_extkey_take()) >= 0) {
         uint32_t k = (uint32_t)e >> 8, v = (uint32_t)e & 0x7Fu, sel = song.sel % NTRK, n, mc;
         if (k >= FM1_NKEY)

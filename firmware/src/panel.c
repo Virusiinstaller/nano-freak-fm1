@@ -94,6 +94,9 @@ static int32_t panel_enc(uint32_t role)
     int32_t s = fm1_enc_take(panel.enc[role]) * panel.dir[role];
     if (s)
         panel_moved = 1;
+#if BOARD_SMK37 && FELUCCA_FMINI_ONLY
+    smk_out_knob(panel.enc[role], s);              /* the knob's own CC on MIDI OUT (smk_midi_out.c) */
+#endif
     return s;
 }
 /* 1 if a knob turned since the last call (the FMini-1 screen takes it each frame: its input is fa_input, not ui.c's) */

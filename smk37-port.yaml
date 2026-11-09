@@ -144,6 +144,11 @@ midi:                       # owner, 2026-11-09: GLO > MIDI SETTINGS on the SMK-
     - "MIDI IN CC: the CC list (was MIDI CC)"
     - "MIDI CLOCK: OFF, USB (no TRS clock in)"
     - "MIDI IN MONITOR (was MIDI MONITOR)"
+  out:                      # owner, 2026-11-09: the SMK as a MIDI controller too
+    keys: "the 37, MIDI OUT CH, velocity, the octave"
+    pads: "notes 36..43 bottom row, 44..51 top row, channel 10, velocity and note-off; still the preset picker"
+    knobs: "K1..K8 = CC 102..109 (fixed, absolute 0..127 kept per encoder; K1 the MASTER value)"
+    faders: "CC 110..113 (fixed)"
   trs_out: "UART1 TX on PC7, the kit's pattern (docs/06-mapping-patterns.md); not yet confirmed on a unit"
 
 modes: {}

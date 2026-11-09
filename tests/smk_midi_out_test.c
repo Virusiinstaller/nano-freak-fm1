@@ -77,6 +77,22 @@ int main(void)
     drain(10);
     CHECK(!trs_dead && t_n == i + 3u, "MIDI OUT set again: the jack sends again (%u)", t_n - i);
 
+    /* the knobs: a value 0..127 from 64 per encoder, one CC on MIDI OUT CH each move, none at an end */
+    {
+        uint32_t pk;
+        smk_out_ch = 2;
+        smk_out_knob(4, 3);                                /* K5 */
+        CHECK(smk_out_ui_take(&pk) && pk == (0x0Bu | 0xB2u << 8 | 106u << 16 | 67u << 24), "K5 +3: CC106 = 67 on channel 3 (%08x)", pk);
+        smk_out_knob(4, -100);
+        CHECK(smk_out_ui_take(&pk) && (pk >> 24) == 0u, "K5 down to 0");
+        smk_out_knob(4, -1);
+        CHECK(!smk_out_ui_take(&pk), "K5 at 0: nothing more");
+        smk_out_cc(SMK_CC_FADER0 + 3u, 127u);
+        CHECK(smk_out_ui_take(&pk) && ((pk >> 16) & 0x7Fu) == 113u, "fader 4: CC113");
+        CHECK(SMK_PAD_NOTE(8) == 36u && SMK_PAD_NOTE(15) == 43u && SMK_PAD_NOTE(0) == 44u && SMK_PAD_NOTE(7) == 51u,
+              "pads: bottom row 36..43, top row 44..51");
+    }
+
     if (fails)
         return 1;
     printf("smk_midi_out_test: ok\n");
