@@ -1724,7 +1724,7 @@ async function updater() {
     ok(gn === "FM-1_900" && dn.bad === 0, `fm1ota.js: install through the ports "${run}" -> "${ota}" -> "${run}" (${gn})`);
     const dr = new FakeFM1(image, { run, ota });
     dr.boot("ota-FM-1_900", ota);
-    ok(await new Updater(dr.access).resume(image) === true, `fm1ota.js: resume finds the loader named "${ota}"`);
+    ok(await new Updater(dr.access).resume(image, null, "FM-1_900") === true, `fm1ota.js: resume finds the loader named "${ota}"`);
   }
 
   /* another custom firmware's USB name: not found by name, found when the player picks the port */
