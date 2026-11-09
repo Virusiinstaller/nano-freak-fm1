@@ -123,6 +123,10 @@ int main(int argc, char **argv)
         fa_sv_open();
         if (!fa_sv || fa_sv_slot != 150) { printf("save: open\n"); return 1; }
         str_cpy(fa_sv_name, "MY PATCH", 13);
+        fa_preset(1);                                   /* 2.5.1: another slot keeps the name being saved */
+        if (fa_sv_slot != 151 || !str_eq(fa_sv_name, "MY PATCH")) { printf("save: another slot changed the name\n"); return 1; }
+        fa_preset(-1);
+        if (fa_sv_slot != 150 || !str_eq(fa_sv_name, "MY PATCH")) { printf("save: back to the slot\n"); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 77);                       /* the name dialog (bigger text) */
         fa_sv_press();                                  /* SAVE: the question, NO by default: nothing written yet */
         if (!fa_sv || !fa_sv_conf || fa_sv_yes || str_eq(ENGINES[ENGI_FMINI]->presets[150].name, "MY PATCH")) { printf("save: no question\n"); return 1; }
