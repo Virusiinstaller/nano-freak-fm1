@@ -38,8 +38,8 @@ the connected model.
 | ARP / SEQ | the ARP / SEQ pop-ups |
 | SEQ PLAY / SEQ REC | PLAY / REC |
 | OCTAVE- / OCTAVE+ | OCT- / OCT+ |
-| < / > | the previous / next preset; held 1 s, five presets a second |
-| FADER BANK | what the faders set: A the A.ENV knobs, B the F.ENV knobs, C the MIX knobs; it opens that page (lit off bank A) |
+| < / > | the previous / next preset; held 1 s, ten presets a second |
+| FADER BANK | what the faders set: A the A.ENV knobs, B the F.ENV knobs, C the MIX knobs; it opens that page (lit on bank B, F.ENV) |
 | Faders 1..4 | the four knobs of the bank's page; a fader takes over only once it moves |
 | KNOB BANK | (free) |
 | Pitch wheel | pitch bend (the preset's PITCH BEND range); also sent as MIDI |

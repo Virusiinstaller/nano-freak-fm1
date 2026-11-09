@@ -53,8 +53,9 @@ jobs:
           mkdir -p _site
           python3 web/make_fmini_installer.py "build/fmini-1-fm1-$VERSION.fwsc" _site/index.html "$VERSION"
           cp "build/fmini-1-fm1-$VERSION.fwsc" "_site/fmini-1-$VERSION.fwsc"
-          for f in build/fmini-1-smk37*-"$VERSION".fwsc; do cp "$f" _site/; done   # (the SMK-37 packages to download)
           cp docs/fmini-ad.mp4 docs/fmini-ad-poster.jpg _site/
+          python3 web/make_smk_installer.py "$VERSION" _site/smk.html   # the SMK-37 installer (beta), its own page
+          cp build/fmini-1-smk37*-"$VERSION".fwsc _site/
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
           cp -r docs/emu _site/emu                 # the browser emulator (web/emu/build_wasi.sh builds docs/emu)
           echo "FMini-1 v$VERSION" >> "$GITHUB_STEP_SUMMARY"
