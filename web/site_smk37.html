@@ -1,0 +1,252 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     FMini-1 on the M-Vave SMK-37 (beta): the installer page. The installer logic (fm1pkg.js, fm1ota.js) is the
+     Felucca installer's (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments), with the SMK-37
+     layer of genkigenki (M. Geisler). Built by web/make_smk_installer.py: the packages are embedded. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>FMini-1 for SMK-37</title>
+<style>
+  :root { --bg: #141211; --panel: #1f1c19; --line: #3a3530; --cream: #ece4d0; --muted: #9a8f7e; --orange: #e0752b; --red: #d6382b; --green: #4cae5a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--cream); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 30px; letter-spacing: -0.5px; }
+  h1 b { color: var(--orange); }
+  .tag { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .lang { background: none; border: 1px solid var(--line); color: var(--cream); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .lead { color: var(--muted); margin: 8px 0 24px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 18px; }
+  .warn { border-color: #6b3a1c; }
+  .warn h2 { color: var(--orange); }
+  ol, ul { margin: 6px 0 0 20px; padding: 0; }
+  li { margin: 4px 0; }
+  .models { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 10px; }
+  .model { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .model b { display: block; }
+  .model a { color: var(--orange); font-size: 14px; }
+  button.go { margin-top: 14px; background: var(--orange); color: #1a0f08; border: 0; border-radius: 8px; padding: 13px 22px; font-size: 17px; font-weight: 600; cursor: pointer; }
+  button.go:disabled { opacity: .45; cursor: default; }
+  label.ack { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; cursor: pointer; }
+  label.ack input { margin-top: 5px; }
+  .meter { height: 10px; background: #0e0d0c; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 16px; }
+  .fill { height: 100%; width: 0; background: var(--orange); transition: width .3s; }
+  .row { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 14px; }
+  #status { color: var(--cream); }
+  body.bad #status { color: var(--red); }
+  #dev { color: var(--muted); font-size: 14px; margin-top: 8px; min-height: 1.5em; }
+  details { margin-top: 14px; color: var(--muted); font-size: 13px; }
+  pre { white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; background: #0e0d0c; padding: 10px; border-radius: 6px; }
+  a { color: var(--orange); }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+  code { background: #0e0d0c; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><b>FMini-1</b> for SMK-37</h1>
+    <span><span class="tag" id="ver">v0</span> <span class="tag">beta</span> <button class="lang" id="lang" type="button">PT</button></span>
+  </header>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="card warn">
+    <h2 data-t="w_h"></h2>
+    <ol>
+      <li data-t="w1"></li>
+      <li data-t="w2"></li>
+      <li data-t="w3"></li>
+      <li data-t="w4"></li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2 data-t="m_h"></h2>
+    <p data-t="m_d" style="margin:0"></p>
+    <div class="models" id="models"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-t="i_h"></h2>
+    <ol>
+      <li data-t="s1"></li>
+      <li data-t="s2"></li>
+      <li data-t="s3"></li>
+    </ol>
+    <label class="ack"><input type="checkbox" id="ack"> <span data-t="ack"></span></label>
+    <button class="go" id="go" type="button" disabled data-t="install"></button>
+    <div id="dev"></div>
+    <div class="meter"><div class="fill" id="fill"></div></div>
+    <div class="row"><span id="status" aria-live="polite"></span><span id="pct"></span></div>
+    <details><summary data-t="log"></summary><pre id="log"></pre></details>
+  </section>
+
+  <section class="card">
+    <h2 data-t="b_h"></h2>
+    <p data-t="b_d" style="margin:0"></p>
+  </section>
+
+  <footer>
+    <p data-t="f1"></p>
+    <p><a href="./" data-t="f_fm1"></a> · <a href="https://github.com/ruppert/fmini-1/blob/fmini-smk37/SMK37.md" data-t="f_doc"></a> · <a href="https://github.com/genkigenki/fm1-to-smk37" data-t="f_kit"></a></p>
+  </footer>
+</main>
+<script type="module">
+/*LIB*/
+const meta = /*META*/;
+const TEXT = {
+  en: {
+    lead: "A Minimoog emulation for the M-Vave SMK-37: the FMini-1 firmware, ported to the SMK-37's keys, pads, faders and wheels. Installs from this page over USB (Chrome or Edge).",
+    w_h: "Before you install (beta)",
+    w1: "This port has not been tested on an SMK-37 yet. Install it only if you accept the risk.",
+    w2: "Make a full flash backup first (the fm1-to-smk37 kit, docs/02-update-and-recovery.md, section 3). Your unit's calibration lives in its flash and cannot be downloaded again.",
+    w3: "Have M-Vave's firmware package for your model and its updater at hand: that is the way back to the stock firmware.",
+    w4: "The first start clears the stock firmware's settings. The calibration, the Bluetooth pairing and the key area are never written.",
+    m_h: "Models",
+    m_d: "The installer reads the connected keyboard's model and writes that model's package. You can also download them:",
+    i_h: "Install",
+    s1: "Connect the SMK-37 to the computer with a USB data cable and close other apps that use MIDI.",
+    s2: "Tick the box below, press Install and allow MIDI (SysEx) when the browser asks.",
+    s3: "Keep the cable connected until it says Done. The keyboard restarts as FMini-1.",
+    ack: "I made a full flash backup and I accept that this beta has not been tested on hardware.",
+    install: "Install",
+    log: "Details",
+    b_h: "Back to the stock firmware",
+    b_d: "Install M-Vave's package for your model with M-Vave's updater. It works directly: the installed package keeps the keyboard's model name.",
+    f1: "FMini-1 by Guilherme Ruppert, based on Felucca by Leo Kuroshita (Hügelton Instruments). The SMK-37 board layer is genkigenki's. Minimoog is a registered trademark of Moog Music Inc.; this project is not affiliated with Moog Music, M-Vave or JieLi.",
+    f_fm1: "FMini-1 for the FM-1", f_doc: "SMK-37 controls (SMK37.md)", f_kit: "the fm1-to-smk37 kit",
+    ready: "Ready. Connect the SMK-37 and press Install.", nomidi: "This browser has no Web MIDI: use Chrome or Edge.",
+    denied: "MIDI (SysEx) access was not allowed. Allow it in the site settings and press Install again.",
+    notfound: "No SMK-37 found. Check the USB cable (a data cable) and close other apps that use MIDI.",
+    nomodel: "The connected device is not a model this page has a package for: ",
+    found: "Found: ", start: "Starting the update…", verify: "Checking the package…", loader: "Starting the update loader…",
+    write: "Writing the firmware…", reboot: "Restarting…", done: "Done. The keyboard is FMini-1 now.",
+    stopped: "Stopped. Replug the USB cable and press Install again (the keyboard stays in update mode until it is finished).",
+    lost: "The USB connection was lost. Replug it and press Install again.",
+    noloader: "The update loader did not appear. Replug the USB cable and press Install again.",
+    noreturn: "The keyboard did not come back: power-cycle it.", mismatch: "Installed, but the keyboard reports ",
+    model: "This package is not for the connected model: ", error: "Error: ", leave: "Installing: do not leave this page."
+  },
+  pt: {
+    lead: "Uma emulação do Minimoog para o M-Vave SMK-37: o firmware FMini-1, adaptado às teclas, pads, faders e rodas do SMK-37. A instalação é feita por esta página, via USB (Chrome ou Edge).",
+    w_h: "Antes de instalar (beta)",
+    w1: "Este port ainda não foi testado num SMK-37. Instale apenas se aceitar o risco.",
+    w2: "Faça antes um backup completo da flash (kit fm1-to-smk37, docs/02-update-and-recovery.md, seção 3). A calibração do seu aparelho fica na flash e não pode ser baixada de novo.",
+    w3: "Tenha à mão o pacote de firmware da M-Vave para o seu modelo e o atualizador dela: é o caminho de volta ao firmware de fábrica.",
+    w4: "O primeiro boot apaga as configurações do firmware de fábrica. A calibração, o pareamento Bluetooth e a área de chaves nunca são gravados.",
+    m_h: "Modelos",
+    m_d: "O instalador lê o modelo do teclado conectado e grava o pacote desse modelo. Você também pode baixá-los:",
+    i_h: "Instalar",
+    s1: "Conecte o SMK-37 ao computador com um cabo USB de dados e feche outros apps que usem MIDI.",
+    s2: "Marque a caixa abaixo, aperte Instalar e permita o MIDI (SysEx) quando o navegador pedir.",
+    s3: "Mantenha o cabo conectado até aparecer Pronto. O teclado reinicia como FMini-1.",
+    ack: "Fiz um backup completo da flash e aceito que este beta não foi testado em hardware.",
+    install: "Instalar",
+    log: "Detalhes",
+    b_h: "Voltar ao firmware de fábrica",
+    b_d: "Instale o pacote da M-Vave para o seu modelo com o atualizador da M-Vave. Funciona direto: o pacote instalado mantém o nome do modelo do teclado.",
+    f1: "FMini-1 por Guilherme Ruppert, baseado no Felucca de Leo Kuroshita (Hügelton Instruments). A camada do SMK-37 é do genkigenki. Minimoog é marca registrada da Moog Music Inc.; este projeto não tem afiliação com a Moog Music, a M-Vave ou a JieLi.",
+    f_fm1: "FMini-1 para o FM-1", f_doc: "Controles do SMK-37 (SMK37.md)", f_kit: "o kit fm1-to-smk37",
+    ready: "Pronto para instalar. Conecte o SMK-37 e aperte Instalar.", nomidi: "Este navegador não tem Web MIDI: use o Chrome ou o Edge.",
+    denied: "O acesso MIDI (SysEx) não foi permitido. Permita nas configurações do site e aperte Instalar de novo.",
+    notfound: "Nenhum SMK-37 encontrado. Confira o cabo USB (de dados) e feche outros apps que usem MIDI.",
+    nomodel: "O aparelho conectado não é um modelo para o qual esta página tem pacote: ",
+    found: "Encontrado: ", start: "Iniciando a atualização…", verify: "Conferindo o pacote…", loader: "Iniciando o carregador de atualização…",
+    write: "Gravando o firmware…", reboot: "Reiniciando…", done: "Pronto. O teclado agora é um FMini-1.",
+    stopped: "Interrompido. Reconecte o cabo USB e aperte Instalar de novo (o teclado fica no modo de atualização até terminar).",
+    lost: "A conexão USB caiu. Reconecte e aperte Instalar de novo.",
+    noloader: "O carregador de atualização não apareceu. Reconecte o cabo USB e aperte Instalar de novo.",
+    noreturn: "O teclado não voltou: desligue e ligue de novo.", mismatch: "Instalado, mas o teclado informa ",
+    model: "Este pacote não é para o modelo conectado: ", error: "Erro: ", leave: "Instalando: não saia desta página."
+  }
+};
+const $ = (id) => document.getElementById(id);
+let lang = (navigator.language || "en").toLowerCase().startsWith("pt") ? "pt" : "en";
+const t = (k) => (TEXT[lang][k] ?? TEXT.en[k] ?? k);
+let last = ["ready", ""];
+function paint() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach((e) => { e.textContent = t(e.dataset.t); });
+  $("lang").textContent = lang === "pt" ? "EN" : "PT";
+  $("status").textContent = t(last[0]) + last[1];
+}
+const say = (k, arg = "", bad = false) => { last = [k, arg]; $("status").textContent = t(k) + arg; document.body.classList.toggle("bad", bad); };
+const log = (s) => { const p = $("log"); p.textContent += s + "\n"; p.scrollTop = p.scrollHeight; };
+const bar = (pct) => { $("fill").style.width = pct + "%"; $("pct").textContent = pct ? Math.round(pct) + "%" : ""; };
+$("lang").addEventListener("click", () => { lang = lang === "pt" ? "en" : "pt"; paint(); });
+$("ver").textContent = "v" + meta.version;
+for (const b of meta.boards) {
+  const d = document.createElement("div");
+  d.className = "model";
+  const name = b.product.split("_")[0];
+  d.innerHTML = `<b></b><a></a>`;
+  d.querySelector("b").textContent = name + (name === "SMK-37 Pro" ? " (Starrykey 37 Play)" : "");
+  const a = d.querySelector("a");
+  a.href = b.pkg; a.download = b.file; a.textContent = b.file;
+  $("models").appendChild(d);
+}
+paint();
+
+let writing = false;
+const ready = () => { $("go").disabled = writing || !$("ack").checked || !navigator.requestMIDIAccess; };
+$("ack").addEventListener("change", ready);
+window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = t("leave"); } });
+if (!navigator.requestMIDIAccess) say("nomidi", "", true); else say("ready");
+ready();
+
+async function packageFor(model) {
+  const b = meta.boards.find((x) => sameModel(model, x.product.split("_")[0]));
+  if (!b) return null;
+  const r = await fetch(b.pkg);
+  const pkg = new Uint8Array(await r.arrayBuffer());
+  if (productOf(pkg) !== b.product) throw Object.assign(new Error("package"), { code: "error" });
+  return { product: b.product, image: logicalImage(pkg) };
+}
+
+$("go").addEventListener("click", async () => {
+  if (writing) return;
+  writing = true; ready(); bar(0); $("dev").textContent = "";
+  let midi;
+  try { midi = await navigator.requestMIDIAccess({ sysex: true }); }
+  catch (_) { say("denied", "", true); writing = false; ready(); return; }
+  try {
+    const up = new Updater(midi, log);
+    const dev = await up.find(() => true);
+    if (!dev) { say("notfound", "", true); return; }
+    dev.link.close();
+    $("dev").textContent = t("found") + dev.id.text;
+    const p = await packageFor(dev.id.model);
+    if (!p) { say("nomodel", dev.id.text, true); return; }
+    log(`${dev.id.text} -> ${p.product}`);
+    const total = 74 + 1167;
+    let writes = 0;
+    const step = (k, a) => {
+      log(`${k} ${a ?? ""}`);
+      if (k === "start") { say("start"); bar(1); }
+      if (k === "verify") { say("verify"); bar(Math.min(6, 1 + (a / total) * 100)); }
+      if (k === "loader") { say("loader"); bar(6); }
+      if (k === "write") { say("write"); writes = a; bar(6 + Math.min(92, (writes / 1167) * 92)); }
+      if (k === "reboot") { say("reboot"); bar(99); }
+      if (k === "done") { say("done"); bar(100); }
+    };
+    if (/^ota-/i.test(dev.id.model)) {
+      say(await up.resume(p.image, step, p.product) ? "done" : "stopped", "", false);
+    } else {
+      await up.install(p.image, p.product, step);
+    }
+  } catch (e) {
+    const code = e && e.code && TEXT.en[e.code] ? e.code : "error";
+    say(code, code === "error" ? (e && e.message) || "" : e.detail || "", true);
+    log(String(e && e.stack || e));
+  } finally {
+    writing = false; ready();
+  }
+});
+</script>
+</body>
+</html>
