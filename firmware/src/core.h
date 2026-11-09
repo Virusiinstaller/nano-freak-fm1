@@ -20,8 +20,8 @@
 #if BOARD_SMK37                  /* the SMK-37 build has its own version (tools/build.py, the installer workflow read it) */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 1u
-#define FMINI_SMK_VERSION "v2.5.1"
+#define FMINI_VER_PATCH 2u
+#define FMINI_SMK_VERSION "v2.5.2"
 #define FMINI_VERSION FMINI_SMK_VERSION
 #else
 #define FMINI_VER_MAJ 2u
