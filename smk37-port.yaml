@@ -114,8 +114,8 @@ buttons:                    # owner, 2026-11-09 (the SMK-37's 18 buttons)
   SEQ REC: REC
   OCTAVE-: OCT-
   OCTAVE+: OCT+
-  "<": "preset -1; held 1 s: repeats, 10 presets a second"
-  ">": "preset +1; held 1 s: repeats, 10 presets a second"
+  "<": "preset -1, loaded on release; held 0.66 s: runs on, 10 presets a second (the pop-up shows the slot reached)"
+  ">": "preset +1, loaded on release; held 0.66 s: runs on, 10 presets a second (the pop-up shows the slot reached)"
   FADER BANK: "AMP ENV (default) -> FILTER ENV -> MIXER -> Screen Knobs (the page on the screen); a pop-up
     'Faders: <bank>' for 1.2 s; lit off the default"
   KNOB BANK: "K5..K8: FILTER (default) -> LFO (CTRL) -> FX -> Screen Knobs; a pop-up 'Knobs K5-K8: <bank>' for

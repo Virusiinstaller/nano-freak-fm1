@@ -1618,6 +1618,9 @@ static void fa_gl_dialog(void)
 static int16_t fa_last_sl = -2;                           /* SLOT as last seen: -1 = not a factory patch (edited / saved one) */
 static uint8_t fa_primed;                                 /* the first frame has been seen: no pop-up at power-on */
 static uint32_t fa_pp_until;                              /* the preset pop-up shows until fm1_ms passes this */
+#if BOARD_SMK37
+static int16_t fa_pp_pend = -1;                           /* < / > held: the slot they have run to, loaded on release (-1 none) */
+#endif
 static void fa_preset_label(char *num, char *name)
 {
     uint32_t k = fa_cur_slot();
@@ -1630,6 +1633,12 @@ static void fa_pp_draw(void)
 {
     char num[8], nm[16];
     const aafont_t *f = &AF_L;
+#if BOARD_SMK37
+    if (fa_pp_pend >= 0) {                                /* < / > held: the slot they would load */
+        fa_slot_num(num, (uint32_t)fa_pp_pend);
+        str_cpy(nm, ENGINES[ENGI_FMINI]->presets[fa_pp_pend].name, 16);
+    } else
+#endif
     fa_preset_label(num, nm);
     if (text_w(&AF_L, nm) > 204)
         f = &AF_M;
@@ -2010,13 +2019,16 @@ static void fa_mv_draw(void)
     char b[8];
     if (!fa_mv_on())
         return;
-    cv_rect(30, 78, 180, 84, FA_OR);
-    cv_rect(32, 80, 176, 80, bg);
-    fa_ctext(120, 88, &AF_M, "MASTER VOLUME", FA_CR);
-    cv_rect(44, 116, 152, 14, FA_LINE);
-    cv_rect(46, 118, (int32_t)(148u * v / 100u), 10, FA_OR);
+    /* the preset pop-up's size (the owner's): AF_L, "MASTER VOLUME" on two lines (one is wider than the screen), the bar
+     * as much larger */
+    cv_rect(12, 36, 216, 168, FA_OR);
+    cv_rect(14, 38, 212, 164, bg);
+    fa_ctext(120, 46, &AF_L, "MASTER", FA_CR);
+    fa_ctext(120, 78, &AF_L, "VOLUME", FA_CR);
+    cv_rect(28, 118, 184, 26, FA_LINE);
+    cv_rect(31, 121, (int32_t)(178u * v / 100u), 20, FA_OR);
     fmt_int(b, (int32_t)v);
-    fa_ctext(120, 136, &AF_M, b, FA_OR);
+    fa_ctext(120, 154, &AF_L, b, FA_OR);
 }
 #endif
 
@@ -2587,19 +2599,43 @@ static void fa_smk_input(uint32_t pressed)
         fa_kbank = (uint8_t)((fa_kbank + 1u) % 4u);
         fa_bp_show("Knobs K5-K8:", FA_KB_NAME[fa_kbank], fa_kbank == 0u);
     }
-    if (d) {                                              /* < / >: a preset; held, it runs on */
+    /* < / >: the previous / next preset; held 0.66 s, they run on, ten a second (the owner's). They only choose: the
+     * pop-up shows the slot they have reached and it is loaded when the button is let go (in the SAVE dialog they move
+     * its slot at once, as PRESETS does) */
+    if (fa_gl || fa_sq || fa_ar || fa_sc) {               /* (a pop-up opened meanwhile: the run is dropped) */
+        if (fa_pp_pend >= 0)
+            fa_pp_until = 0;
+        fa_pp_pend = -1;
+    }
+    if (d) {
         lr_dir = d;
         lr_t0 = fm1_ms;
-        lr_next = fm1_ms + 1000u;
+        lr_next = fm1_ms + 660u;
     } else if (lr_dir && !((fm1_in.buttons >> (lr_dir > 0 ? SMK_BTN_RIGHT : SMK_BTN_LEFT)) & 1u)) {
         lr_dir = 0;
+        if (fa_pp_pend >= 0) {                            /* let go: the slot reached is loaded */
+            int32_t k = fa_pp_pend, c = (int32_t)fa_cur_slot();
+            fa_pp_pend = -1;
+            if (k != c && !fa_sv)
+                fa_preset(k - c);
+            ui.force = 1;
+        }
     } else if (lr_dir && (int32_t)(fm1_ms - lr_next) >= 0) {
         d = lr_dir;
-        lr_next += 100u;                                  /* ten a second (the owner's) */
+        lr_next += 100u;
         (void)lr_t0;
     }
-    if (d && !fa_gl)
-        fa_preset(d);
+    if (d && !fa_gl) {
+        if (fa_sv)
+            fa_preset(d);
+        else if (!fa_sq && !fa_ar && !fa_sc) {
+            int32_t k = (fa_pp_pend >= 0 ? fa_pp_pend : (int32_t)fa_cur_slot()) + d;
+            fa_pp_pend = (int16_t)((k + (int32_t)FMINI_NSLOT) % (int32_t)FMINI_NSLOT);
+            ui.force = 1;
+        }
+    }
+    if (fa_pp_pend >= 0)
+        fa_pp_until = fm1_ms + 1000u;                     /* the pop-up stays while they run */
     fm1_irq_off();
     hits = smk_pad_hits;
     smk_pad_hits = 0;
@@ -2645,30 +2681,29 @@ static void fa_smk_pads(void)
         return;
     if (fa_sq) {                                          /* the SEQ pop-up: 16 of its 64 slots, as on its grid */
         const track_t *t = TSEL;
-        uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), now = song.playing ? t->seq_idx % len : 99u, notes = 0, base;
-        for (p = 0; p < len; p++)
-            notes |= t->step[p].n;
+        uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), now = song.playing ? t->seq_idx % len : 99u, base;
         base = (now < NSTEP ? now : fa_sq_rec ? fa_sq_cur : 0u) / 16u * 16u;   /* the bank of 16 follows the step that
                                                                                  * plays (stopped: the slot a take writes) */
         for (p = 0; p < SMK_NPAD; p++) {
             uint32_t i = base + p;
+            /* (the owner's) each window of 16 its colour: 1..16 blue, 17..32 red, 33..48 yellow, 49..64 green; a step
+             * with a note lit in it, the one that plays white, the others (rests, empty) dark */
+            static const uint32_t WIN[4] = {0x1E50FFu, 0xFF2010u, 0xFFC000u, 0x18E040u};
             if (i >= NSTEP)
                 fa_pad(p, 0, 0);
             else if (i == now)
-                fa_pad(p, 0xE0752Bu, 256u);               /* the step that plays: orange */
+                fa_pad(p, 0xFFFFFFu, 256u);               /* the step that plays: white */
             else if (i < len && t->step[i].n)
-                fa_pad(p, 0xD6382Bu, 96u);                /* recorded: red */
+                fa_pad(p, WIN[i / 16u], 128u);            /* a note: its window's colour */
             else if (fa_sq_rec && i == fa_sq_cur && fa_sq_blink())
                 fa_pad(p, 0xECE4D0u, 160u);               /* the next slot of the take: cream */
-            else if (i < len && (notes || fa_sq_cur))
-                fa_pad(p, 0xD6382Bu, 24u);                /* a rest of the take: a dark red */
             else
-                fa_pad(p, 0x2A2520u, 32u);                /* empty */
+                fa_pad(p, 0, 0);                          /* no note: dark */
         }
         return;
     }
     {
-        uint32_t cur = fa_sv ? fa_sv_slot : fa_cur_slot(), base = cur / 16u * 16u;
+        uint32_t cur = fa_sv ? fa_sv_slot : fa_pp_pend >= 0 ? (uint32_t)fa_pp_pend : fa_cur_slot(), base = cur / 16u * 16u;
         for (p = 0; p < SMK_NPAD; p++) {
             uint32_t k = base + p;
             if (k >= FMINI_NSLOT)

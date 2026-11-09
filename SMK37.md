@@ -23,7 +23,7 @@ the connected model.
 | --- | --- |
 | Keys F3..G5 (the middle 27) | the FM-1's 27 keys, with velocity |
 | Keys C3..E3 and G#5..C6 (the outer 10) | more notes, one each, with velocity |
-| 16 pads | the preset picker: the 16 presets of the page that holds the loaded one, in their category's colour (the loaded one bright); a pad loads its preset (in the SAVE dialog: the slot it writes). In the SEQ pop-up the pads show 16 of its 64 steps (the page of the step that plays, or of the slot a take writes next) |
+| 16 pads | the preset picker: the 16 presets of the page that holds the loaded one, in their category's colour (the loaded one bright); a pad loads its preset (in the SAVE dialog: the slot it writes). In the SEQ pop-up the pads show 16 of its 64 steps (the page of the step that plays, or of the slot a take writes next): a step with a note in its window's colour (1-16 blue, 17-32 red, 33-48 yellow, 49-64 green), the step that plays white, the others dark |
 | K1 | MASTER (volume) |
 | K2 / K3 / K4 | PRESETS / SELECT / ALGORITHM (the screen's hints name them K2, K3, K4) |
 | K5..K8 | four knobs, by KNOB BANK: FILT's (the default), CTRL's (LFO), FX's, or the four of the page on the screen (the FM-1's K1..K4); turned, the screen shows their page for 1 s, then the page before comes back (and stays the Screen Knobs' page meanwhile) |
@@ -38,7 +38,7 @@ the connected model.
 | ARP / SEQ | the ARP / SEQ pop-ups |
 | SEQ PLAY / SEQ REC | PLAY / REC |
 | OCTAVE- / OCTAVE+ | OCT- / OCT+ |
-| < / > | the previous / next preset; held 1 s, ten presets a second |
+| < / > | the previous / next preset, loaded when the button is let go; held 0.66 s, they run on ten a second (the pop-up shows where) |
 | FADER BANK | what the faders set: A.ENV (the default), F.ENV, MIX, or the page on the screen; a pop-up names the bank for 1.2 s; lit off the default |
 | Faders 1..4 | the four knobs of the bank's page; a fader takes over only once it moves, and shows its page for 1 s as K5..K8 do |
 | KNOB BANK | what K5..K8 set: FILTER (the default), LFO, FX, or the page on the screen; a pop-up names the bank for 1.2 s; lit off the default |
