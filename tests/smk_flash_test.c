@@ -63,7 +63,10 @@ int main(void)
           !LDR_RANGE_OK(0xC0000u, 0x1000u) && FL_REC_HI == 0xC0000u);
     for (o = 0; o < OBJ_COUNT; o++)
         for (c = 0; c < 2u; c++)
-            in_store &= FL_STORE_OK(st_sector(o, c), 0x1000u) && st_sector(o, c) < FL_DATA_HI;
+            in_store &= FL_STORE_OK(st_sector(o, c), 0x1000u) &&
+                        ((o >= OBJ_PRESET0 && o <= OBJ_PRESET_LAST) ?   /* FMini-1: the preset slots in USRFLASH */
+                         st_sector(o, c) >= FL_SMP_LO && st_sector(o, c) + 0x1000u <= FL_SMP_HI :
+                         st_sector(o, c) < FL_DATA_HI);
     {   /* every object's two copies distinct */
         uint32_t o2, c2, distinct = 1;
         for (o = 0; o < OBJ_COUNT; o++)
@@ -73,10 +76,12 @@ int main(void)
                         if ((o != o2 || c != c2) && st_sector(o, c) == st_sector(o2, c2) &&
                             !(c == c2 && (o == OBJ_FM6BANK || o == OBJ_UPFM6) && (o2 == OBJ_FM6BANK || o2 == OBJ_UPFM6)))
                             distinct = 0;                 /* (the retired FM6 bank and OBJ_UPFM6 share a pair, as on the FM-1) */
-        check("storage.c: every object (A/B) in FL_DATA, no two share a sector", in_store && distinct);
+        check("storage.c: every object (A/B) in FL_DATA (FMini-1's preset slots in FL_SMP), no two share a sector",
+              in_store && distinct);
         for (o = 0, distinct = 1; o < OBJ_COUNT; o++)
             for (c = 0; c < 2u; c++)
-                distinct &= st_sector(o, c) != ST_SMK_VBANK && st_sector(o, c) < 0xAF000u;
+                distinct &= st_sector(o, c) != ST_SMK_VBANK &&
+                            (st_sector(o, c) < 0xAF000u || (o >= OBJ_PRESET0 && o <= OBJ_PRESET_LAST));
         check("FM6 voice bank 0xB0000: in FL_DATA, its own sector; objects below the owner tag 0xAF000",
               distinct && FL_STORE_OK(ST_SMK_VBANK, 0x1000u) && ST_SMK_VBANK == 0xB0000u);
     }

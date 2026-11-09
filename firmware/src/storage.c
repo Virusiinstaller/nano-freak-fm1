@@ -75,22 +75,32 @@ static uint32_t st_crc32(const void *p, uint32_t n) { return ~st_crc32_add(0xFFF
 #define ST_SMK_PAIRS 9u
 #define ST_SMK_SECTORS (2u * ST_SMK_PAIRS)
 #define ST_SMK_VBANK 0xB0000u                  /* the FM6 voice bank (fm6_vbank.c), one sector */
-_Static_assert(OBJ_COUNT == 10u && OBJ_UPFM6 == OBJ_FM6BANK + 1u, "SMK store: a new object needs a place");
+/* FMini-1: the 200 preset slots (OBJ_PRESET0..OBJ_PRESET_LAST, 13 A/B pairs, 26 sectors) do not fit FL_DATA's spare
+ * room (0xB1000..0xBAFFF, 10 sectors). FMini-1 has no sample engine, so they take USRFLASH, from FL_SMP_LO: 0xC2000..
+ * 0xDBFFF (st_erase releases the stock mapping's marker before the first erase there, storage_hw.c). */
+#define ST_SMK_PRESET 0xC2000u
+_Static_assert(OBJ_COUNT == 10u + 13u && OBJ_PRESET0 == 10u && OBJ_UPFM6 == OBJ_FM6BANK + 1u,
+               "SMK store: a new object needs a place");
+_Static_assert(ST_SMK_PRESET == FL_SMP_LO && ST_SMK_PRESET + 26u * ST_SECTOR <= FL_SMP_HI,
+               "SMK store: the preset slots inside USRFLASH (FL_SMP)");
 _Static_assert(ST_SMK_BASE + ST_SMK_SECTORS * ST_SECTOR == 0xAF000u, "SMK store: the objects end at the owner tag");
 _Static_assert(ST_SMK_VBANK >= 0xAF000u + ST_SECTOR && ST_SMK_VBANK + ST_SECTOR <= 0xBB000u, "SMK store: past FL_DATA");
 static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy A (0) / B (1) */
 {
-    static const uint8_t ORDER[OBJ_COUNT] = {
+    static const uint8_t ORDER[OBJ_PRESET0] = {
         [OBJ_PROJECT0] = 0, [OBJ_PROJECT0 + 1] = 1, [OBJ_PROJECT0 + 2] = 2, [OBJ_PROJECT0 + 3] = 3,
         [OBJ_UPRESET0] = 4, [OBJ_UPRESET0 + 1] = 5, [OBJ_AUTOSAVE] = 6, [OBJ_FM6BANK] = 7, [OBJ_UPFM6] = 7,
         [OBJ_SETTINGS] = 8};
-    return ST_SMK_BASE + (ORDER[obj % OBJ_COUNT] * 2u + (copy & 1u)) * ST_SECTOR;
+    if (obj >= OBJ_PRESET0 && obj <= OBJ_PRESET_LAST)
+        return ST_SMK_PRESET + ((obj - OBJ_PRESET0) * 2u + (copy & 1u)) * ST_SECTOR;
+    return ST_SMK_BASE + (ORDER[obj % OBJ_PRESET0] * 2u + (copy & 1u)) * ST_SECTOR;
 }
 
 /* The owner of the store. The store area is the stock firmware's VM, so after an install it may hold the stock
  * firmware's (or any other firmware's) data, which Felucca must never parse as its own. The sector after the objects
- * (0xAF000) holds the tag "SMK37DATAFELUCCA". Tagged: load as ever. Anything else (another tag, or none): clear the
- * objects (0x9D000..0xAEFFF) and the FM6 voice bank (0xB0000), then write the tag. FELUCCA_DATA_UNTAGGED_OK 1 would
+ * (0xAF000) holds the tag "SMK37DATAFMINI" (FMini-1's own family). Tagged: load as ever. Anything else (another tag,
+ * or none): clear the objects (0x9D000..0xAEFFF), the FM6 voice bank (0xB0000) and those of the preset slots
+ * (0xC2000..0xDBFFF) that hold an FMini-1 commit record, then write the tag. FELUCCA_DATA_UNTAGGED_OK 1 would
  * keep a store with an erased tag (0: the SMK build never wrote untagged data). User samples (FL_SMP) validate
  * themselves. Calibration, BT pairing and key_mac are outside FL_DATA: never touched. Called first in persist_boot
  * (project.c), before any store read. */
@@ -142,10 +152,11 @@ static void st_stock_release(void)              /* erase the marker's sector, on
         st_erase(FL_STOCKTAG_LO);
 }
 static inline int st_in_usrflash(uint32_t off) { return off >= FL_SMP_LO && off < FL_SMP_HI; }
+static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h);   /* (below) */
 static uint8_t st_owner_cleared;                /* (the UI may say so) */
 static void st_owner_check(void)
 {
-    static const char FAM[] = "FELUCCA";            /* the tag: "SMK37DATA" + this, zero-padded to 16 B */
+    static const char FAM[] = "FMINI";              /* the tag: "SMK37DATA" + this, zero-padded to 16 B (FMini-1's own family) */
     uint8_t tag[16], want[16];
     uint32_t i, erased = 1, ours = 1, s;
     for (i = 0; i < 16u; i++)
@@ -164,6 +175,13 @@ static void st_owner_check(void)
         for (s = 0; s < ST_SMK_SECTORS; s++)
             st_erase(ST_SMK_BASE + s * ST_SECTOR);
         st_erase(ST_SMK_VBANK);
+        for (s = OBJ_PRESET0; s <= OBJ_PRESET_LAST; s++) {   /* FMini-1's preset slots in USRFLASH: only a copy that */
+            st_hdr_t h;                                      /* is ours (a valid commit record): the stock mapping or */
+            uint32_t c;                                      /* another firmware's samples there are left alone */
+            for (c = 0; c < 2u; c++)
+                if (!st_head(s, c, &h))
+                    st_erase(st_sector(s, c));
+        }
         st_owner_cleared = 1;
     }
     st_erase(ST_OWNER_OFF);

@@ -251,8 +251,9 @@ done
 $CC -DT_CDC=0 -DT_UAC=1 -DT_LAYOUT=0 -DT_ON=0 -DT_48K=0 -DT_ASF=1 -DT_OUT=1 -o "$OUT/usb_desc_test" tests/usb_desc_test.c
 run "USB descriptors + playback (FELUCCA_UAC_OUT): 44.1 kHz only" "$OUT/usb_desc_test"
 
-PKG=$(ls build/fmini-1-fm1-*.fwsc 2>/dev/null | head -1)
-APP=$(ls build/fmini-1-fm1-*.bin 2>/dev/null | grep -v -- -app.bin | head -1)
+FMV=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)   # this version's files (build/ keeps older ones)
+PKG=build/fmini-1-fm1-$FMV.fwsc
+APP=build/fmini-1-fm1-$FMV.bin
 [ -f "$PKG" ] || { echo "run ./build.sh first"; exit 1; }
 
 $CC -DOWN_PKG=1 -o "$OUT/ota_test" tests/ota_test.c
@@ -269,7 +270,7 @@ $CC -DBOARD_SMK37=1 -Ifirmware/hal -o "$OUT/smk_flash_test" tests/smk_flash_test
 run "SMK-37 Pro flash map: allow-lists never reach the head, BTIF/USRTRIM, USR, key_mac; store layout" "$OUT/smk_flash_test"
 $CC -DBOARD_SMK37=1 -Ifirmware/hal -o "$OUT/smk_owner_test" tests/smk_owner_test.c
 run "SMK-37 Pro store owner tag: another firmware's store cleared, ours kept, nothing else written" "$OUT/smk_owner_test"
-python3 tools/fm1pkg_make.py --board smk37 build/felucca.bin build/loader/ota.bin "$OUT/smk_new.fwsc" >/dev/null
+python3 tools/fm1pkg_make.py --board smk37 "$APP" build/loader/ota.bin "$OUT/smk_new.fwsc" >/dev/null
 python3 tools/fm1pkg_make.py --board smk37 "$OUT/old_app.bin" build/loader/ota.bin "$OUT/smk_old.fwsc" >/dev/null
 run "SMK-37 Pro package layout (fm1pkg_make --board smk37): PRCT 0x9D000, stock region table" python3 tests/smk_pkg_test.py "$OUT/smk_new.fwsc"
 $CC -DBOARD_SMK37=1 -DOWN_PKG=1 -o "$OUT/ota_test_smk" tests/ota_test.c
@@ -279,9 +280,9 @@ for m in 1 2; do                         # the MODEL=elite / mke builds of ota.c
     run "M-UPGRADE entry, SMK model $m build (MODEL=elite / mke: its own parm identity)" "$OUT/ota_test_smk_m$m" "$OUT/smk_new.fwsc"
 done
 for m in pro elite mke; do               # the packages build.sh made (BOARD=smk37 MODEL=...), when present
-    f=build/felucca-smk37.fwsc; id="SMK-37 Pro_900"
-    [ $m = elite ] && f=build/felucca-smk37-elite.fwsc && id="SMK-37 Elite_900"
-    [ $m = mke ] && f=build/felucca-smk37-mke.fwsc && id="MKE-P37_900"
+    f=build/fmini-1-smk37-$FMV.fwsc; id="SMK-37 Pro_900"
+    [ $m = elite ] && f=build/fmini-1-smk37-elite-$FMV.fwsc && id="SMK-37 Elite_900"
+    [ $m = mke ] && f=build/fmini-1-smk37-mke-$FMV.fwsc && id="MKE-P37_900"
     [ -f $f ] && run "SMK package $f: identity $id, stock region table" python3 tests/smk_pkg_test.py $f "$id"
 done
 $CC -DBOARD_SMK37=1 -o "$OUT/ldr_test_smk" tests/ldr_test.c

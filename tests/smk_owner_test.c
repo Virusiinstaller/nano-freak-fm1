@@ -14,11 +14,13 @@
 
 static uint8_t nor[0x100000];
 static int bad_write;
+static int fmini_presets_ours;                     /* FMini-1: a preset slot with our commit record may be erased */
 static int tag_erases;
 static int st_read(uint32_t off, void *dst, uint32_t n) { memcpy(dst, nor + off, n); return 0; }
 static int st_erase(uint32_t off)
 {
-    if ((off & 0xFFFu) || !(FL_IN(off, 0x1000u, 0x9D000u, 0xAF000u) || off == 0xAF000u || off == 0xB0000u || off == 0xEA000u))
+    if ((off & 0xFFFu) || !(FL_IN(off, 0x1000u, 0x9D000u, 0xAF000u) || off == 0xAF000u || off == 0xB0000u || off == 0xEA000u ||
+                            (fmini_presets_ours && FL_IN(off, 0x1000u, 0xC2000u, 0xDC000u))))
         bad_write++;
     if (off == 0xEA000u)
         tag_erases++;
@@ -92,18 +94,18 @@ int main(void)
     fill();
     memcpy(nor + 0xAF000, "SMK37DATAOTHER\0", 16);
     st_owner_check();
-    check("another firmware's store (another tag): cleared, tagged FELUCCA", store_erased() && st_owner_cleared &&
-          !memcmp(nor + 0xAF000, "SMK37DATAFELUCCA", 16));
+    check("another firmware's store (another tag): cleared, tagged FMINI", store_erased() && st_owner_cleared &&
+          !memcmp(nor + 0xAF000, "SMK37DATAFMINI\0\0", 16));
     check("... calibration (USRTRIM) and samples untouched", others_kept());
     fill();
-    memcpy(nor + 0xAF000, "SMK37DATAFELUCCA", 16);
+    memcpy(nor + 0xAF000, "SMK37DATAFMINI\0\0", 16);
     st_owner_cleared = 0;
     st_owner_check();
     check("our own store: kept as it is", nor[0x9D000] == 0x11 && nor[0xB0000] == 0x22 && !st_owner_cleared);
     fill();
     st_owner_check();
     check("an untagged store (FELUCCA_DATA_UNTAGGED_OK 0): cleared, tagged", store_erased() &&
-          !memcmp(nor + 0xAF000, "SMK37DATAFELUCCA", 16) && others_kept());
+          !memcmp(nor + 0xAF000, "SMK37DATAFMINI\0\0", 16) && others_kept());
     /* the stock firmware's mapping in USRFLASH: kept while intact, its marker released over anything else */
     fill();
     stock();
@@ -143,6 +145,25 @@ int main(void)
     st_owner_check();
     check("no marker: the marker sector never erased", tag_erases == 0);
     check("nothing written outside FL_DATA's objects, the voice bank and the tag", bad_write == 0);
+    /* FMini-1: the preset slots live in USRFLASH (0xC2000..0xDBFFF); under another firmware's tag only a copy with
+     * FMini-1's own commit record is erased, never the stock mapping or another firmware's samples */
+    {
+        st_hdr_t h = {0};
+        uint32_t sec = st_sector(OBJ_PRESET0 + 3u, 1u);
+        fill();
+        memset(nor + 0xAF000, 0xFF, 0x1000);
+        memcpy(nor + 0xAF000, "SMK37DATAOTHER\0", 16);
+        h.magic = ST_MAGIC; h.type = (uint16_t)(OBJ_PRESET0 + 3u); h.slot = 1; h.len = 0;
+        h.hcrc = st_crc32(&h, sizeof h - 4u);
+        memset(nor + sec, 0x55, 0x1000);
+        memcpy(nor + sec, &h, sizeof h);
+        fmini_presets_ours = 1;
+        bad_write = 0;
+        st_owner_check();
+        fmini_presets_ours = 0;
+        check("FMini-1 preset slot with our record under another tag: erased; a sample there kept",
+              erased(sec, sec + 0x1000u) && nor[0xC2000] == 0x44 && bad_write == 0);
+    }
     printf("%s\n", bad ? "SMK OWNER TEST FAILED" : "smk owner test passed");
     return bad != 0;
 }

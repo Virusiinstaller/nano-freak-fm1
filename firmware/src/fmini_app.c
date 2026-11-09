@@ -2585,7 +2585,7 @@ static void fa_input(void)
 
 static void fa_leds(void)
 {
-    uint8_t nl[FM1_NCOL] = {0}, nd[FM1_NCOL] = {0}, nb[FM1_NCOL] = {0}, nm[FM1_NCOL] = {0};
+    uint8_t nl[LED_BUF] = {0}, nd[LED_BUF] = {0}, nb[LED_BUF] = {0}, nm[LED_BUF] = {0};   /* (LED_BUF: FM1_NCOL on the FM-1) */
     uint32_t k, c;
     static uint8_t ready;
     if (idle_leds() || fm1_led_anim_on())
@@ -2597,7 +2597,7 @@ static void fa_leds(void)
     for (k = 0; k < NB; k++)
         led_put(nd, panel.btn[k], 1);                       /* every button's glow */
     for (k = 0; k < 27u; k++)
-        led_put(nd, 14u + k, 1);                            /* every key's glow too: the keys lit when held or sounding stand over it */
+        led_put(nd, LED_KEY0 + k, 1);                       /* every key's glow too: the keys lit when held or sounding stand over it */
     {
         static const uint8_t PG_LED[FA_NPAGE] = {B_LFO, B_SCL, B_SCL, B_EDIT, B_ENV, B_ENV, B_FX};
         led_put(nl, panel.btn[PG_LED[fa_page]], 1);          /* the page's button */
@@ -2615,13 +2615,20 @@ static void fa_leds(void)
     led_put(nl, panel.btn[B_OCTUP], song.octave > 0);
     c = fm1_in.notes | fa_sound_keys();                     /* the keys held, and the notes sounding: arpeggio, sequence, MIDI */
     for (k = 0; k < 27u; k++)
-        led_put(nl, 14u + k, (int)((c >> k) & 1u));
+        led_put(nl, LED_KEY0 + k, (int)((c >> k) & 1u));
+#if BOARD_SMK37
+    {
+        static const uint8_t Z[LED_BUF];                    /* (no DRUM-grid lanes, no SCALE LEDS on FMini-1) */
+        smk_leds(nl, nb, nm, Z, Z);                         /* the 19 button LEDs and the pads (ui_input.c) */
+    }
+#else
     for (k = 0; k < FM1_NCOL; k++) {
         fm1_led_dim[k] = nd[k];
         fm1_led_breath[k] = nb[k];
         fm1_led_mid[k] = nm[k];
         fm1_led[k] = nl[k];
     }
+#endif
 }
 
 /* power-on: track 1 is the instrument (the first factory patch), the others are muted FMINI parts */
