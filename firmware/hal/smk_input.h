@@ -387,33 +387,51 @@ static void smk__buttons(void)
     }
 }
 
-static void smk__encoders(void)                    /* stock decoder: 3-state window, 4 counts a cycle */
+/* The encoders (FMini-1 2.5.6, the owner's report: a fast turn counted little or nothing). Each one is read once a frame
+ * (1.6 ms: row 7 of its column). The stock decoder wanted a state to hold for two frames (3.2 ms) and three valid states
+ * in a row, so above ~75 states a second (a quick spin) it dropped whole detents. This one is a plain quadrature state
+ * machine: every new state counts at once (+1 / -1 for a neighbour, the Gray code; contact bounce is a step there and back
+ * and cancels), and a state two away (one missed between two frames) counts two in the direction it was going. Each
+ * four counts are a detent; back at the rest state (the one seen at power-on: these detent on one state of the four)
+ * what is left rounds (2 or 3 counts: one more, less: none), so it never drifts off the clicks.
+ *   enc_last: the state now (0xFF: not read yet); enc_hist: the rest state (bits 0-1) and the last direction (bit 2 +,
+ *   bit 3 -); enc_cnt: the counts since the last detent, + = B leads */
+static const int8_t SMK_QDEC[16] = {0, -1, 1, 9, 1, 0, 9, -1, -1, 9, 0, 1, 9, 1, -1, 0};   /* [prev << 2 | cur]; 9 = skipped */
+static void smk__encoders(void)
 {
     uint32_t e;
     for (e = 0; e < FM1_NENC; e++) {
-        uint32_t cur = smk__closed(SMK_ENCC[e][0]) | smk__closed(SMK_ENCC[e][1]) << 1, h;
-        if (fm1_in.enc_last[e] == 0xFF) {           /* first frame */
+        uint32_t cur = smk__closed(SMK_ENCC[e][0]) | smk__closed(SMK_ENCC[e][1]) << 1, prev = fm1_in.enc_last[e], hs;
+        int32_t d, c;
+        if (prev == 0xFFu) {                        /* first frame: the rest state */
             fm1_in.enc_last[e] = (uint8_t)cur;
-            fm1_in.enc_hist[e] = (uint8_t)(cur * 0x15u);
+            fm1_in.enc_hist[e] = (uint8_t)cur;
             continue;
         }
-        if (cur != fm1_in.enc_last[e]) {            /* must hold for two frames */
-            fm1_in.enc_last[e] = (uint8_t)cur;
+        if (cur == prev)
             continue;
-        }
-        if (cur == (fm1_in.enc_hist[e] & 3u))
-            continue;
-        h = ((uint32_t)fm1_in.enc_hist[e] << 2 | cur) & 0x3Fu;
-        fm1_in.enc_hist[e] = (uint8_t)h;
-        if (h == 0x07u || h == 0x1Eu || h == 0x21u || h == 0x38u)
-            fm1_in.enc_cnt[e]--;                     /* A leads */
-        else if (h == 0x0Bu || h == 0x12u || h == 0x2Du || h == 0x34u)
-            fm1_in.enc_cnt[e]++;                     /* B leads */
-        if (fm1_in.enc_cnt[e] >= SMK_ENC_DIV || fm1_in.enc_cnt[e] <= -SMK_ENC_DIV) {   /* one step a detent */
-            int32_t s = fm1_in.enc_cnt[e] / SMK_ENC_DIV;
+        fm1_in.enc_last[e] = (uint8_t)cur;
+        hs = fm1_in.enc_hist[e];
+        d = SMK_QDEC[prev << 2 | cur];
+        if (d == 9)                                 /* one state missed: two more the way it was going (none known: none) */
+            d = (hs & 4u) ? 2 : (hs & 8u) ? -2 : 0;
+        if (d > 0)
+            hs = (hs & 3u) | 4u;
+        else if (d < 0)
+            hs = (hs & 3u) | 8u;
+        fm1_in.enc_hist[e] = (uint8_t)hs;
+        c = fm1_in.enc_cnt[e] + d;
+        if (c >= SMK_ENC_DIV || c <= -SMK_ENC_DIV) {    /* a whole cycle: a detent (also when the rest state was missed) */
+            int32_t s = c / SMK_ENC_DIV;
             fm1_in.enc_steps[e] = (int16_t)(fm1_in.enc_steps[e] + s);
-            fm1_in.enc_cnt[e] = (int16_t)(fm1_in.enc_cnt[e] - s * SMK_ENC_DIV);
+            c -= s * SMK_ENC_DIV;
         }
+        if (cur == (hs & 3u)) {                     /* back at rest: what is left of a cycle rounds to the detent */
+            if (c >= 2 || c <= -2)
+                fm1_in.enc_steps[e] = (int16_t)(fm1_in.enc_steps[e] + (c > 0 ? 1 : -1));
+            c = 0;
+        }
+        fm1_in.enc_cnt[e] = (int16_t)c;
     }
 }
 
