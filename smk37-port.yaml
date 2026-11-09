@@ -45,7 +45,7 @@ keys:
 pads:
   pattern: custom           # owner: "Picker + steps"
   order: reading            # pads 1-8 top row (hardware pads 0..7), 9-16 bottom (8..15)
-  colours: screen           # FMini-1's category colours (bass, lead, pad, pluck, keys, fx) on the picker
+  colours: orange           # owner (2.5.9): the picker all orange, dim; the loaded preset bright
   idle: dim
   playhead: bright
   picker:                   # the normal mode

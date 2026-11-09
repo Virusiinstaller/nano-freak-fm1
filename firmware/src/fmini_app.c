@@ -2524,7 +2524,7 @@ static void fa_reload_reset(void)
 #if BOARD_SMK37
 /* ------------------------------------------------ the SMK-37's extras --- *
  * (smk37-port.yaml, the owner's choices) The 16 pads are the UI's (smk_input.h smk_pad_ui): a preset picker, the 16
- * presets of the page that holds the loaded one, in their category's colour (the loaded one full, the others dim), a pad
+ * presets of the page that holds the loaded one, all orange (the loaded one full, the others dim), a pad
  * loads its preset; in the SEQ pop-up they show 16 of its 64 slots (the page of the step that plays, or of the slot a
  * take writes next) in the pop-up's colours. FADER BANK: the faders set the four knobs of A.ENV (the default), F.ENV,
  * MIX, or the page on the screen (its four knobs, the FM-1's K1..K4); KNOB BANK: K5..K8 set the four knobs of FILT (the
@@ -2658,17 +2658,6 @@ static void fa_smk_input(uint32_t pressed)
 }
 
 /* the pads' colours, over smk_leds' picture (fa_leds) */
-static uint32_t fa_cat_rgb(char c)                        /* a category's colour (category.c's letters) */
-{
-    switch (c) {
-    case 'B': return 0xE0402Au;                           /* bass: red */
-    case 'L': return 0xE0752Bu;                           /* lead: orange (the panel's) */
-    case 'P': return 0x2F7FE0u;                           /* pad: blue */
-    case 'U': return 0x30C060u;                           /* pluck: green */
-    case 'K': return 0xE0C030u;                           /* keys: yellow */
-    default: return 0xA050E0u;                            /* fx (and the rest): violet */
-    }
-}
 static void fa_pad(uint32_t p, uint32_t rgb, uint32_t lv)   /* lv 0..256 */
 {
     padled_set(p, (uint8_t)(((rgb >> 16) & 255u) * lv >> 8), (uint8_t)(((rgb >> 8) & 255u) * lv >> 8),
@@ -2709,7 +2698,7 @@ static void fa_smk_pads(void)
             if (k >= FMINI_NSLOT)
                 fa_pad(p, 0, 0);
             else
-                fa_pad(p, fa_cat_rgb(FMINI_CATS[k]), k == cur ? 256u : 20u);
+                fa_pad(p, 0xE0752Bu, k == cur ? 256u : 20u);   /* (the owner's, 2.5.9) all orange: dim, the chosen one full */
         }
     }
 }
