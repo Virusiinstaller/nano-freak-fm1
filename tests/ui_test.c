@@ -8826,7 +8826,8 @@ static int test_fmini_panel(void)
     ok &= TSEL->p[P_GLIDE] == (int16_t)fmini_patch[tr][FG_GLID];
     bad += check("FMINI panel: the GLIDE switch and knob drive the part's GLIDE time", ok);
 
-    /* the ranges and waves are names 0..5 and stop at the ends; the four common-parameter pages move the track's params */
+    /* the ranges are names 0..5, the waves 0..6 (SIN since 2.2.18), and stop at the ends; the four common-parameter pages move
+     * the track's params */
     go_title("OSC");
     frame();
     turn(EN_K1, 20);
@@ -8835,8 +8836,8 @@ static int test_fmini_panel(void)
     ok &= fmini_patch[tr][FG_R1] == 0u;
     fmg_cur[1] = 5;                                  /* WAVE2 */
     turn(EN_ALGO, 20);
-    ok &= fmini_patch[tr][FG_W2] == 5u;
-    bad += check("FMINI panel: RANGE 1 and WAVE 2 run 0..5 and stop at the ends", ok);
+    ok &= fmini_patch[tr][FG_W2] == 6u;
+    bad += check("FMINI panel: RANGE 1 runs 0..5, WAVE 2 0..6 (SIN), and they stop at the ends", ok);
     go_title("FILT");
     frame();
     b0 = (uint32_t)TSEL->p[P_E0];
