@@ -53,6 +53,8 @@ BUILDING.md has the SDK clone). If a download is refused by the network allowlis
   `tests/fmini_filter_test.c` (section 3a holds the velocity) when you touch `track_render`.
 - Raw CUTOFF / EMPHASIS bytes changed meaning in 1.7.0: a stored patch, user preset, sound file or library entry from 1.6.x sounds
   different. Any change of a stored value's meaning needs a note in `web/EDITOR_PROTOCOL.md` and, if possible, a migration.
+- Every new firmware build the owner gets carries a new version: bump the patch number (0.0.x) before building, never
+  ship a changed firmware under a version already given out.
 - The version is `FMINI_VER_MAJ/MIN/PATCH` and `FMINI_VERSION` in `firmware/src/core.h`; the workflow, the emulator and the installer read it from there. INFO reports it (tag `49`), and the web editor compares it with `FW_LATEST` in `web/editor_fmini.html`: change both with the version.
   (`FELUCCA_VERSION` in `felucca.c` is Felucca's and stays.) After a version bump rebuild `docs/emu` and `docs/index.html`.
 - Until 1.7.0 "FMINI" was called FMUG (files, identifiers, the engine's name on the device and in the editor protocol). Old
