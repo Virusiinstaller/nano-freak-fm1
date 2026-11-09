@@ -129,7 +129,8 @@ static void smk_faders(void)
 static void smk_wheels(void)
 {
     enum { DEAD = 12, SPAN0 = 80, MOD_LO = 485, MOD_HI = 615 };
-    static int32_t pc, plo, phi, mlo, mhi, rest;
+    static int32_t pc, plo, phi, mlo, mhi;
+    static uint32_t rest_t, drift_t;
     int32_t p = fm1_in.wheel[0], m = fm1_in.wheel[1], d, b, mw;
     if (fm1_in.frames < 300u)                     /* (the readings settle) */
         return;
@@ -150,13 +151,18 @@ static void smk_wheels(void)
         mhi = m;
     d = p - pc;
     if (d > -DEAD && d < DEAD) {
+        /* resting: the centre follows a slow drift, one count every 0.5 s once the wheel has been in the dead band for
+         * 1 s (FMini-1 2.5.8: it was one count every 200 calls, and this runs thousands of times a second, so the centre
+         * followed a slow push of the wheel and stayed there: let go, the wheel was off centre, a bend that stayed) */
         b = 0;
-        if (++rest > 200) {                        /* resting: the centre follows a slow drift */
+        if (!rest_t)
+            rest_t = fm1_ms | 1u;
+        if (fm1_ms - rest_t >= 1000u && fm1_ms - drift_t >= 500u) {
             pc += d > 0 ? 1 : d < 0 ? -1 : 0;
-            rest = 0;
+            drift_t = fm1_ms;
         }
     } else {
-        rest = 0;
+        rest_t = 0;
         b = d > 0 ? (d - DEAD) * 8191 / (phi - pc - DEAD > 1 ? phi - pc - DEAD : 1)
                   : (d + DEAD) * 8192 / (pc - plo - DEAD > 1 ? pc - plo - DEAD : 1);
         b = clamp(b, -8192, 8191);
