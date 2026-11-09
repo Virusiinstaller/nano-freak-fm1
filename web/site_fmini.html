@@ -388,6 +388,7 @@
       <div class="side">
       <p class="note" data-t="intro"></p>
       <p class="note" data-t="compat"></p>
+      <p class="note" data-t="smk" id="smknote" hidden></p>
       <p class="note warn" data-t="warn"></p>
       <p class="note" data-t="direct"></p>
       <p class="note" data-t="beta"></p>
@@ -421,6 +422,7 @@ const TEXT = {
   pt: {
     intro: "Conecte o FM-1 por USB. (Funciona no Chrome ou no Edge.)",
     compat: "Compatível com as novas versões do FM-1 (com o chip de flash UC25HQ80).",
+    smk: "M-Vave SMK-37 (Pro, Elite, MKE-P37; beta): o instalador reconhece o modelo conectado e grava o pacote dele. Faça antes um backup completo da flash.",
     warn: "Não desconecte o cabo USB durante a gravação.",
     install: "Instalar", other: "English",
     fw_pick: "Instalar outro firmware (.fwsc)…", fw_bad: "Este arquivo não é um firmware FM-1 válido.",
@@ -455,6 +457,7 @@ const TEXT = {
   en: {
     intro: "Connect the FM-1 by USB. (Works in Chrome or Edge.)",
     compat: "Supports the new FM-1 versions (with the UC25HQ80 flash chip).",
+    smk: "M-Vave SMK-37 (Pro, Elite, MKE-P37; beta): the installer recognises the connected model and writes its package. Make a full flash backup first.",
     warn: "Do not unplug the USB cable while writing.",
     install: "Install", other: "Português",
     fw_pick: "Install another firmware (.fwsc)…", fw_bad: "This file is not a valid FM-1 firmware.",
@@ -693,9 +696,29 @@ function stopCrawl() { if (crawl) clearInterval(crawl); crawl = null; }
 let image = null;
 const meta = /*META*/;
 let product = meta.product;                 /* the package to install: the site's, or one chosen below */
+let picked = false;                         /* a .fwsc the player chose: installed as it is (no board choice) */
+/* the board's package: the connected device's model picks the site's FM-1 package or one of meta.boards (the SMK-37
+ * Pro, Elite, MKE-P37 packages, when the page carries them); none: the FM-1's (install() then names the model) */
+async function chooseBoard(up) {
+  if (picked || !meta.boards || !meta.boards.length) return;
+  const dev = await up.find(() => true);
+  if (!dev) return;
+  dev.link.close();
+  const want = (p) => sameModel(dev.id.model, p.split("_")[0]);
+  const hit = want(meta.product) ? null : meta.boards.find((b) => want(b.product));
+  const use = hit || { product: meta.product, pkg: meta.pkg };
+  if (use.product === product && image) return;
+  const r = await fetch(use.pkg);
+  const pkg = new Uint8Array(await r.arrayBuffer());
+  if (productOf(pkg) !== use.product) throw Object.assign(new Error("package"), { code: "badpkg" });
+  image = logicalImage(pkg);
+  product = use.product;
+  log(`board: ${dev.id.text} -> ${product}`);
+}
 document.querySelectorAll(".curver").forEach((e) => { e.textContent = "v" + meta.version; });
 document.querySelectorAll(".curver-b").forEach((e) => { e.textContent = "(v" + meta.version + ")"; });
 { const dl = document.getElementById("fwdl"); if (dl) { dl.href = meta.pkg; dl.download = "FMini-1-" + meta.version + ".fwsc"; } }
+{ const n = document.getElementById("smknote"); if (n) n.hidden = !(meta.boards && meta.boards.length); }
 
 let writing = false;
 let wake = null;
@@ -761,6 +784,7 @@ async function runInstall(portName) {
       if (k === "reboot") { stopCrawl(); sayK("reboot"); setBar(100, "reboot"); }
       if (k === "done") { stopCrawl(); setBar(100, "done"); sayK("done"); }
     };
+    await chooseBoard(up);
     const ota = await up.find((id) => /^ota-/i.test(id.model));
     if (ota) {
       ota.link.close();
@@ -800,6 +824,7 @@ $("fwfile").addEventListener("change", async (e) => {
     if (!/^FM-1_9\d\d$/.test(prod) || !hasMarker(pkg)) { sayK("fw_bad"); $("go").disabled = true; image = null; return; }
     image = logicalImage(pkg);
     product = prod;
+    picked = true;
     say(`${file.name} (${prod})`);
     $("go").disabled = false;
     setBar(0, null);

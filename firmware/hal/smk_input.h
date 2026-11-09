@@ -102,6 +102,10 @@ static volatile uint8_t smk_pad_grid;   /* set by the UI: pads as a step grid, w
  * black keys between them (C#4 D#4 - F#4 G#4 A#4 - C#5); note-key index (0 = F3) by hardware pad, -1 = none */
 static const int8_t SMK_PIANO_NOTE[SMK_NPAD] = {7, 9, 11, 12, 14, 16, 18, 19, 8, 10, -1, 13, 15, 17, -1, 20};
 static volatile uint8_t smk_pad_piano;
+/* the UI owns the pads (FMini-1: a preset picker, the SEQ's steps): a hit plays no note, it sets the hardware pad's bit
+ * in smk_pad_hits (taken by the UI); a release does nothing */
+static volatile uint8_t smk_pad_ui;
+static volatile uint16_t smk_pad_hits;
 static uint8_t smk_pad_note[SMK_NPAD];   /* the note key a pad pressed (+1; 0 = none): its release ends that one */
 #define SMK_WHITE_OF_PAD(p) (smk_pad_grid ? (p) : (p) < 8u ? (p) + 8u : (p) - 8u)
 
@@ -439,6 +443,11 @@ static void smk__padq(uint32_t pad, uint32_t vel)     /* a pad hit (vel) or rele
 {
     int32_t n0 = smk_pad_piano ? SMK_PIANO_NOTE[pad] : (int32_t)SMK_WHITE_NOTE[SMK_WHITE_OF_PAD(pad)];
     uint32_t n, bit;
+    if (smk_pad_ui && !smk_pad_note[pad]) {             /* (a note a pad started before keeps its release) */
+        if (vel)
+            smk_pad_hits |= (uint16_t)(1u << pad);
+        return;
+    }
     if (vel) {
         if (n0 < 0)
             return;                                   /* (a gap of the piano layout) */

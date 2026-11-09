@@ -22,7 +22,14 @@ def main(pkg, out, version="1.4.2"):
     html = (HERE / "site_fmini.html").read_text(encoding="utf-8")
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8")) for f in ("fm1pkg.js", "fm1ota.js", "fm1backup.js"))
     url = "data:application/octet-stream;base64," + base64.b64encode(raw).decode()
-    meta = json.dumps({"version": version, "product": product, "pkg": url})
+    boards = []                     # the SMK-37 packages of this version beside the FM-1's (BOARD=smk37 builds), when present
+    for b in sorted(Path(pkg).parent.glob(f"fmini-1-smk37*-{version}.fwsc")):
+        rb = b.read_bytes()
+        pb = product_of(rb)
+        if not re.fullmatch(r"(SMK-37 Pro|SMK-37 Elite|MKE-P37)_9\d\d", pb) or b"FELUCCA-LOADER-1" not in rb:
+            raise SystemExit(f"{b}: not an SMK-37 package of FMini-1 (identity {pb!r})")
+        boards.append({"product": pb, "pkg": "data:application/octet-stream;base64," + base64.b64encode(rb).decode()})
+    meta = json.dumps({"version": version, "product": product, "pkg": url, "boards": boards})
     hero = "data:image/jpeg;base64," + base64.b64encode((HERE.parent / "assets" / "fmini-installer-hero.jpg").read_bytes()).decode()
     imgs = {p.stem: ("data:image/" + ("webp" if p.suffix == ".webp" else "png") + ";base64,") + base64.b64encode(p.read_bytes()).decode() for p in sorted((HERE.parent / "assets" / "site").glob("*.*"))}
     names = re.findall(r'"([A-Z0-9 .\'/+&-]{2,12})"', (HERE.parent / "firmware" / "src" / "eng_fmini_presets.h").read_text())[:10]
@@ -33,7 +40,8 @@ def main(pkg, out, version="1.4.2"):
     html = html.replace("/*LIB*/", lib).replace("/*META*/", meta).replace("/*HERO*/", hero)
     html = html.replace('<span class="ver" id="ver">v1.1.0</span>', f'<span class="ver" id="ver">v{version}</span>', 1)
     Path(out).write_text(html, encoding="utf-8")
-    print(f"{out}: {len(html)} B, {product}, package {len(raw)} B embedded")
+    print(f"{out}: {len(html)} B, {product}, package {len(raw)} B embedded" +
+          (f"; SMK-37: {', '.join(b['product'] for b in boards)}" if boards else ""))
 
 
 if __name__ == "__main__":

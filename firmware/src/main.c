@@ -92,6 +92,10 @@ static void smk_faders(void)
 {
     static uint8_t last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
     uint32_t i;
+#if FELUCCA_FMINI_ONLY
+    fa_smk_faders();                                      /* FMini-1: the faders set the A.ENV / F.ENV / MIX knobs */
+    return;
+#endif
     if (smk_fbank_new) {                                  /* a new bank: wait for each fader to move */
         smk_fbank_new = 0;
         for (i = 0; i < 4u; i++)
