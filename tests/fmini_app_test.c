@@ -1181,7 +1181,7 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 6) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);

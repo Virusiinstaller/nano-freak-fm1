@@ -19,8 +19,8 @@
 /* FMini-1 firmware version: the one the device shows and INFO reports (tag 0x49). Bump it on every firmware change. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 3u
-#define FMINI_VERSION "v2.5.3"
+#define FMINI_VER_PATCH 4u
+#define FMINI_VERSION "v2.5.4"
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
 /* FMINI: the filter contour's RELEASE index (0..127): the explicit value, or the DECAY when none was set (the older presets) */
 #define FMINI_FREL(t) (((t)->frel & 0x80) ? ((t)->frel & 127) : ((t)->p[P_E4] & 127))

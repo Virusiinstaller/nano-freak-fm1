@@ -2164,7 +2164,7 @@ static void fa_buttons(uint32_t pressed)
                 fa_sc = 0;
                 fa_sq = 0;
                 fa_sq_rec = 0;
-                fa_gl_row = 5u;
+                fa_gl_row = 6u;                            /* (ABOUT's row) */
                 fa_gl = 3u;
             }
         }
