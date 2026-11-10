@@ -20,14 +20,14 @@
 #if BOARD_SMK37                  /* the SMK-37 build has its own version (tools/build.py, the installer workflow read it) */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 10u
-#define FMINI_SMK_VERSION "v2.5.10"
+#define FMINI_VER_PATCH 11u
+#define FMINI_SMK_VERSION "v2.5.11"
 #define FMINI_VERSION FMINI_SMK_VERSION
 #else
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 2u
-#define FMINI_VERSION "v2.5.2"
+#define FMINI_VER_PATCH 4u
+#define FMINI_VERSION "v2.5.4"
 #endif
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
 /* FMINI: the filter contour's RELEASE index (0..127): the explicit value, or the DECAY when none was set (the older presets) */

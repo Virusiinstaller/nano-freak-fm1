@@ -897,18 +897,29 @@ int main(int argc, char **argv)
             if (fa_gl == 7) { printf("EDIT closes PRESET SETTINGS\n"); return 1; }
             fm_bend_mode = bm; TSEL->mw = mw0; TSEL->p[P_LEVEL] = (int16_t)lv;
         }
-        /* GLOBAL: NOTE PRIORITY is row 3 (below TRANSPOSE), SUPPORT FMINI-1!! row 4, ABOUT row 5: ALGORITHM opens the QR screen, any key goes back to it */
+        /* GLOBAL: NOTE PRIORITY is row 3 (below TRANSPOSE), FACTORY RESET row 4 (2.5.3), SUPPORT FMINI-1!! row 5, ABOUT
+         * row 6: ALGORITHM opens the QR screen, any key goes back to it */
         fa_gl = 1; fa_gl_row = 2; fturn(EN_SELECT, 1);
         if (fa_gl_row != 3) { printf("note priority row\n"); return 1; }
         fturn(EN_SELECT, 1);
-        if (fa_gl_row != 4) { printf("support row\n"); return 1; }
+        if (fa_gl_row != 4) { printf("factory reset row\n"); return 1; }
+        fturn(EN_SELECT, 1);
+        if (fa_gl_row != 5) { printf("support row\n"); return 1; }
         fturn(EN_SELECT, 1); fturn(EN_SELECT, 1);
-        if (fa_gl_row != 0) { printf("GLOBAL wraps at 6 (%d)\n", fa_gl_row); return 1; }
+        if (fa_gl_row != 0) { printf("GLOBAL wraps at 7 (%d)\n", fa_gl_row); return 1; }
         fa_gl = 1; fa_gl_row = 4; fturn(EN_ALGO, 1);
+        if (fa_gl != 8 || fa_fr_yes) { printf("factory reset question opens on NO (%d)\n", fa_gl); return 1; }
+        fturn(EN_ALGO, 1);
+        if (!fa_fr_yes) { printf("factory reset: ALGORITHM to YES\n"); return 1; }
+        fturn(EN_ALGO, -1);
+        if (fa_fr_yes) { printf("factory reset: ALGORITHM back to NO\n"); return 1; }
+        fa_buttons(1u << panel.btn[B_EDIT]);
+        if (fa_gl != 1 || fa_gl_row != 4) { printf("factory reset: another key goes back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
+        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
         if (fa_gl != 6) { printf("support opens (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 43);
         fa_buttons(1u << panel.btn[B_EDIT]);
-        if (fa_gl != 1 || fa_gl_row != 4) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 5) { printf("support key back (%d, %d)\n", fa_gl, fa_gl_row); return 1; }
         fa_gl = 6; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("support ALGO back (%d)\n", fa_gl); return 1; }
         /* NOTE PRIORITY (row 3, below TRANSPOSE): LOW (default), HIGH, LAST; the mono part plays the note it picks */
@@ -1057,7 +1068,7 @@ int main(int argc, char **argv)
             if (song.playing) { printf("TRS clock: stop\n"); return 1; }
             fa_clk = 0; fa_clk_apply();
         }
-        fa_gl = 1; fa_gl_row = 5; fturn(EN_ALGO, 1);
+        fa_gl = 1; fa_gl_row = 6; fturn(EN_ALGO, 1);
         if (fa_gl != 3) { printf("ABOUT opens\n"); return 1; }
         fa_gl = 3; fturn(EN_ALGO, 1);
         if (fa_gl != 1) { printf("about ALGO\n"); return 1; }
@@ -1170,12 +1181,12 @@ int main(int argc, char **argv)
         fframes(400);                                    /* 0.4 s: still the list */
         if (fa_gl != 1) { printf("GLO 0.4 s: the list (%d)\n", fa_gl); return 1; }
         fframes(200);                                    /* past 0.5 s: ABOUT */
-        if (fa_gl != 3 || fa_gl_row != 5) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 3 || fa_gl_row != 6) { printf("GLO held: ABOUT (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fm1_in.buttons &= ~(1u << panel.btn[B_GLO]); fframe();
         if (fa_gl != 3) { printf("GLO released: ABOUT stays (%d)\n", fa_gl); return 1; }
         ui.force = 1; fa_draw(); dump(dir, 921);
         fpress(B_GLO);                                   /* GLO from ABOUT: back to the list, on ABOUT's line */
-        if (fa_gl != 1 || fa_gl_row != 5) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
+        if (fa_gl != 1 || fa_gl_row != 6) { printf("ABOUT -> list (%d, row %d)\n", fa_gl, fa_gl_row); return 1; }
         fpress(B_GLO);
         fpress(B_SEQ);                                   /* from the SEQ pop-up (REC armed): held GLO closes it, ABOUT */
         fpress(B_REC);
@@ -1232,6 +1243,26 @@ int main(int argc, char **argv)
         for (n = 0; n < FA_NCC; n++)
             fa_cc[n] = 0;
         if (bad) return 1;
+    }
+    {   /* 2.5.3: GLOBAL > FACTORY RESET: its line opens the question (NO first); SAVE on NO goes back and changes nothing;
+         * SAVE on YES forgets every saved preset and puts GLOBAL's settings back */
+        uint32_t save = 1u << panel.btn[B_SAVE];
+        if (fa_save_slot(150, "MY PATCH") != 0 || !str_eq(ENGINES[ENGI_FMINI]->presets[150].name, "MY PATCH")) { printf("reset: no saved preset to forget\n"); return 1; }
+        fa_gl_close(); fa_sv = 0; fa_ar = 0; fa_sq = 0; fa_sc = 0; fmg_fx = 0;
+        fa_tune_hz = 445; glo_transpose = 3; glo_note_prio = 2; fm_midi_ch = 5;
+        fa_gl = 1; fa_gl_row = 4;
+        ui.force = 1; fa_draw(); dump(dir, 940);           /* GLOBAL with FACTORY RESET above SUPPORT */
+        fa_gl = 8; fa_fr_yes = 0;                          /* (ALGORITHM on the line: fa_input) */
+        ui.force = 1; fa_draw(); dump(dir, 941);           /* the question, NO */
+        fa_buttons(save);
+        if (fa_gl != 1 || fa_gl_row != 4 || fa_tune_hz != 445 || !str_eq(ENGINES[ENGI_FMINI]->presets[150].name, "MY PATCH")) { printf("reset: NO did something\n"); return 1; }
+        fa_gl = 8; fa_fr_yes = 1;
+        ui.force = 1; fa_draw(); dump(dir, 942);           /* YES */
+        fa_buttons(save);
+        if (fa_gl) { printf("reset: GLOBAL still open\n"); return 1; }
+        if (str_eq(ENGINES[ENGI_FMINI]->presets[150].name, "MY PATCH") || !str_eq(ENGINES[ENGI_FMINI]->presets[150].name, FMINI_PRESETS[150].name)) { printf("reset: preset 150 not the factory's\n"); return 1; }
+        if (fa_tune_hz != 440 || glo_transpose != 0 || glo_note_prio != 1 || fm_midi_ch != 0) { printf("reset: GLOBAL's settings kept\n"); return 1; }
+        ui.force = 1; fa_draw(); dump(dir, 943);           /* RESET DONE */
     }
     printf("fmini_app_test: ok\n");
     {   /* the CUTOFF / EMPH / CNTR knobs glide (200 ms): a click is a ramp of tiny steps, silence snaps */
