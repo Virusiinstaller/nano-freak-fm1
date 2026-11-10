@@ -952,6 +952,10 @@ def preset_moves(b):
             vib=40, mflt=True, lfo=(0.13, "TRI", 0, "OFF"),
             send=(0, 90, 45, 105), rv=("CLOUD", 115, 90), dl=("TAPE", 750, 50), ch=("JUNO", 110, 0.25), pat=5)
     P[84] = tmp.p[0]
+    # 2.5.2 (the owner's): 000 MINI LEAD is MONO, its PITCH BEND +/-2 (a factory patch carries no PRESET SETTINGS record:
+    # +/-2 is what it gets) and its filter contour's SUSTAIN 7.9 on the screen (100: 100 * 100 / 127 rounds to 79 %)
+    P[0]["poly"] = False
+    P[0]["e"][5] = 100
 
 def build(b):
     showcase(b)
