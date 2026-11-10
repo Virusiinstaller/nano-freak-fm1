@@ -2524,7 +2524,7 @@ static void fa_reload_reset(void)
 #if BOARD_SMK37
 /* ------------------------------------------------ the SMK-37's extras --- *
  * (smk37-port.yaml, the owner's choices) The 16 pads are the UI's (smk_input.h smk_pad_ui): a preset picker, the 16
- * presets of the page that holds the loaded one, all orange (the loaded one full, the others dim), a pad
+ * presets of the page that holds the loaded one, dim blue (the loaded one bright white), a pad
  * loads its preset; in the SEQ pop-up they show 16 of its 64 slots (the page of the step that plays, or of the slot a
  * take writes next) in the pop-up's colours. FADER BANK: the faders set the four knobs of A.ENV (the default), F.ENV,
  * MIX, or the page on the screen (its four knobs, the FM-1's K1..K4); KNOB BANK: K5..K8 set the four knobs of FILT (the
@@ -2698,7 +2698,8 @@ static void fa_smk_pads(void)
             if (k >= FMINI_NSLOT)
                 fa_pad(p, 0, 0);
             else
-                fa_pad(p, 0xE0752Bu, k == cur ? 256u : 20u);   /* (the owner's, 2.5.9) all orange: dim, the chosen one full */
+                fa_pad(p, k == cur ? 0xFFFFFFu : 0x1E50FFu, k == cur ? 256u : 20u);   /* (the owner's, 2.5.10) dim blue, the
+                                                                                     * chosen one bright white */
         }
     }
 }
