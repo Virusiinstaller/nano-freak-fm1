@@ -12,7 +12,8 @@ enum {
     FR_PATCH = 2,    /* FG_SIZE bytes: the track's patch (eng_fmini.c) */
     FR_EXTRA = 3,    /* the fmini_x_t bytes: arpeggiator, LFO, FX, level, modulation, octave */
     FR_PARAM = 4,    /* the preset's parameter values: 2 bytes each, little endian, in order */
-    FR_PSET = 5,     /* the preset's own settings: PITCH BEND range (0..3), MOD WHEEL position (0..127) */
+    FR_PSET = 5,     /* the preset's own settings: PITCH BEND range (0..3), MOD WHEEL position (0..127), the RELEASEs
+                      * (1.8: 2 bytes more), VELOCITY SENS. (2.5.5: 1 byte more, 0 OFF / 1 ON; shorter: OFF) */
 };
 
 /* append one block; 0 when it does not fit in cap */

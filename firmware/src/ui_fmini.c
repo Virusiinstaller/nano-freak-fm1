@@ -18,7 +18,7 @@ static void ml_knob(const track_t *t, uint32_t id);              /* (midi_learn.
 static uint8_t fmg_gdirty;                                        /* a global (FK_GLB) changed: fmini_app.c saves it */
 static uint8_t fmg_cur[12];                                        /* the cursor of each page: 0..3 the knobs, 4.. extras */
 
-enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE, FK_FREL, FK_VOL };   /* FK_VOL: PRESET SETTINGS' VOLUME, shown 0..10 (stored as P_LEVEL 0..127) */   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
+enum { FK_BYTE, FK_PAR, FK_SW, FK_NAME, FK_GLIDE, FK_BYP, FK_INS, FK_GLB, FK_VOICE, FK_EDIT, FK_BEND, FK_WHEEL, FK_NONE, FK_FREL, FK_VOL, FK_VSENS };   /* FK_VSENS: PRESET SETTINGS' VELOCITY SENS. ON / OFF (fm_vel_sens) */   /* FK_VOL: PRESET SETTINGS' VOLUME, shown 0..10 (stored as P_LEVEL 0..127) */   /* FK_BEND (the preset's PITCH BEND range), FK_WHEEL (its MOD WHEEL position), FK_NONE (a knob with no function) */   /* FK_BYP: a send's on / off (its value kept aside); FK_INS: the INSERT; FK_EDIT (FMini-1): a button that opens an FX pop-up (a = 0..3: REVERB DELAY CHORUS DRIVE) */
 typedef struct {
     const char *lb;                                               /* card label (<= 6) */
     uint8_t kind, a, b;                                           /* a: byte index or param id; b: switch bit / names */
@@ -55,9 +55,10 @@ static const struct { const char *name; uint8_t n; fmgf_t f[FMG_NF]; } FMG_PAGE[
                     {"EDIT", FK_EDIT, 0, 0, ICON_REVERB}, {"EDIT", FK_EDIT, 1, 0, ICON_DELAY},
                     {"EDIT", FK_EDIT, 2, 0, ICON_CHORUS}, {"EDIT", FK_EDIT, 3, 0, ICON_DRIVE}}},
     /* PRESET SETTINGS (1.25.0): the page after FX, and the EDIT pop-up on FILT: VOLUME (the LEVEL that was A.ENV's),
-     * MODE (MONO / POLY, as CTRL's VOICES), PITCH BEND and MOD WHEEL, both kept in the preset */
-    {"PRESET SETTINGS", 4, {{"VOLUME", FK_VOL, P_LEVEL, 0, ICON_LEVEL}, {"MODE", FK_VOICE, P_VOICE, 0, ICON_LEVEL},
-                            {"PITCH BEND", FK_BEND, 0, 0, ICON_SWEEP}, {"MOD WHEEL", FK_WHEEL, 0, 0, ICON_MOD}}},
+     * MODE (MONO / POLY, as CTRL's VOICES), PITCH BEND and MOD WHEEL, both kept in the preset; 2.5.5: VELOCITY SENS. */
+    {"PRESET SETTINGS", 5, {{"VOLUME", FK_VOL, P_LEVEL, 0, ICON_LEVEL}, {"MODE", FK_VOICE, P_VOICE, 0, ICON_LEVEL},
+                            {"PITCH BEND", FK_BEND, 0, 0, ICON_SWEEP}, {"MOD WHEEL", FK_WHEEL, 0, 0, ICON_MOD},
+                            {"VELOCITY SENS.", FK_VSENS, 0, 0, ICON_LEVEL}}},
     /* the FX pop-ups: four knobs each (K1..K4) */
     {"REVERB", 4, {{"MIX", FK_PAR, P_REV, 0, ICON_REVERB}, {"TYPE", FK_GLB, G_RTYPE, 0, ICON_REVERB},
                    {"DECAY", FK_GLB, G_RSIZE, 0, ICON_REVERB}, {"TONE", FK_GLB, G_RDAMP, 0, ICON_REVERB}}},
@@ -306,6 +307,9 @@ static void fmg_turn(uint32_t pg, uint32_t i, int32_t s, uint32_t role)
     case FK_BEND:                                     /* PITCH BEND: the preset's range (fm_bend_mode), a step a detent */
         fm_bend_mode = (uint8_t)clamp((int32_t)fm_bend_mode + (s > 0 ? 1 : -1), 0, 3);
         break;
+    case FK_VSENS:                                    /* VELOCITY SENS.: ON clockwise, OFF the other way; saved with the preset */
+        fm_vel_sens = (uint8_t)(s > 0);
+        break;
     case FK_WHEEL:                                    /* MOD WHEEL: the track's position (t->mw, as CC1 sets it); saved with the preset */
         t->mw = (uint8_t)clamp((int32_t)t->mw + fmg_acc(role, s, 127), 0, 127);
         break;
@@ -386,7 +390,7 @@ static void fmg_range(uint32_t pg, uint32_t i, int32_t *lo, int32_t *hi)
 {
     const fmgf_t *f = fmg_field(pg, i);
     *lo = 0;
-    *hi = f->kind == FK_SW || f->kind == FK_BYP || f->kind == FK_INS || f->kind == FK_VOICE || f->kind == FK_EDIT ? 1 : f->kind == FK_NAME ? (f->b == FN_WAVE ? 6 : 5) : 127;
+    *hi = f->kind == FK_SW || f->kind == FK_BYP || f->kind == FK_INS || f->kind == FK_VOICE || f->kind == FK_EDIT || f->kind == FK_VSENS ? 1 : f->kind == FK_NAME ? (f->b == FN_WAVE ? 6 : 5) : 127;
     if (f->kind == FK_GLB) {
         *lo = GP[f->a].min;
         *hi = GP[f->a].max;
@@ -473,6 +477,11 @@ static void fmg_card_at(uint32_t pg, uint32_t i, int32_t vo, const char **label,
         v = vo >= 0 ? vo : (int32_t)fm_bend_mode;
         str_cpy(val, FMG_BEND[clamp(v, 0, 3)], 12);
         *ratio = clamp(v, 0, 3) * 1000 / 3;
+        return;
+    case FK_VSENS:
+        v = vo >= 0 ? vo : (int32_t)fm_vel_sens;
+        str_cpy(val, v ? "ON" : "OFF", 12);
+        *ratio = v ? 1000 : 0;
         return;
     case FK_WHEEL:
         v = vo >= 0 ? vo : (int32_t)t->mw;

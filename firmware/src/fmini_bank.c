@@ -65,11 +65,12 @@ static uint32_t fb_factory_rec(uint32_t k, uint8_t *rec)
     n = fr_put(rec, FB_SLOT, n, FR_PARAM, par, sizeof par);
     {   /* the factory's PITCH BEND (0 = +-2), MOD WHEEL (0), and the RELEASEs: the filter's is its DECAY, the loudness's its
          * DECAY too, so the sound is the one the presets always had */
-        uint8_t PS[4];
+        uint8_t PS[5];
         PS[0] = 0;
         PS[1] = 0;
         PS[2] = (uint8_t)(k < FMINI_NFACTORY ? FMINI_PRESETS[k].e[4] & 127 : 0);
         PS[3] = (uint8_t)(k < FMINI_NFACTORY ? FMINI_PRESETS[k].env[1] & 127 : 0);
+        PS[4] = 0;                              /* VELOCITY SENS. OFF on every factory preset (2.5.5) */
         n = fr_put(rec, FB_SLOT, n, FR_PSET, PS, sizeof PS);
     }
     return n;
@@ -176,7 +177,7 @@ static void fb_extra(uint32_t k, fmini_x_t *x)
 }
 
 /* slot k's PITCH BEND range and MOD WHEEL position (the FR_PSET block; 0 and 0 when it is not there, as the factory's are) */
-static uint32_t fb_pset(uint32_t k, uint8_t *bend, uint8_t *wheel, uint8_t *frel, uint8_t *arel)
+static uint32_t fb_pset(uint32_t k, uint8_t *bend, uint8_t *wheel, uint8_t *frel, uint8_t *arel, uint8_t *vsens)
 {
     uint8_t rec[FB_SLOT];
     uint32_t n = fb_read(k, rec), l = 0;
@@ -185,6 +186,7 @@ static uint32_t fb_pset(uint32_t k, uint8_t *bend, uint8_t *wheel, uint8_t *frel
     *wheel = 0;
     *frel = 0;
     *arel = 0;
+    *vsens = 0;
     if (fr_find(rec, n, FR_PSET, &d, &l) && l >= 2u) {
         *bend = (uint8_t)(d[0] & 3u);
         *wheel = (uint8_t)(d[1] & 127u);
@@ -192,6 +194,8 @@ static uint32_t fb_pset(uint32_t k, uint8_t *bend, uint8_t *wheel, uint8_t *frel
             *frel = (uint8_t)(d[2] & 127u);
             *arel = (uint8_t)(d[3] & 127u);
         }
+        if (l >= 5u)                            /* VELOCITY SENS. (2.5.5); an older record: OFF */
+            *vsens = (uint8_t)(d[4] & 1u);
     }
     return l;                                   /* 0 or 2: a record of before the RELEASE knobs; 4: with them */
 }

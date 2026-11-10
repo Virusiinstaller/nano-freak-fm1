@@ -1109,6 +1109,7 @@ static void fa_cfg_defaults(void)                         /* GLOBAL's settings a
     smk_out_ch = 0;
 #endif
     fm_bend_mode = 0;
+    fm_vel_sens = 0;
     fm_bt = 0;
     fa_clk = 0;
     glo_note_prio = 1;
@@ -1125,6 +1126,9 @@ static void fa_cfg_load(void)
         fm_midi_src = (uint8_t)(src == 0u || src == 1u ? src : 3u);   /* (2 was Bluetooth) */
         fm_midi_ch = (uint8_t)(ch > 16u ? 0u : ch);
         fm_bend_mode = (uint8_t)(*fa_cfg_byte(4u + FA_NCC) & 3u);
+        {   uint32_t vb = *fa_cfg_byte(23u + FA_NCC);   /* VELOCITY SENS. as the last sound had it: 0xD0 | v; else OFF */
+            fm_vel_sens = (uint8_t)((vb & 0xFEu) == 0xD0u ? vb & 1u : 0u);
+        }
         {   uint32_t np = *fa_cfg_byte(20u + FA_NCC);   /* NOTE PRIORITY 0 LAST, 1 LOW, 2 HIGH; erased (0xFF): LOW */
             glo_note_prio = (uint8_t)(np <= 2u ? np : 1u);
         }
@@ -1167,6 +1171,7 @@ static void fa_cfg_save(void)
     for (i = 0; i < FA_NCC; i++)
         *fa_cfg_byte(4u + i) = fa_cc[i];
     *fa_cfg_byte(4u + FA_NCC) = fm_bend_mode;
+    *fa_cfg_byte(23u + FA_NCC) = (uint8_t)(0xD0u | (fm_vel_sens & 1u));
     *fa_cfg_byte(18u + FA_NCC) = (uint8_t)(fa_tune_hz - 410u);
     *fa_cfg_byte(19u + FA_NCC) = (uint8_t)(glo_transpose + 12);
     *fa_cfg_byte(20u + FA_NCC) = glo_note_prio;
@@ -1533,9 +1538,9 @@ static void fa_support_dialog(void)
 
 static void fa_pset_rows(void)                           /* PRESET SETTINGS: its four options as a list, GLOBAL's style */
 {
-    static const int32_t Y[4] = {62, 79, 96, 113};
+    static const int32_t Y[5] = {62, 79, 96, 113, 130};
     uint32_t i;
-    for (i = 0; i < 4u; i++) {
+    for (i = 0; i < 5u; i++) {
         const char *lb = "", *un = "";
         char val[16];
         int32_t ratio = 0;
@@ -1890,7 +1895,7 @@ static uint32_t fa_signature(void)
     h = (h ^ fa_base ^ (uint32_t)fa_pp_on() << 8 ^ (uint32_t)fa_cpu_on() << 9) * 16777619u;
     if (fa_gl == 5u)                                      /* the monitor redraws with each message and each scroll step */
         h = (h ^ midi_mon_seq() ^ fa_mon_off << 16) * 16777619u;
-    h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19 ^ (uint32_t)fa_fr_yes << 24) * 16777619u;
+    h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19 ^ (uint32_t)fa_fr_yes << 24 ^ (uint32_t)fm_vel_sens << 25) * 16777619u;
     h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24 ^ (uint32_t)glo_note_prio << 29) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
     for (i = 0; i < FA_NCC; i++)
         h = (h ^ fa_cc[i]) * 16777619u;
@@ -2162,11 +2167,13 @@ static void fa_factory_extras(track_t *t, uint32_t n)
     if (n >= FMINI_NSLOT)
         return;
     fb_extra(n, x);                             /* the slot's record (saved or factory) */
-    {   uint8_t bnd, wh, frl, arl;              /* the preset's PITCH BEND range, MOD WHEEL position and RELEASEs */
-        uint32_t l = fb_pset(n, &bnd, &wh, &frl, &arl);
+    {   uint8_t bnd, wh, frl, arl, vs;          /* the preset's PITCH BEND range, MOD WHEEL position, RELEASEs, VELOCITY SENS. */
+        uint32_t l = fb_pset(n, &bnd, &wh, &frl, &arl, &vs);
         t->mw = wh;
-        if (t == &trk[0])
+        if (t == &trk[0]) {
             fm_bend_mode = bnd;
+            fm_vel_sens = vs;
+        }
         if (l >= 4u) {                          /* the saved releases */
             t->frel = (uint8_t)(0x80u | frl);
             t->p[P_REL] = (int16_t)arl;
@@ -2246,8 +2253,8 @@ static int fa_save_slot(uint32_t k, const char *name)
     n = fr_put(rec, FB_SLOT, n, FR_PATCH, patch, FG_SIZE);
     n = fr_put(rec, FB_SLOT, n, FR_EXTRA, (const uint8_t *)&x, sizeof x);
     n = fr_put(rec, FB_SLOT, n, FR_PARAM, par, sizeof par);
-    {   const uint8_t ps[4] = {(uint8_t)(fm_bend_mode & 3u), (uint8_t)(t->mw & 127u), (uint8_t)FMINI_FREL(t),
-                               (uint8_t)(t->p[P_REL] & 127)};   /* the bend range and the wheel as they are now */
+    {   const uint8_t ps[5] = {(uint8_t)(fm_bend_mode & 3u), (uint8_t)(t->mw & 127u), (uint8_t)FMINI_FREL(t),
+                               (uint8_t)(t->p[P_REL] & 127), (uint8_t)(fm_vel_sens & 1u)};   /* as they are now */
         n = fr_put(rec, FB_SLOT, n, FR_PSET, ps, sizeof ps);
     }
     if (!n)
@@ -2990,7 +2997,7 @@ static void fa_input(void)
             }
         } else if (fa_gl == 7u) {                         /* PRESET SETTINGS: SELECT moves the option, ALGO changes it */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fmg_cur[7] = (uint8_t)((fmg_cur[7] + 4u + (s > 0 ? 1u : 3u)) % 4u);
+                fmg_cur[7] = (uint8_t)((fmg_cur[7] + 5u + (s > 0 ? 1u : 4u)) % 5u);
             if ((s = panel_enc(EN_ALGO)) != 0)
                 fmg_turn(7u, fmg_cur[7], s, EN_ALGO);
         } else {                                            /* ABOUT: either encoder goes back */

@@ -4,6 +4,7 @@
 #define UI_TEST_NO_MAIN 1
 #include "ui_test.c"
 volatile uint8_t fm_bend_mode;               /* seq.c's (the firmware's; this test has no seq.c): the PITCH BEND range */
+volatile uint8_t fm_vel_sens;                /* seq.c's too: VELOCITY SENS. (2.5.5) */
 
 static void midi_test_reset(void)
 {

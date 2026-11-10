@@ -425,6 +425,11 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         t->xp_vel[i] = (uint8_t)vel;
         return;
     }
+#if FELUCCA_FMINI_ONLY
+    if (!fm_vel_sens)
+        vel = 127;                                      /* VELOCITY SENS. OFF (2.5.5): every note at full loudness; the
+                                                         * keys still send their velocity to MIDI OUT (seq.c key_on) */
+#endif
     vel = mod_note(t, note, vel);                       /* the matrix's VEL / KEY / RAND (1.5.6: VEL as a destination) */
     for (i = 0; i < NVOICE; i++)
         any |= t->v[i].gate;

@@ -45,6 +45,7 @@ static uint32_t host_slots[3u * 0x14000u / 4u];          /* USR1..3 (zero: empty
 #define main hostsim_main
 #include "hostsim.c"
 volatile uint8_t fm_bend_mode;               /* seq.c's (the firmware's; these tests have no seq.c): the PITCH BEND range */
+volatile uint8_t fm_vel_sens;                /* seq.c's too: VELOCITY SENS. (2.5.5) */
 #undef main
 
 /* ------------------------------------------------------------ HAL stubs --- */

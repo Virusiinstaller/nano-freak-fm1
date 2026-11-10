@@ -892,6 +892,29 @@ int main(int argc, char **argv)
             fturn(EN_SELECT, 1); mw0 = TSEL->mw;
             fturn(EN_ALGO, 1); fframes(64);
             if (TSEL->mw == mw0) { printf("PRESET MOD WHEEL does not change\n"); return 1; }
+            {   /* 2.5.5: VELOCITY SENS. (row 4): OFF (the factory's) plays every note at 127, ON as played; saved with the preset */
+                uint32_t vv, k;
+                fm_vel_sens = 1;
+                fturn(EN_SELECT, 1);
+                if (fmg_cur[7] != 4) { printf("VELOCITY SENS. row (%u)\n", (unsigned)fmg_cur[7]); return 1; }
+                fturn(EN_ALGO, -1); fframes(4);
+                if (fm_vel_sens) { printf("VELOCITY SENS. OFF\n"); return 1; }
+                for (k = 0; k < 2u; k++) {
+                    trk_note_on(TSEL, 60, 40); fframes(2);
+                    vv = 0;
+                    { uint32_t i; for (i = 0; i < NVOICE; i++) if (TSEL->v[i].active && TSEL->v[i].gate && TSEL->v[i].note == 60) vv = TSEL->v[i].vel; }
+                    trk_note_off(TSEL, 60); fframes(20);
+                    if (k == 0 && vv != 127) { printf("VELOCITY SENS. OFF: velocity 40 played as %u\n", (unsigned)vv); return 1; }
+                    if (k == 1 && vv != 40) { printf("VELOCITY SENS. ON: velocity 40 played as %u\n", (unsigned)vv); return 1; }
+                    if (!k) { fturn(EN_ALGO, 1); fframes(4); if (!fm_vel_sens) { printf("VELOCITY SENS. ON\n"); return 1; } }
+                }
+                if (fa_save_slot(160, "VEL TEST") != 0) { printf("VELOCITY SENS.: save\n"); return 1; }
+                fm_vel_sens = 0; fa_factory_extras(TSEL, 160);
+                if (fm_vel_sens != 1) { printf("VELOCITY SENS. not kept in the preset\n"); return 1; }
+                fa_factory_extras(TSEL, 161);
+                if (fm_vel_sens != 0) { printf("VELOCITY SENS.: a factory preset is OFF\n"); return 1; }
+                fturn(EN_SELECT, -1);
+            }
             ui.force = 1; fa_draw(); dump(dir, 30);
             fpress(B_EDIT); fframes(64);
             if (fa_gl == 7) { printf("EDIT closes PRESET SETTINGS\n"); return 1; }
