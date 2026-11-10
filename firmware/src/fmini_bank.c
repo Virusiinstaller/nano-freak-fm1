@@ -377,4 +377,24 @@ static int fb_rs_apply(void)
     return fb_rs_k < FB_NSLOT ? fb_forget(fb_rs_k) : 0;
 }
 
+/* GLOBAL > FACTORY RESET (2.5.3, fmini_app.c): every saved preset forgotten at once (the bank's objects emptied), every
+ * slot its factory preset again. 0 = done */
+static int fb_reset_all(void)
+{
+    uint8_t rec[FB_SLOT];
+    uint32_t k;
+    int rc = 0;
+#if FELUCCA_FLASH
+    uint32_t o;
+    for (o = 0; o < FB_NOBJ; o++)
+        if (fb_obj_clear(o) != 0)
+            rc = -1;
+#else
+    memset(fb_host_n, 0, sizeof fb_host_n);
+#endif
+    for (k = 0; k < FB_NSLOT; k++)
+        fb_slot_init(k, rec, fb_factory_rec(k, rec));
+    return rc;
+}
+
 #endif /* FMINI_BANK_C */

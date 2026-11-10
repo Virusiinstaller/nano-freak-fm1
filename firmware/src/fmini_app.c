@@ -1030,7 +1030,8 @@ static uint32_t fa_sound_keys(void)
 #define FA_NPG 47u                                        /* the controls of the seven screens (FMG_PAGE: 8+8+9+6+4+4+8; CTRL's VOICES has no CC) */
 #define FA_NCC (FA_NPG + FA_AR_N)                         /* .. and the ARP pop-up's six lines */
 static uint8_t fa_gl;                                     /* 0 closed, 1 the list, 2 MIDI CC, 3 ABOUT */
-static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 SUPPORT, 4 ABOUT;
+static uint8_t fa_gl_row;                                 /* GLOBAL (fa_gl 1): 0 MIDI SETTINGS, 1 TUNING, 2 TRANSPOSE, 3 NOTE PRIORITY,
+                                                           * 4 FACTORY RESET (fa_gl 8: its question), 5 SUPPORT, 6 ABOUT;
                                                            * MIDI SETTINGS (fa_gl 4): 0 MIDI IN, 1 CHANNEL, 2 MIDI CC, 3 CLOCK */
 static uint16_t fa_tune_hz = 440;                         /* TUNING: the reference A, 410 .. 470 Hz (the global glo_tune_c) */
 /* the TUNING in cents from A 440, for 410 .. 470 Hz: round(1200 * log2(hz / 440)) */
@@ -1060,6 +1061,19 @@ static int fa_cc_valid(uint32_t cc) { return cc == 0u || ml_free_cc(cc); }
 /* the FX pop-ups' other globals (the settings still keep their bytes; a factory patch, a saved one and the autosave set them) */
 static const uint8_t FA_GID2[8] = {G_RTYPE, G_RDAMP, G_DTIME, G_DFDBK, G_ENGGO, G_CDEPTH, G_INFO, G_MIDI};
 static uint8_t *fa_cfg_byte(uint32_t i) { return &favorites.factory[7u + i / 32u][i % 32u]; }
+static void fa_cfg_defaults(void)                         /* GLOBAL's settings as they come (also FACTORY RESET) */
+{
+    fm_midi_src = 3;
+    fm_midi_ch = 0;
+    fm_bend_mode = 0;
+    fm_bt = 0;
+    fa_clk = 0;
+    glo_note_prio = 1;
+    fa_tune_hz = 440;
+    glo_tune_c = 0;
+    glo_transpose = 0;
+    memcpy(fa_cc, FA_CC0, sizeof fa_cc);
+}
 static void fa_cfg_load(void)
 {
     uint32_t i;
@@ -1085,18 +1099,8 @@ static void fa_cfg_load(void)
             uint32_t c = *fa_cfg_byte(4u + i);
             fa_cc[i] = (uint8_t)(fa_cc_valid(c) ? c : FA_CC0[i]);
         }
-    } else {
-        fm_midi_src = 3;
-        fm_midi_ch = 0;
-        fm_bend_mode = 0;
-        fm_bt = 0;
-        fa_clk = 0;
-        glo_note_prio = 1;
-        fa_tune_hz = 440;
-        glo_tune_c = 0;
-        glo_transpose = 0;
-        memcpy(fa_cc, FA_CC0, sizeof fa_cc);
-    }
+    } else
+        fa_cfg_defaults();
 }
 static void fa_cfg_save(void)
 {
@@ -1415,6 +1419,30 @@ static const aafont_t *fa_fit(const char *s)
         return &AF_X;
     return &AF_S;
 }
+/* GLOBAL > FACTORY RESET (2.5.3, the owner's): the question, as SAVE's OVERWRITE one. NO is the default; ALGORITHM
+ * turns it to YES, SAVE on YES resets every preset to its factory one and GLOBAL's settings to theirs (fa_factory_reset);
+ * SAVE on NO, or any other key, goes back to GLOBAL */
+static uint8_t fa_fr_yes;
+static void fa_fr_dialog(void)
+{
+    const uint16_t bgd = FA_RGB(0x1B, 0x19, 0x17);
+    uint32_t i;
+    static const int32_t BX[2] = {34, 126};              /* NO, YES: the boxes */
+    static const char *const BL[2] = {"NO", "YES"};
+    cv_rect(10, 46, 220, 148, FA_OR);
+    cv_rect(12, 48, 216, 144, bgd);
+    fa_pc_text(120, 56, &AF_L, "FACTORY RESET", FA_RED, bgd);
+    fa_pc_text(120, 98, &AF_S, "ALL PRESETS AND GLOBAL SETTINGS", FA_CR, bgd);
+    for (i = 0; i < 2u; i++) {
+        uint8_t sel = (i == 1u) == (fa_fr_yes != 0);
+        cv_rect(BX[i], 130, 80, 36, sel ? FA_OR : FA_LINE);
+        if (!sel)
+            cv_rect(BX[i] + 2, 132, 76, 32, bgd);
+        fa_pc_text(BX[i] + 40, 139, &AF_L, BL[i], sel ? bgd : FA_CR, bgd);
+    }
+    fa_pc_text(120, 176, &AF_S, "ALGO: YES / NO   SAVE: OK", FA_MU, bgd);
+}
+
 static void fa_support_dialog(void)
 {
     const int32_t qx = (240 - 83) / 2, qy = 100;          /* the code: 25 modules of 3 px and a 2-module quiet zone */
@@ -1484,8 +1512,9 @@ static void fa_gl_dialog(void)
             fa_line(96, "TRANSPOSE", tr, fa_gl_row == 2u);
         }
         fa_line(113, "NOTE PRIORITY", glo_note_prio == 2u ? "HIGH" : glo_note_prio == 0u ? "LAST" : "LOW", fa_gl_row == 3u);
-        fa_line(130, "SUPPORT FMINI-1", ">", fa_gl_row == 4u);
-        fa_line(147, "ABOUT", ">", fa_gl_row == 5u);
+        fa_line(130, "FACTORY RESET", ">", fa_gl_row == 4u);
+        fa_line(147, "SUPPORT FMINI-1", ">", fa_gl_row == 5u);
+        fa_line(164, "ABOUT", ">", fa_gl_row == 6u);
         fa_ctext(120, 199, &AF_S, "SELECT  ALGO  GLO=BACK", FA_MU);
     } else if (fa_gl == 4u) {                             /* MIDI SETTINGS: the MIDI options, one folder down */
         fa_frame("MIDI SETTINGS");
@@ -1723,6 +1752,8 @@ static void fa_scene(void)
         fa_restore_dialog();                              /* the restore question / its progress: over everything */
     else if (fa_gl == 6u)
         fa_support_dialog();
+    else if (fa_gl == 8u)
+        fa_fr_dialog();
     else if (fa_gl == 5u)
         fa_mon_dialog();
     else if (fa_gl == 1u || fa_gl == 2u || fa_gl == 4u || fa_gl == 7u)
@@ -1771,7 +1802,7 @@ static uint32_t fa_signature(void)
     h = (h ^ fa_base ^ (uint32_t)fa_pp_on() << 8 ^ (uint32_t)fa_cpu_on() << 9) * 16777619u;
     if (fa_gl == 5u)                                      /* the monitor redraws with each message and each scroll step */
         h = (h ^ midi_mon_seq() ^ fa_mon_off << 16) * 16777619u;
-    h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19) * 16777619u;
+    h = (h ^ fa_gl ^ (uint32_t)fa_gl_row << 3 ^ (uint32_t)fa_cc_i << 6 ^ (uint32_t)fm_midi_src << 12 ^ (uint32_t)fm_bt << 17 ^ (uint32_t)fm_midi_ch << 14 ^ (uint32_t)fm_bend_mode << 19 ^ (uint32_t)fa_fr_yes << 24) * 16777619u;
     h = (h ^ (uint32_t)fa_tune_hz << 7 ^ (uint32_t)(glo_transpose + 16) << 24 ^ (uint32_t)glo_note_prio << 29) * 16777619u;   /* TUNING, TRANSPOSE: the list redraws as they change */
     for (i = 0; i < FA_NCC; i++)
         h = (h ^ fa_cc[i]) * 16777619u;
@@ -2059,11 +2090,44 @@ static void fa_tap(void)
     }
 }
 
+/* FACTORY RESET's YES: every saved preset forgotten (fmini_bank.c fb_reset_all), GLOBAL's settings as they come, saved;
+ * the sound playing is its slot's factory preset again */
+static void fa_factory_reset(void)
+{
+    track_t *t = TSEL;
+    uint32_t cur = fa_cur_slot();
+    int rc = fb_reset_all();
+    fa_cfg_defaults();
+    fa_clk_apply();
+    fa_cfg_dirty = 1;
+    fa_cfg_save();
+    panic_req |= 1u;                                      /* (the notes held: none may hang) */
+    t->user = 0;
+    apply_preset_to(t, cur);
+    t->p[P_E7] = (int16_t)cur;
+    fa_factory_extras(t, cur);
+    fmini_poll();
+    str_cpy(fa_msg, rc == 0 ? "RESET DONE" : "RESET ERROR", 16);
+    fa_msg_until = fm1_ms + 1500u;
+    ui.force = 1;
+}
+
 static void fa_buttons(uint32_t pressed)
 {
     static const uint8_t PG_BTN[5] = {B_LFO, B_EDIT, B_SCL, B_FX, B_ENV};   /* (GLO: global, ARP, SEQ, REC, PLAY: their own) */
     uint32_t i;
     if (fa_gl == 6u && pressed) {                         /* SUPPORT: any key goes back to GLOBAL */
+        fa_gl = 1u;
+        fa_gl_row = 5u;
+        return;
+    }
+    if (fa_gl == 8u && pressed) {                         /* FACTORY RESET's question: SAVE on YES resets, on NO goes back;
+                                                           * any other key goes back to GLOBAL */
+        if (((pressed >> panel.btn[B_SAVE]) & 1u) && fa_fr_yes) {
+            fa_factory_reset();
+            fa_gl_close();                                 /* (the RESET DONE message shows over the page) */
+            return;
+        }
         fa_gl = 1u;
         fa_gl_row = 4u;
         return;
@@ -2117,7 +2181,7 @@ static void fa_buttons(uint32_t pressed)
         } else if (fa_gl == 2u)
             fa_gl = 4u;                                    /* MIDI CC -> MIDI SETTINGS (its row kept) */
         else if (fa_gl == 4u || fa_gl == 3u) {             /* MIDI SETTINGS / ABOUT -> GLOBAL */
-            fa_gl_row = fa_gl == 3u ? 5u : 0u;
+            fa_gl_row = fa_gl == 3u ? 6u : 0u;
             fa_gl = 1;
         } else
             fa_gl_close();
@@ -2394,8 +2458,17 @@ static void fa_input(void)
         (void)panel_enc(EN_SELECT);
         if (panel_enc(EN_ALGO) != 0) {
             fa_gl = 1u;
-            fa_gl_row = 4u;
+            fa_gl_row = 5u;
         }
+        return;
+    }
+    if (fa_gl == 8u) {                                    /* FACTORY RESET's question: ALGORITHM YES / NO */
+        for (k = 0; k < 4u; k++)
+            (void)panel_enc(EN_K1 + k);
+        (void)panel_enc(EN_PRESET);
+        (void)panel_enc(EN_SELECT);
+        if ((s = panel_enc(EN_ALGO)) != 0)
+            fa_fr_yes = s > 0;
         return;
     }
     if (fa_gl == 5u) {                                    /* MIDI MONITOR: SELECT scrolls, ALGORITHM goes back to MIDI SETTINGS */
@@ -2416,9 +2489,10 @@ static void fa_input(void)
         for (k = 0; k < 4u; k++)
             (void)panel_enc(EN_K1 + k);
         (void)panel_enc(EN_PRESET);
-        if (fa_gl == 1u) {                                /* GLOBAL: MIDI SETTINGS, TUNING, TRANSPOSE, ABOUT */
+        if (fa_gl == 1u) {                                /* GLOBAL: MIDI SETTINGS, TUNING, TRANSPOSE, NOTE PRIORITY, FACTORY RESET,
+                                                           * SUPPORT, ABOUT */
             if ((s = panel_enc(EN_SELECT)) != 0)
-                fa_gl_row = (uint8_t)((fa_gl_row + 6u + (s > 0 ? 1u : 5u)) % 6u);
+                fa_gl_row = (uint8_t)((fa_gl_row + 7u + (s > 0 ? 1u : 6u)) % 7u);
             if ((s = panel_enc(EN_ALGO)) != 0) {
                 if (fa_gl_row == 0u) {
                     fa_gl = 4u;                            /* MIDI SETTINGS: its first line */
@@ -2438,7 +2512,10 @@ static void fa_input(void)
                     glo_note_prio = NP[k2];
                     panic_req |= 1u;                       /* the note sounding may change: none may hang */
                     fa_cfg_dirty = 1;
-                } else if (fa_gl_row == 4u)
+                } else if (fa_gl_row == 4u) {
+                    fa_gl = 8u;                            /* FACTORY RESET: its question, NO first */
+                    fa_fr_yes = 0;
+                } else if (fa_gl_row == 5u)
                     fa_gl = 6u;                            /* SUPPORT: the QR code screen */
                 else
                     fa_gl = 3u;                            /* ABOUT */
