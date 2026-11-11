@@ -1,0 +1,462 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     FMini-1 on the M-Vave SMK-37, in the browser. The panel (its drawing, layout and gestures) is the SMK-37 simulator of
+     Felucca SMK by Chance Roth (https://github.com/ChanceTheMaker/felucca-smk, web/smk-simulator.js, smk-studio.css,
+     panel-glide.js, keyboard-glide.js; GPL-3.0), restyled for the FMini-1 site; what runs behind it is FMini-1's own
+     firmware built for the SMK-37 (web/emu/felucca_web.c with BOARD_SMK37). The FM-1 page (../index.html) is the pattern
+     for the start, the silent boot and the saved flash. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>FMini-1 for SMK-37 — in your browser</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%23ff7a1a%22/%3E%3Crect x=%224%22 y=%224%22 width=%228%22 height=%228%22 fill=%22%230d0c10%22/%3E%3C/svg%3E">
+<meta name="description" content="FMini-1, the Minimoog emulation firmware, on the M-Vave SMK-37, running in your browser: the same code the keyboard runs.">
+<style>
+:root { --bg: #0d0c10; --surface: #15131a; --surface2: #1c1922; --line: #2a2631; --fg: #f4f0ea; --dim: #a29cab; --mute: #6f6a78;
+        --or: #ff7a1a; --or2: #ff9a4d; --sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { background: var(--bg); }
+body { margin: 0; color: var(--fg); font: 14px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: var(--or2); }
+button { font: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+header.nav { position: sticky; top: 0; z-index: 30; background: rgba(13,12,16,.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+header.nav .wrap { display: flex; align-items: center; gap: 14px; height: 56px; max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+.brand { font-weight: 900; font-style: italic; letter-spacing: -.04em; font-size: 22px; color: var(--fg); text-decoration: none; }
+.brand i { color: var(--or); }
+.brand small { font: 600 12px/1 var(--mono); font-style: normal; letter-spacing: 0; color: var(--dim); margin-left: 8px; }
+header.nav nav { display: flex; gap: 6px; margin-left: auto; }
+header.nav nav a { color: var(--dim); text-decoration: none; font-size: 13.5px; font-weight: 600; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); }
+header.nav nav a:hover { color: var(--fg); border-color: var(--mute); }
+header.nav nav a.keep { color: #1a0e05; background: var(--or); border-color: var(--or); }
+header.nav nav a.keep:hover { background: var(--or2); }
+@media (max-width: 560px) { header.nav nav a:not(.keep) { display: none; } .brand small { display: none; } }
+main { max-width: 1240px; margin: 0 auto; padding: 8px 20px 32px; }
+
+/* the toolbar and the panel: after Felucca SMK's smk-studio.css (Chance Roth, GPL-3.0) */
+#smk { position: relative; margin: 10px auto 20px; }
+#smk.sim-expanded { max-width: none; }
+#smk:fullscreen { box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: 18px clamp(12px,3vw,48px); overflow: auto; background: var(--bg); }
+.sim-toolbar { display: flex; align-items: center; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+.sim-toolbar strong { margin-right: auto; font: 700 14px/1 var(--mono); letter-spacing: .02em; }
+.sim-toolbar strong i { color: var(--or); font-style: normal; }
+.sim-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 34px; padding: 6px; border-radius: 8px;
+                   color: var(--dim); background: var(--surface2); border: 1px solid var(--line); }
+.sim-icon-button:hover { color: var(--fg); border-color: var(--mute); }
+.sim-icon-button svg { display: block; width: 22px; height: 22px; }
+.sim-finish-picker { position: relative; }
+.sim-finish-toggle { width: 54px !important; gap: 5px; }
+.sim-swatch { display: inline-block; width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%; border: 1px solid #0008; box-shadow: inset 0 1px 2px #ffffff66, 0 0 0 1px #ffffff33; }
+.sim-caret { font-size: 12px; }
+.sim-finish-menu { position: absolute; z-index: 60; right: 0; top: calc(100% + 8px); min-width: 170px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px #0008; }
+.sim-finish-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid transparent; background: transparent; color: var(--fg); text-align: left; font-size: 12.5px; border-radius: 7px; }
+.sim-finish-option[aria-selected=true] { outline: 1px solid var(--or); outline-offset: -2px; }
+.sim-finish-option:is(:hover,:focus-visible) { background: var(--surface2); }
+.sim-status { flex-basis: 100%; font-size: 12px; color: var(--dim); }
+
+.smk-simulator-shell { --case:#b92832; --case-edge:#53141a; --ink:#fff2e5; position:relative; padding:24px 24px 20px; border:1px solid #0009; border-radius:22px 22px 15px 15px; color:var(--ink); background:linear-gradient(110deg,#ffffff22,transparent 30%,#0002),var(--case); box-shadow:inset 0 2px 1px #fff5,inset 0 -8px 0 var(--case-edge),0 18px 40px #000a; font-family:Arial,sans-serif; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+.smk-simulator-shell[data-finish=white] { --case:#e8e7e0; --case-edge:#9b9c98; --ink:#303436; }
+.smk-simulator-shell[data-finish=elite] { --case:#687481; --case-edge:#39434e; --ink:#f1f1e9; }
+.smk-simulator-shell[data-finish=black] { --case:#16191b; --case-edge:#08090a; --ink:#e9eef0; }
+.smk-simulator-shell[data-finish=pink] { --case:#e5a2b4; --case-edge:#9b6476; --ink:#392630; }
+.smk-simulator-shell[data-finish=charcoal] { --case:#52575b; --case-edge:#2b2e31; --ink:#f2f0e6; }
+.smk-simulator-shell::before,.smk-simulator-shell::after { content:''; position:absolute; top:10px; width:10px; height:10px; background:linear-gradient(135deg,#ddd,#666); border:1px solid #000b; border-radius:50%; box-shadow:0 1px 2px #0008; }
+.smk-simulator-shell::before { left:10px; } .smk-simulator-shell::after { right:10px; }
+.sim-top { display:grid; grid-template-columns:8% 21% 40% 1fr; gap:16px; align-items:start; }
+.sim-left,.sim-center,.sim-right,.sim-wheels { min-width:0; }
+.sim-bezel { position:relative; padding:12px; background:linear-gradient(135deg,#2e3032,#090a0b); border:2px solid #111; border-radius:18px; box-shadow:0 2px 5px #0006,inset 0 1px 2px #fff3; }
+.sim-lcd { display:block; width:100%; height:auto; aspect-ratio:1; border-radius:7px; background:#000; }
+.sim-knobs { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:6px; padding:4px 0 14px; }
+.sim-encoder { display:grid; justify-items:center; gap:6px; min-width:0; font-size:10px; font-weight:bold; }
+.sim-encoder small { font-size:8px; font-weight:normal; white-space:nowrap; }
+.sim-dial { padding:0; min-width:0; width:100%; max-width:45px; aspect-ratio:1; border-radius:50%; border:2px solid #111; background:repeating-conic-gradient(#222 0deg 6deg,#36393b 6deg 12deg); box-shadow:0 4px 5px #0008,inset 0 1px 1px #fff6; position:relative; cursor:ns-resize; touch-action:none; }
+.sim-dial::before { content:''; position:absolute; inset:5px; border-radius:50%; background:radial-gradient(ellipse at 35% 20%,#696b6c,#292b2d 65%,#181a1c); box-shadow:inset 0 1px #fff4; }
+.sim-dial::after { content:''; position:absolute; top:12%; left:calc(50% - 1px); width:2px; height:26%; border-radius:2px; background:#e8e8e4; transform-origin:50% 146%; transform:rotate(var(--angle,0deg)); }
+.sim-pads { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:7px; padding:9px; background:#0002; border:1px solid #0004; border-radius:10px; box-shadow:inset 0 2px 6px #0003; }
+.sim-pad { min-width:0; padding:0; aspect-ratio:.95; border-radius:6px; color:#bfc3c6; font-size:10px; border:2px solid #15191b; background:linear-gradient(135deg,#555a5e,#303437); box-shadow:inset 0 1px 2px #ffffff35,0 2px 2px #0006; touch-action:none; }
+.sim-pad.lit { background:color-mix(in srgb,var(--led) var(--mix,100%),#303437); border-color:color-mix(in srgb,var(--led) var(--mix,100%),#15191b); color:#e8e6e2; box-shadow:0 0 calc(14px*var(--glow,1)) color-mix(in srgb,var(--led) 60%,transparent),inset 0 1px #fff4; }
+.sim-pad.lit.full { color:#0d0c10; }
+.sim-pad[aria-pressed=true] { box-shadow:inset 0 2px 5px #0009; filter:brightness(.85); }
+.sim-faders { display:flex; gap:8px; justify-content:space-evenly; padding:4px 0 12px; }
+.sim-fader,.sim-wheel { display:flex; flex-direction:column; align-items:center; gap:8px; font-size:9px; font-weight:bold; }
+.sim-fader input { writing-mode:vertical-lr; direction:rtl; touch-action:none; appearance:none; -webkit-appearance:none; width:40px; height:124px; margin:0; border:0; background:repeating-linear-gradient(to top,transparent 0 11px,#ffffff40 11px 12px) left center/7px 108px no-repeat; cursor:ns-resize; }
+.sim-fader input::-webkit-slider-runnable-track { width:6px; border:1px solid #090b0d; border-radius:5px; background:#141719; box-shadow:inset 1px 0 3px #000,1px 0 #ffffff30; }
+.sim-fader input::-webkit-slider-thumb { -webkit-appearance:none; width:36px; height:23px; margin-left:-16px; border:1px solid #101214; border-radius:4px; background:linear-gradient(to bottom,#777c7f 0%,#414649 36%,#111416 43%,#dadcda 47%,#dadcda 53%,#171a1c 57%,#393e41 75%,#202427); box-shadow:0 3px 4px #0009,inset 0 1px #ffffff77; }
+.sim-fader input::-moz-range-track { width:6px; height:100%; border:1px solid #090b0d; border-radius:5px; background:#141719; }
+.sim-fader input::-moz-range-thumb { width:36px; height:23px; border:1px solid #101214; border-radius:4px; background:linear-gradient(#777c7f,#414649 36%,#111416 43%,#dadcda 47%,#dadcda 53%,#171a1c 57%,#202427); }
+.sim-banks,.sim-buttons { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:5px; margin-top:8px; }
+.sim-banks { grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; margin:0; }
+.sim-button { min-width:0; min-height:27px; padding:7px 2px; font:700 8px/1.2 Arial,sans-serif; color:#e3e5e6; background:linear-gradient(#474b4e,#272b2e); border:1px solid #131617; border-radius:5px; box-shadow:0 2px 2px #0005,inset 0 1px #fff2; touch-action:none; }
+.sim-button.lit { border-bottom:3px solid var(--or); padding-bottom:5px; color:#ffd8b0; box-shadow:0 2px 8px #ff7a1a66,inset 0 1px #fff2; }
+.sim-button[aria-pressed=true] { background:#171b1e; box-shadow:inset 0 2px 4px #0009; }
+.sim-banks .sim-button { min-height:23px; padding:4px 2px; font-size:7px; border-radius:4px; }
+.sim-banks .sim-button.lit { padding-bottom:2px; }
+.sim-bottom { margin-top:20px; }
+.sim-wheels { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; align-content:end; padding-top:4px; }
+.sim-wheels > .sim-banks { grid-column:1/-1; width:100%; }
+.sim-wheel { gap:6px; text-transform:uppercase; letter-spacing:.08em; }
+.sim-wheel-housing { display:block; position:relative; width:min(42px,100%); height:104px; padding:5px 6px; overflow:hidden; border:1px solid #151819; border-radius:12px; background:#0b0d0f; box-shadow:inset 0 3px 6px #000,0 1px #ffffff40; }
+.sim-wheel-tread { display:block; height:100%; border-radius:45% / 18%; background:linear-gradient(to bottom,#000e,transparent 30%,#ffffff15 48%,transparent 65%,#000e),linear-gradient(to right,#07090b,#4d5357 24%,#343a3e 55%,#14191d),repeating-linear-gradient(to bottom,#6b7378 0 2px,#202529 2px 5px); background-blend-mode:normal,soft-light,normal; background-position:0 0,0 0,0 var(--wheel-turn,0px); box-shadow:inset 1px 0 #ffffff30,inset -2px 0 #0008; }
+.sim-wheel-housing::after { content:''; position:absolute; left:11px; right:11px; top:var(--wheel-position,50%); height:2px; background:#e0e4df; box-shadow:0 1px 2px #000; pointer-events:none; }
+.sim-wheel-housing input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:ns-resize; writing-mode:vertical-lr; direction:rtl; touch-action:none; }
+.sim-wheel-housing:focus-within { outline:2px solid var(--or); outline-offset:3px; }
+.smk-simulator-shell[data-finish=elite] .sim-button { background:linear-gradient(#f78a4f,#cd4b16); color:#311f17; }
+.smk-simulator-shell[data-finish=elite] .sim-key.black { background:linear-gradient(90deg,#ac3914,#ed733d 35%,#ce4e1e); border-color:#82341c; }
+.smk-simulator-shell[data-finish=elite] .sim-pad:not(.lit) { background:linear-gradient(#fff5dc,#c5c3b1); color:#5e5950; }
+.sim-piano { position:relative; height:180px; background:#111; border:5px solid #111; border-top:9px solid #111; border-radius:4px 4px 8px 8px; box-shadow:0 3px 4px #0006; overflow:hidden; touch-action:none; }
+.sim-key { position:absolute; top:0; margin:0; padding:0 0 8px; border-radius:0 0 4px 4px; text-align:center; display:flex; align-items:end; justify-content:center; font:9px Arial,sans-serif; left:calc(var(--key-x)*100%/var(--white-count)); width:calc(100%/var(--white-count)); min-width:0; touch-action:none; }
+.sim-key.white { height:100%; color:#777; background:linear-gradient(90deg,#d5d5d0,#fcfcf7 20%,#eee 85%,#b8b9b6); border:1px solid #777; border-top:0; box-shadow:inset 0 -6px 0 #c5c6c2; }
+.sim-key.black { z-index:2; height:62%; width:calc(62%/var(--white-count)); color:#999; background:linear-gradient(90deg,#151618,#3d4042 30%,#222426 75%,#070808); border:1px solid #060708; border-bottom:6px solid #0b0c0d; box-shadow:2px 4px 3px #0006; }
+.sim-key[aria-pressed=true] { background:linear-gradient(#e0661a,#ff9a4d); box-shadow:inset 0 3px 5px #0006; color:#1a0e05; }
+.smk-simulator-shell[data-finish=black] .sim-key.white:not([aria-pressed=true]) { color:#aaa; background:linear-gradient(90deg,#16181a,#34383b 20%,#25292c 85%,#111315); border-color:#080a0b; box-shadow:inset 0 -6px 0 #121416; }
+.smk-simulator-shell[data-finish=black] .sim-key.black:not([aria-pressed=true]) { color:#b7b9ba; background:linear-gradient(90deg,#08090a,#202326 30%,#121416 75%,#030405); border-color:#020303; }
+.smk-simulator-shell :is(button,input):focus-visible { outline:2px solid var(--or); outline-offset:3px; }
+@media(max-width:1050px) { .sim-top { gap:12px; } .smk-simulator-shell { padding:20px 14px; } .sim-encoder small { display:none; } .sim-pads { gap:6px; padding:8px; } .sim-piano { height:150px; } }
+@media(max-width:700px) { #smk { overflow:auto; } .smk-simulator-shell { min-width:660px; } .sim-toolbar { position:sticky; left:0; } }
+#smk.sim-screen-only .smk-simulator-shell { min-width:0; width:min(100%,640px); margin-inline:auto; padding:22px; }
+#smk.sim-screen-only :is(.sim-wheels,.sim-center,.sim-right,.sim-bottom) { display:none; }
+#smk.sim-screen-only .sim-top { display:block; }
+.start { position:absolute; inset:0; z-index:5; display:grid; place-content:center; justify-items:center; gap:12px; background:rgba(13,12,16,.55); border-radius:22px 22px 15px 15px; }
+.start button { font:800 17px/1 var(--sans); padding:14px 28px; background:var(--or); color:#1a0e05; border:0; border-radius:12px; }
+.start button:disabled { opacity:.5; cursor:progress; }
+.start p { margin:0; max-width:32em; text-align:center; color:var(--fg); }
+.keys { margin:14px 0 0; color:var(--dim); text-align:center; font-size:12.5px; }
+.keys span { white-space:nowrap; margin:0 8px; }
+kbd { font:600 11px var(--mono); border:1px solid var(--line); border-radius:4px; padding:0 4px; color:var(--fg); }
+footer { margin-top:18px; color:var(--mute); text-align:center; font-size:12px; line-height:1.7; }
+footer a { color:var(--dim); }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../../"><i>FM</i>ini-<i>1</i><small>SMK-37</small></a>
+  <nav><a href="../">FM-1 emulator</a><a href="../../" class="keep">FMini-1 website</a></nav>
+</div></header>
+<main>
+<section id="smk" aria-label="SMK-37 running FMini-1"></section>
+<p class="keys">
+  <span><kbd>A</kbd>–<kbd>;</kbd> <kbd>W</kbd>–<kbd>P</kbd> keys</span>
+  <span><kbd>Z</kbd> <kbd>X</kbd> OCTAVE</span>
+  <span>Knobs: drag, scroll or arrow keys</span>
+  <span>Faders and wheels: drag</span>
+</p>
+<footer>
+  <span class="version">@VERSION@</span><br>
+  FMini-1 by Guilherme Ruppert, a fork of Felucca by Leo Kuroshita, Hügelton Instruments · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a><br>
+  The SMK-37 panel is the simulator of <a href="https://github.com/ChanceTheMaker/felucca-smk">Felucca SMK</a> by Chance Roth (GPL-3.0), restyled; the firmware behind it is FMini-1's.<br>
+  <small>M-VAVE, SMK-37 and FM-1 are trademarks of their respective owners. FMini-1 is not affiliated with or endorsed by them.</small>
+</footer>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const STORE = "fmini-smk-emu-flash", FINISH = "fmini-smk-emu-finish";
+let node = null;
+const send = (m) => { if (node) node.port.postMessage(m); };
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; };
+const host = $("smk");
+
+// ------------------------------------------------------------------ the panel (after Felucca SMK's smk-simulator.js)
+const toolbar = el("div", "sim-toolbar"), title = el("strong");
+title.innerHTML = "SMK-37 · <i>FMini-1</i>";
+const finishes = [["red", "Pro Red", "#b92832"], ["white", "Pro White", "#e8e7e0"], ["elite", "Elite", "linear-gradient(135deg,#687481 55%,#e76522 55%)"],
+                  ["black", "Pro Black", "#16191b"], ["pink", "Pro Pink", "#e5a2b4"], ["charcoal", "Pro Charcoal", "#52575b"]];
+const picker = el("div", "sim-finish-picker"), finish = el("button", "sim-icon-button sim-finish-toggle"), menu = el("div", "sim-finish-menu");
+finish.type = "button"; finish.setAttribute("aria-haspopup", "listbox");
+const swatch = el("span", "sim-swatch"); finish.append(swatch, el("span", "sim-caret", "⌄"));
+menu.hidden = true; menu.setAttribute("role", "listbox"); picker.append(finish, menu);
+const icon = (d, extra = "") => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${extra}<path d="${d}"/></svg>`;
+const screenOnly = el("button", "sim-icon-button"); screenOnly.type = "button"; screenOnly.title = "Screen only";
+screenOnly.innerHTML = icon("M9 21h6m-3-4v4", '<rect x="3" y="3" width="18" height="14" rx="2"/>');
+const expand = el("button", "sim-icon-button"); expand.type = "button"; expand.title = "Expand";
+expand.innerHTML = icon("M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5");
+const full = el("button", "sim-icon-button"); full.type = "button"; full.title = "Fullscreen"; full.hidden = !document.fullscreenEnabled;
+full.innerHTML = icon("M7 12V8h4m2 8h4v-4M7 8l4 4m2 0 4 4", '<rect x="3" y="4" width="18" height="16" rx="2"/>');
+const status = el("span", "sim-status"); status.setAttribute("role", "status"); status.hidden = true;
+toolbar.append(title, picker, screenOnly, expand, full, status);
+
+const shell = el("div", "smk-simulator-shell");
+function chooseFinish(id, save = true) {
+  const f = finishes.find((x) => x[0] === id) || finishes[0];
+  shell.dataset.finish = f[0]; swatch.style.background = f[2]; finish.title = "Finish: " + f[1];
+  for (const b of menu.children) b.setAttribute("aria-selected", String(b.dataset.finish === f[0]));
+  if (save) try { localStorage.setItem(FINISH, f[0]); } catch {}
+}
+for (const [id, name, color] of finishes) {
+  const b = el("button", "sim-finish-option"); b.type = "button"; b.dataset.finish = id; b.setAttribute("role", "option");
+  const s = el("span", "sim-swatch"); s.style.background = color; b.append(s, el("span", "", name));
+  b.onclick = () => { chooseFinish(id); menu.hidden = true; }; menu.append(b);
+}
+finish.onclick = () => { menu.hidden = !menu.hidden; };
+document.addEventListener("pointerdown", (e) => { if (!picker.contains(e.target)) menu.hidden = true; });
+let saved = "red"; try { saved = localStorage.getItem(FINISH) || "red"; } catch {}
+chooseFinish(saved, false);
+screenOnly.onclick = () => { releaseAll(); host.classList.toggle("sim-screen-only"); };
+expand.onclick = () => host.classList.toggle("sim-expanded");
+full.onclick = async () => { releaseAll(); try { if (document.fullscreenElement === host) await document.exitFullscreen(); else await host.requestFullscreen(); } catch {} };
+
+const top = el("div", "sim-top"), left = el("div", "sim-left"), center = el("div", "sim-center"), right = el("div", "sim-right");
+const lcd = el("canvas", "sim-lcd"); lcd.width = lcd.height = 240; lcd.setAttribute("role", "img"); lcd.setAttribute("aria-label", "The screen");
+const bezel = el("div", "sim-bezel"); bezel.append(lcd); left.append(bezel);
+const ctx = lcd.getContext("2d"), img = ctx.createImageData(240, 240);
+ctx.fillStyle = "#000"; ctx.fillRect(0, 0, 240, 240);
+
+// press / release, counted per control: several pointers or keys may hold one
+const owners = new Map(), counts = new Map();
+let buttonMask = 0;
+function act(kind, id, value) {
+  if (kind === "button") { buttonMask = value ? buttonMask | (1 << id) : buttonMask & ~(1 << id); send({ type: "buttons", mask: buttonMask }); }
+  else if (kind === "key") send({ type: "key", k: id, vel: value });
+  else if (kind === "pad") send({ type: "pad", p: id, vel: value });
+}
+function press(owner, kind, id, value, button) {
+  if (owners.has(owner)) return;
+  const key = kind + ":" + id, n = counts.get(key) || 0;
+  counts.set(key, n + 1); owners.set(owner, { key, kind, id, button });
+  if (!n) act(kind, id, value);
+  button?.setAttribute("aria-pressed", "true");
+}
+function release(owner) {
+  const v = owners.get(owner); if (!v) return;
+  owners.delete(owner);
+  const n = counts.get(v.key) - 1;
+  if (n) counts.set(v.key, n); else { counts.delete(v.key); act(v.kind, v.id, 0); }
+  v.button?.setAttribute("aria-pressed", String(n > 0));
+}
+// a gesture that crosses keys or pads plays each (Felucca SMK's keyboard-glide.js / panel-glide.js)
+const glides = new Map();
+const hitAt = (x, y) => { const t = document.elementFromPoint(x, y)?.closest(".sim-key,.sim-pad"); return t && host.contains(t) ? t : null; };
+const velOf = (t, y) => { const r = t.getBoundingClientRect(); return Math.max(20, Math.min(127, Math.round(40 + 87 * (y - r.top) / r.height))); };
+function glideVisit(id, g, x, y) {
+  const t = hitAt(x, y);
+  if (t === g.t) return;
+  g.t = t; release("p" + id);
+  if (t) press("p" + id, t.classList.contains("sim-pad") ? "pad" : "key", +(t.dataset.pad ?? t.dataset.key), velOf(t, y), t);
+}
+function glideMove(id, x, y) {
+  const g = glides.get(id); if (!g) return;
+  const dx = x - g.x, dy = y - g.y, steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 4));
+  for (let i = 1; i <= steps; i++) glideVisit(id, g, g.x + dx * i / steps, g.y + dy * i / steps);
+  g.x = x; g.y = y;
+}
+function glideEnd(id) { if (glides.delete(id)) release("p" + id); }
+function wire(button, kind, id) {
+  button.type = "button"; button.setAttribute("aria-pressed", "false");
+  const playable = kind === "key" || kind === "pad";
+  button.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault(); button.setPointerCapture(e.pointerId);
+    if (playable) { glideEnd(e.pointerId); const g = { x: e.clientX, y: e.clientY, t: null }; glides.set(e.pointerId, g); glideVisit(e.pointerId, g, e.clientX, e.clientY); }
+    else press("p" + e.pointerId, kind, id, 1, button);
+  });
+  if (playable) button.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" && !(e.buttons & 1)) { glideEnd(e.pointerId); return; } glideMove(e.pointerId, e.clientX, e.clientY); });
+  for (const n of ["pointerup", "pointercancel", "lostpointercapture"])
+    button.addEventListener(n, (e) => { if (playable) glideEnd(e.pointerId); else release("p" + e.pointerId); });
+  button.onkeydown = (e) => { if (["Space", "Enter"].includes(e.code)) { e.preventDefault(); if (!e.repeat) press("k" + e.code, kind, id, 100, button); } };
+  button.onkeyup = (e) => { if (["Space", "Enter"].includes(e.code)) { e.preventDefault(); release("k" + e.code); } };
+  button.onblur = () => { release("kSpace"); release("kEnter"); };
+}
+
+// K1..K8: endless encoders (K1 MASTER; K2 PRESETS, K3 SELECT, K4 ALGORITHM; K5..K8 the screen's four, as KNOB BANK says)
+const knobs = el("div", "sim-knobs");
+["MASTER", "PRESETS", "SELECT", "ALGORITHM", "KNOB", "KNOB", "KNOB", "KNOB"].forEach((name, id) => {
+  const box = el("div", "sim-encoder"), dial = el("button", "sim-dial");
+  dial.type = "button"; dial.setAttribute("aria-label", `K${id + 1} (${name})`);
+  let angle = 0, drag;
+  const turn = (n) => { n = Math.max(-32, Math.min(32, n)); if (!n) return; send({ type: "enc", e: id, n }); angle += n * 12; dial.style.setProperty("--angle", angle + "deg"); };
+  dial.onpointerdown = (e) => { if (e.button) return; e.preventDefault(); dial.focus(); dial.setPointerCapture(e.pointerId); drag = { id: e.pointerId, y: e.clientY }; };
+  dial.onpointermove = (e) => { if (drag?.id !== e.pointerId) return; const step = e.shiftKey ? 24 : 7, n = Math.trunc((drag.y - e.clientY) / step); if (n) { turn(n); drag.y -= n * step; } };
+  for (const n of ["pointerup", "pointercancel", "lostpointercapture"]) dial.addEventListener(n, () => { drag = null; });
+  dial.onkeydown = (e) => { const n = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (n) { e.preventDefault(); turn(n * (e.shiftKey ? 10 : 1)); } };
+  dial.addEventListener("wheel", (e) => { e.preventDefault(); turn(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  box.append(el("span", "", `K${id + 1}`), dial, el("small", "", id >= 4 ? `KNOB ${id - 3}` : name)); knobs.append(box);
+});
+// the 16 pads: 1..8 the top row (hardware pads 0..7), 9..16 the bottom row
+const padGrid = el("div", "sim-pads"), pads = [];
+for (let i = 0; i < 16; i++) { const b = el("button", "sim-pad", String(i + 1)); b.dataset.pad = String(i); b.setAttribute("aria-label", `Pad ${i + 1}`); wire(b, "pad", i); pads.push(b); padGrid.append(b); }
+center.append(knobs, padGrid);
+// the 4 faders: 0..127
+const faderRow = el("div", "sim-faders"), faders = [];
+let faderVals = [0, 0, 0, 0];
+for (let i = 0; i < 4; i++) {
+  const label = el("label", "sim-fader", `F${i + 1}`), f = el("input");
+  f.type = "range"; f.min = 0; f.max = 127; f.value = 0; f.setAttribute("aria-label", `Fader ${i + 1}`);
+  f.oninput = () => { faderVals[i] = +f.value; send({ type: "fader", i, v: +f.value }); };
+  label.append(f); faders.push(f); faderRow.append(label);
+}
+right.append(faderRow);
+// the 18 buttons, in smk_input.h's order (bit i = button i)
+const BUTTONS = ["KNOB BANK", "FADER BANK", "◀", "▶", "OCT−", "OCT+", "ARP", "NOTE REPEAT", "SCALE", "CHORD", "GLOBE", "BT", "PATCH", "PARA", "FX", "SEQ", "SEQ PLAY", "SEQ REC"];
+const SHORT = { 7: "REPEAT", 16: "PLAY", 17: "REC" };
+const bankRow = el("div", "sim-banks"), panelBtns = el("div", "sim-buttons"), buttons = [];
+BUTTONS.forEach((name, id) => {
+  const b = el("button", "sim-button", SHORT[id] || name); b.setAttribute("aria-label", name); b.title = name;
+  wire(b, "button", id); buttons.push(b); (id < 6 ? bankRow : panelBtns).append(b);
+});
+right.append(panelBtns);
+// the wheels: raw values as the SMK's mux reads them (pitch rests ~535, ~445..640; mod 615 none .. 485 full)
+const wheels = el("div", "sim-wheels");
+for (const [id, name, min, max] of [[0, "Pitch", -100, 100], [1, "Mod", 0, 127]]) {
+  const label = el("label", "sim-wheel", name), housing = el("span", "sim-wheel-housing"), tread = el("span", "sim-wheel-tread"), input = el("input");
+  input.type = "range"; input.min = min; input.max = max; input.value = 0; input.setAttribute("aria-label", name + " wheel");
+  const paint = () => { const p = (+input.value - min) / (max - min); housing.style.setProperty("--wheel-turn", (p * 48) + "px"); housing.style.setProperty("--wheel-position", (12 + (1 - p) * 76) + "%"); };
+  const out = () => send({ type: "wheel", i: id, raw: id ? Math.round(615 - +input.value * 130 / 127) : 535 + Math.round(+input.value * .95) });
+  input.oninput = () => { paint(); out(); };
+  if (!id) { const back = () => { input.value = 0; paint(); out(); }; for (const n of ["pointerup", "pointercancel", "keyup", "blur"]) input.addEventListener(n, back); }
+  paint(); housing.append(tread, input); label.append(housing); wheels.append(label);
+}
+wheels.append(bankRow);
+// the 37 keys, C3..C6
+const piano = el("div", "sim-piano"), keys = [];
+const NOTES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+let white = 0;
+for (let i = 0; i < 37; i++) {
+  const n = i + 48, black = [1, 3, 6, 8, 10].includes(n % 12), b = el("button", "sim-key " + (black ? "black" : "white"), black ? "" : NOTES[n % 12] + (Math.floor(n / 12) - 1));
+  b.setAttribute("aria-label", NOTES[n % 12] + (Math.floor(n / 12) - 1)); b.dataset.key = String(i); wire(b, "key", i);
+  b.style.setProperty("--key-x", String(black ? white - .31 : white++)); keys.push(b); piano.append(b);
+}
+piano.style.setProperty("--white-count", white);
+top.append(wheels, left, center, right);
+const bottom = el("div", "sim-bottom"); bottom.append(piano);
+shell.append(top, bottom);
+const start = el("div", "start"), go = el("button", "", "Switch on"), msg = el("p"); msg.hidden = true;
+go.type = "button"; start.append(go, msg); shell.append(start);
+host.replaceChildren(toolbar, shell);
+
+// the computer keyboard: A W S E D F T G Y H U J K O L P ; from the second C (C4), Z / X the octave buttons
+const TYPING = ["KeyA", "KeyW", "KeyS", "KeyE", "KeyD", "KeyF", "KeyT", "KeyG", "KeyY", "KeyH", "KeyU", "KeyJ", "KeyK", "KeyO", "KeyL", "KeyP", "Semicolon"];
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.target.closest("input,select,textarea")) return;
+  const i = TYPING.indexOf(e.code);
+  if (i >= 0) { e.preventDefault(); press("q" + e.code, "key", 12 + i, 100, keys[12 + i]); }
+  else if (e.code === "KeyZ") press("q" + e.code, "button", 4, 1, buttons[4]);
+  else if (e.code === "KeyX") press("q" + e.code, "button", 5, 1, buttons[5]);
+});
+document.addEventListener("keyup", (e) => release("q" + e.code));
+function releaseAll() { for (const id of [...glides.keys()]) glideEnd(id); for (const o of [...owners.keys()]) release(o); }
+addEventListener("blur", releaseAll);
+document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAll(); send({ type: "visible", on: !document.hidden }); });
+
+// ------------------------------------------------------------------ what the firmware shows
+function drawScreen(fb) {
+  const d = img.data;
+  for (let i = 0; i < 240 * 240; i++) {
+    const v = fb[i], p = ((v >> 8) | (v << 8)) & 0xFFFF;
+    d[i * 4] = ((p >> 11) & 31) * 255 / 31; d[i * 4 + 1] = ((p >> 5) & 63) * 255 / 63; d[i * 4 + 2] = (p & 31) * 255 / 31; d[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+function drawLights(leds, rgbs) {
+  buttons.forEach((b, i) => b.classList.toggle("lit", !!(leds & (1 << i))));
+  pads.forEach((b, i) => {
+    const c = rgbs[i] >>> 0, r = (c >> 16) & 255, g = (c >> 8) & 255, bl = c & 255, m = Math.max(r, g, bl);
+    b.classList.toggle("lit", m > 0);
+    b.classList.toggle("full", m > 160);
+    if (m > 0) {   // the LED's colour, mixed into the dark pad by its level (perceived: the square root)
+      const k = 255 / m, lv = m / 255;
+      b.style.setProperty("--led", `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(bl * k)})`);
+      b.style.setProperty("--mix", Math.round(100 * Math.min(1, 0.15 + 0.85 * Math.sqrt(lv))) + "%");
+      b.style.setProperty("--glow", lv.toFixed(2));
+    }
+  });
+}
+
+// ------------------------------------------------------------------ the flash, kept in this browser
+function loadFlash() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE) || "{}"), out = {};
+    for (const [off, b64] of Object.entries(raw)) out[off] = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return out;
+  } catch { return {}; }
+}
+function saveFlash(sectors) {
+  try {
+    const raw = {};
+    for (const [off, u8] of Object.entries(sectors)) {
+      let s = "";
+      for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096));
+      raw[off] = btoa(s);
+    }
+    localStorage.setItem(STORE, JSON.stringify(raw));
+    return true;
+  } catch { return false; }
+}
+
+// ------------------------------------------------------------------ Web MIDI in (channel messages) to the firmware
+async function midiOn() {
+  if (!navigator.requestMIDIAccess) return;
+  try {
+    const access = await navigator.requestMIDIAccess();
+    const bind = () => { for (const input of access.inputs.values()) input.onmidimessage = (e) => { const d = e.data; if (d.length >= 2 && d[0] >= 0x80 && d[0] < 0xF0) send({ type: "midi", data: [d[0], d[1], d[2] || 0] }); }; };
+    access.onstatechange = bind; bind();
+  } catch { /* no permission: the panel only */ }
+}
+
+// ------------------------------------------------------------------ switching on
+const say = (t) => { msg.textContent = t; msg.hidden = !t; };
+function onNodeMessage(m, st) {
+  if (m.type !== "frame") return;
+  if (m.fb) drawScreen(m.fb);
+  if (m.leds !== undefined) drawLights(m.leds, m.pads);
+  if (m.sectors && !saveFlash(m.sectors) && !st.warned) { st.warned = true; console.warn("FMini-1: this browser does not keep the saves."); }
+}
+function loadNode(n, wasm, st) {
+  return new Promise((res, rej) => {
+    n.port.onmessage = (e) => { const m = e.data; if (m.type === "ready") res(); else if (m.type === "error") rej(new Error(m.message)); else onNodeMessage(m, st); };
+    n.port.postMessage({ type: "load", wasm, sectors: loadFlash(), faders: faderVals }, [wasm]);
+  });
+}
+const sync = () => { send({ type: "buttons", mask: buttonMask }); send({ type: "visible", on: !document.hidden }); };
+async function startWorklet(ac, wasm) {
+  await ac.audioWorklet.addModule("worklet.js");
+  const n = new AudioWorkletNode(ac, "fmini-smk", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+  n.connect(ac.destination);
+  await loadNode(n, wasm, { warned: false });
+  node = n;
+}
+// no click yet: the firmware runs silently on this thread (the screen alive); the first click starts the sound
+async function startSilent(ac, wasm) {
+  const { FMiniSMKCore } = await import("./worklet.js");
+  const core = new FMiniSMKCore();
+  const out = [[new Float32Array(128), new Float32Array(128)]];
+  const n = { port: { onmessage: null, postMessage: (m) => core.onMessage(m) } };
+  core.port = { postMessage: (m) => n.port.onmessage && n.port.onmessage({ data: m }), set onmessage(f) {} };
+  await loadNode(n, wasm.slice(0), { warned: false });
+  node = n;
+  let last = performance.now(), owed = 0;
+  const timer = setInterval(() => { const t = performance.now(); owed += Math.min(100, t - last) * 44.1 / 128; last = t; for (; owed >= 1; owed--) core.process([], out); }, 8);
+  const wake = async () => {
+    try { await ac.resume(); } catch (_) {}
+    if (ac.state !== "running") return;
+    for (const t of ["pointerdown", "keydown", "touchstart"]) removeEventListener(t, wake, true);
+    clearInterval(timer); node = null;
+    await startWorklet(ac, wasm);
+    sync();
+  };
+  for (const t of ["pointerdown", "keydown", "touchstart"]) addEventListener(t, wake, true);
+}
+async function switchOn() {
+  go.disabled = true; go.textContent = "Starting…";
+  try {
+    const ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+    ac.resume().catch(() => {});
+    const [wasm] = await Promise.all([
+      fetch("felucca.wasm").then((r) => { if (!r.ok) throw new Error(`felucca.wasm: ${r.status}`); return r.arrayBuffer(); }),
+      new Promise((r) => setTimeout(r, 250))]);
+    if (ac.state === "running") await startWorklet(ac, wasm); else await startSilent(ac, wasm);
+    start.hidden = true;
+    sync();
+    midiOn();
+  } catch (err) {
+    node = null; go.disabled = false; go.textContent = "Switch on";
+    say("Could not start: " + (err && err.message || err) + ". A current Chrome, Edge, Firefox or Safari should work.");
+  }
+}
+go.addEventListener("click", switchOn);
+switchOn();
+</script>
+</body>
+</html>

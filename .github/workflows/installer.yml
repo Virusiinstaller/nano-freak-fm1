@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# FMini-1: builds the firmware and publishes the web installer (web/make_fmini_installer.py: one page with the package
-# inside) on GitHub Pages, at https://ruppert.github.io/fmini-1/.
+# FMini-1: builds the firmware (FM-1 and the SMK-37's three models) and publishes the web installer
+# (web/make_fmini_installer.py: one page with the four packages inside) on GitHub Pages, at https://ruppert.github.io/fmini-1/.
 # Once in the repository's Settings > Pages: Source = GitHub Actions.
 name: Installer
 
@@ -40,8 +40,11 @@ jobs:
           git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
               https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"
 
-      - name: Build the firmware
+      - name: Build the firmware (the SMK-37's three models, then the FM-1)
         run: |
+          BOARD=smk37 ./build.sh
+          BOARD=smk37 MODEL=elite ./build.sh
+          BOARD=smk37 MODEL=mke ./build.sh
           ./build.sh
 
       - name: Make the installer page
@@ -49,11 +52,13 @@ jobs:
           VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
           mkdir -p _site
           python3 web/make_fmini_installer.py "build/fmini-1-fm1-$VERSION.fwsc" _site/index.html "$VERSION"
+          SMK=$(sed -n 's/^#define FMINI_SMK_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
           cp "build/fmini-1-fm1-$VERSION.fwsc" "_site/fmini-1-$VERSION.fwsc"
+          cp "build/fmini-1-fm1-$VERSION.fwsc" build/fmini-1-smk37*-"$SMK".fwsc _site/
           cp docs/fmini-ad.mp4 docs/fmini-ad-poster.jpg _site/
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
-          cp -r docs/emu _site/emu                 # the browser emulator (web/emu/build_wasi.sh builds docs/emu)
-          echo "FMini-1 v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          cp -r docs/emu _site/emu                 # the browser emulators: FM-1 in docs/emu, SMK-37 in docs/emu/smk (web/emu/build_wasi.sh, SMK=1)
+          echo "FMini-1 v$VERSION (FM-1), v$SMK (SMK-37)" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-pages-artifact@v3
         with:

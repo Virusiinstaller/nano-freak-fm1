@@ -29,8 +29,11 @@ sh tests/run_tests.sh > /tmp/tests.log 2>&1 # the whole host suite, 20-30 minute
 python3 tools/fmini_filter.py                # regenerate firmware/src/eng_fmini_filter.h (filter laws and tables)
 python3 tools/gen_fmini_presets.py           # regenerate firmware/src/eng_fmini_presets.h from tools/fmini_bank.py
 python3 tools/preset_lab.py --wasm docs/emu/felucca.wasm --out DIR     # render and measure the 200 factory patches
-WASI_SDK=<wasi-sdk-25.0 dir> sh web/emu/build_wasi.sh                    # docs/emu (the browser emulator)
-python3 web/make_fmini_installer.py build/fmini-1-fm1-<version>.fwsc docs/index.html X.Y.Z  # the installer page (docs/index.html)
+BOARD=smk37 [MODEL=elite|mke] ./build.sh   # build/fmini-1-smk37[-elite|-mke]-<smk version>.fwsc (the SMK-37's three models)
+WASI_SDK=<wasi-sdk-25.0 dir> sh web/emu/build_wasi.sh                    # docs/emu (the FM-1 browser emulator)
+SMK=1 WASI_SDK=<wasi-sdk-25.0 dir> sh web/emu/build_wasi.sh              # docs/emu/smk (the SMK-37 browser emulator)
+python3 web/make_fmini_installer.py build/fmini-1-fm1-<version>.fwsc docs/index.html X.Y.Z  # the site and installer (docs/index.html);
+                                             # it embeds the FM-1 package and the three SMK-37 ones of FMINI_SMK_VERSION from build/
 ```
 
 A single host test is one `cc` line (they are in `tests/run_tests.sh`); `tests/fmini_filter_test.c` and `tests/fmini_app_test.c`
@@ -54,7 +57,7 @@ BUILDING.md has the SDK clone). If a download is refused by the network allowlis
 - Raw CUTOFF / EMPHASIS bytes changed meaning in 1.7.0: a stored patch, user preset, sound file or library entry from 1.6.x sounds
   different. Any change of a stored value's meaning needs a note in `web/EDITOR_PROTOCOL.md` and, if possible, a migration.
 - Every new firmware build the owner gets carries a new version: bump the patch number (0.0.x) before building, never
-  ship a changed firmware under a version already given out. On branch `fmini-smk37` the SMK-37 has its own version
+  ship a changed firmware under a version already given out. The SMK-37 has its own version
   (`FMINI_SMK_VERSION` and its `FMINI_VER_*` under `BOARD_SMK37` in `core.h`); an SMK-only change bumps that one alone.
 - The version is `FMINI_VER_MAJ/MIN/PATCH` and `FMINI_VERSION` in `firmware/src/core.h`; the workflow, the emulator and the installer read it from there. INFO reports it (tag `49`), and the web editor compares it with `FW_LATEST` in `web/editor_fmini.html`: change both with the version.
   (`FELUCCA_VERSION` in `felucca.c` is Felucca's and stays.) After a version bump rebuild `docs/emu` and `docs/index.html`.

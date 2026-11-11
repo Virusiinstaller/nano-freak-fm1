@@ -27,7 +27,9 @@
 #undef memset
 #undef memcpy
 #undef memcmp
+#ifndef HOSTSIM_NO_FM1_IN                    /* (the SMK-37 emulator brings its own: web/emu/smk_web_input.h) */
 static struct { volatile uint32_t notes, buttons; } fm1_in;
+#endif
 #include "../firmware/src/core.h"
 #include "../firmware/src/engines.c"
 #include "../firmware/src/fmini_rec.c"

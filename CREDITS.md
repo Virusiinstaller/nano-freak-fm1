@@ -37,3 +37,7 @@ thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICE
 The SMK-37 board layer (input HAL, display, pad LEDs, flash map, update path, installers and their tests) is
 genkigenki's (M. Geisler), from [genkigenki/Felucca](https://github.com/genkigenki/Felucca) branch `smk37`
 (hugelton/Felucca#237), GPL-3.0, with the [fm1-to-smk37](https://github.com/genkigenki/fm1-to-smk37) kit's guide.
+
+The SMK-37 browser emulator's panel (web/emu/smk/index.html: the keyboard's drawing, its finishes and controls) is adapted from
+the simulator of [Felucca SMK](https://github.com/ChanceTheMaker/felucca-smk) by Chance Roth
+([ChanceTheMaker](https://github.com/ChanceTheMaker)), GPL-3.0; here it runs FMini-1 (web/emu/felucca_web.c built with BOARD_SMK37).

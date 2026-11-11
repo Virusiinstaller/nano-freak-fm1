@@ -6,8 +6,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="FMini-1: a Minimoog emulation firmware for the M-Vave FM-1, mono and polyphonic. Analog Circuit Modelling, 3 oscillators, ladder filter, 200 presets, arpeggiator, sequencer, MIDI.">
-<title>FMini-1 — a Minimoog emulation for the M-Vave FM-1</title>
+<meta name="description" content="FMini-1: a Minimoog emulation firmware for the M-Vave FM-1 and SMK-37, mono and polyphonic. Analog Circuit Modelling, 3 oscillators, ladder filter, 200 presets, arpeggiator, sequencer, MIDI.">
+<title>FMini-1 — a Minimoog emulation for the M-Vave FM-1 and SMK-37</title>
 <style>
   :root {
     --bg: #0d0c10; --surface: #15131a; --surface2: #1c1922; --line: #2a2631; --fg: #f4f0ea; --dim: #a29cab; --mute: #6f6a78;
@@ -36,17 +36,25 @@
   header.nav nav a.keep:hover { background: var(--or2); }
   .lang { font: 600 12px/1 var(--mono); color: var(--dim); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; cursor: pointer; }
   .lang:hover { color: var(--fg); border-color: var(--mute); }
-  header.nav nav a.try .ts { display: none; }
+  header.nav nav a.try .ts, header.nav nav .try .ts { display: none; }
+  .trywrap { position: relative; }
+  header.nav nav button.try { font: 500 14px/1.65 var(--sans); color: var(--dim); background: transparent; border: 0; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+  header.nav nav button.try:hover, header.nav nav button.try[aria-expanded=true] { color: var(--fg); background: var(--surface2); }
+  header.nav nav button.try .car { font-size: 10px; margin-left: 5px; opacity: .7; }
+  .trymenu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 210px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.55); z-index: 40; }
+  header.nav nav .trymenu a { display: flex; align-items: baseline; gap: 10px; color: var(--fg); padding: 10px 12px; border-radius: 8px; font-weight: 600; }
+  header.nav nav .trymenu a small { color: var(--mute); font: 500 11.5px/1 var(--mono); }
+  header.nav nav .trymenu a:hover { background: var(--surface2); }
   header.nav nav a.donate { color: var(--or2); }
   /* a phone: the section links go, the emulator's ("Try in browser") and Install stay; on a narrow one the short label */
   @media (max-width: 720px) {
-    header.nav nav a:not(.keep):not(.try) { display: none; }
+    header.nav nav > a:not(.keep):not(.try) { display: none; }
     header.nav .wrap { gap: 10px; }
     header.nav nav a { padding: 8px 9px; font-size: 13px; }
     header.nav nav a.keep { margin-left: 2px; }
-    header.nav nav a.try { color: var(--fg); border: 1px solid var(--line); }
+    header.nav nav a.try, header.nav nav button.try { color: var(--fg); border: 1px solid var(--line); padding: 8px 9px; font-size: 13px; }
   }
-  @media (max-width: 430px) { header.nav nav a.try .tl { display: none; } header.nav nav a.try .ts { display: inline; } }
+  @media (max-width: 430px) { header.nav nav .try .tl { display: none; } header.nav nav .try .ts { display: inline; } }
   .tipbg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
   .tipbg[hidden] { display: none; }
   .tipbox { background: var(--surface2, #1b1917); border: 1px solid var(--line); border-radius: 14px; padding: 22px; max-width: 380px; color: var(--fg); }
@@ -92,7 +100,8 @@
   .fm .body { display: block; width: 100%; height: auto; filter: drop-shadow(0 30px 50px rgba(0,0,0,.6)); }
   .fm .lcd { position: absolute; left: 30.73%; top: 15.23%; width: 16.76%; height: 28.3%; background: #000; overflow: hidden; border-radius: 1.5%; opacity: 0;
              box-shadow: 0 0 18px rgba(255,122,26,.18); cursor: pointer; }
-  .fm .lcd #scr { position: absolute; inset: 0; }
+  .fm .lcd .scr { position: absolute; inset: 0; }
+  .fm.smk .lcd { left: 13.702%; top: 11.423%; width: 17.107%; height: 38.713%; border-radius: 1.2%; }
   .fm .lcd img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transition: opacity .6s ease; }
   .copy2 { position: absolute; z-index: 3; left: 0; right: 0; text-align: center; opacity: 0; pointer-events: none; padding: 0 24px; }
   .copy2 h2 { margin: 0 auto; font-size: clamp(26px, 4vw, 40px); }
@@ -201,12 +210,13 @@
   #install .steps { margin-bottom: 12px; }
   #install #go { padding: 13px 20px; }
   @media (min-width: 900px) {   /* the install block on one screen: steps and button left, notes and details right */
-    #install .card { display: grid; grid-template-columns: 1.3fr 1fr; column-gap: 32px; row-gap: 12px; align-items: start; }
+    #install .card { display: grid; grid-template-columns: 1.3fr 1fr; grid-template-rows: auto auto auto auto auto 1fr; column-gap: 32px; row-gap: 12px; align-items: start; }
     #install .steps { grid-column: 1; grid-row: 1; margin: 0; }
-    #install #go { grid-column: 1; grid-row: 2; }
-    #install .busywarn { grid-column: 1; grid-row: 3; margin: 0; }
-    #install .prog { grid-column: 1; grid-row: 4; margin: 0; }
-    #install .side { grid-column: 2; grid-row: 1 / span 4; display: flex; flex-direction: column; gap: 12px; }
+    #install .detected { grid-column: 1; grid-row: 2; margin: 0; }
+    #install #go { grid-column: 1; grid-row: 3; }
+    #install .busywarn { grid-column: 1; grid-row: 4; margin: 0; }
+    #install .prog { grid-column: 1; grid-row: 5; margin: 0; }
+    #install .side { grid-column: 2; grid-row: 1 / span 6; display: flex; flex-direction: column; gap: 12px; }
     #install .side .note { margin: 0; }
   }
   .meter { position: relative; height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
@@ -230,6 +240,16 @@
   body.finished #phases li.done::before { background: var(--ok); }
 
   .note { color: var(--dim); font-size: 14.5px; margin: 10px 0 0; }
+  .detected { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--or); background: rgba(255,122,26,.10); font-size: 15px; line-height: 1.45; }
+  .detected b { color: var(--or2); }
+  .fwlist { list-style: none; margin: 8px 0 0; padding: 0; }
+  .fwlist li { margin: 6px 0; font-size: 14px; }
+  .fwlist li span { color: var(--mute); font: 500 12px/1 var(--mono); margin-left: 8px; }
+  .portpick label { display: block; margin-top: 14px; color: var(--dim); font-size: 13px; }
+  .devs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .devs label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--fg); font-size: 14px; cursor: pointer; }
+  .devs label:has(input:checked) { border-color: var(--or); background: rgba(255,122,26,.10); }
+  .devs input { accent-color: var(--or); margin: 0; }
   .fwother { margin: 6px 0 0; }
   #fwpick { background: transparent; color: var(--dim); border: 1px solid var(--line); font-size: 13px; padding: 6px 10px; cursor: pointer; }
   .note.warn { color: #ffb37a; }
@@ -259,8 +279,10 @@
       <a href="#features" data-t="nav_f"></a>
       <a href="#screens" data-t="nav_s"></a>
       <a href="#feat" data-t="nav_ft"></a>
+      <a href="#smk37">SMK-37</a>
       <a href="editor/" data-t="nav_ed"></a>
-      <a href="emu/" class="try"><span class="tl" data-t="nav_try"></span><span class="ts" data-t="nav_try_s"></span></a>
+      <div class="trywrap"><button type="button" class="try" id="trybtn" aria-haspopup="true" aria-expanded="false"><span class="tl" data-t="nav_try"></span><span class="ts" data-t="nav_try_s"></span><span class="car">▾</span></button>
+        <div class="trymenu" id="trymenu" hidden><a href="emu/">FM-1 <small data-t="try_fm1"></small></a><a href="emu/smk/">SMK-37 <small data-t="try_smk"></small></a></div></div>
       <a href="https://ko-fi.com/ruppert" class="try donate" target="_blank" rel="noopener"><span class="tl" data-t="donate"></span><span class="ts" data-t="donate_s"></span></a>
       <a href="#install" class="keep" data-t="nav_i"></a>
     </nav>
@@ -287,8 +309,13 @@
       <img class="mm" id="mm" alt="Minimoog" src="/*HERO*/">
       <figure class="fm" id="fm">
         <img class="body" id="fm-body" alt="M-VAVE FM-1" src="">
-        <div class="lcd" id="lcd"><div id="scr"><img id="lcd-a" alt=""><img id="lcd-b" alt=""></div></div>
+        <div class="lcd" id="lcd"><div class="scr" id="scr"><img id="lcd-a" alt=""><img id="lcd-b" alt=""></div></div>
       </figure>
+      <figure class="fm smk" id="smkfig">
+        <img class="body" id="smk-body" alt="M-VAVE SMK-37" src="">
+        <div class="lcd" id="lcd2"><div class="scr" id="scr2"><img id="lcd2-a" alt=""><img id="lcd2-b" alt=""></div></div>
+      </figure>
+      <img class="mm" id="mm2" alt="" aria-hidden="true">
       <div class="copy2" id="copy2">
         <h2 data-t="hero2_t"></h2>
         <p data-t="hero2_s"></p>
@@ -320,6 +347,21 @@
       <article class="feat"><span class="n">05</span><h3 data-t="f5t"></h3><p data-t="f5d"></p></article>
       <article class="feat"><span class="n">06</span><h3 data-t="f6t"></h3><p data-t="f6d"></p></article>
     </div>
+  </section>
+
+  <section class="s wrap" id="smk37">
+    <p class="eyebrow">SMK-37</p>
+    <h2 data-t="h_smk"></h2>
+    <p class="lead" data-t="l_smk"></p>
+    <div class="grid">
+      <article class="feat"><span class="n">01</span><h3 data-t="k1t"></h3><p data-t="k1d"></p></article>
+      <article class="feat"><span class="n">02</span><h3 data-t="k2t"></h3><p data-t="k2d"></p></article>
+      <article class="feat"><span class="n">03</span><h3 data-t="k3t"></h3><p data-t="k3d"></p></article>
+      <article class="feat"><span class="n">04</span><h3 data-t="k4t"></h3><p data-t="k4d"></p></article>
+      <article class="feat"><span class="n">05</span><h3 data-t="k5t"></h3><p data-t="k5d"></p></article>
+      <article class="feat"><span class="n">06</span><h3 data-t="k6t"></h3><p data-t="k6d"></p></article>
+    </div>
+    <p class="cta"><a class="btn sec2" href="emu/smk/" data-t="btn_smkemu"></a></p>
   </section>
 
   <section class="s wrap" id="screens">
@@ -373,9 +415,14 @@
         <li><b><i>3</i><span data-t="step3"></span></b><span class="d" data-t="s3"></span></li>
       </ol>
 
+      <div class="detected" id="detected" role="status" hidden></div>
       <button id="go" disabled><span data-t="install"></span> <small class="curver-b"></small></button>
 
-      <dialog class="portpick" id="portpick"><b data-t="pick_t"></b><p data-t="pick_d"></p><select id="portsel" size="5" aria-label="MIDI"></select><button id="portgo" type="button" data-t="pick_b"></button><button id="portno" type="button" class="ghost" data-t="pick_c"></button></dialog>
+      <dialog class="portpick" id="portpick"><b data-t="pick_t"></b><p data-t="pick_d"></p>
+        <label data-t="pick_port"></label><select id="portsel" size="4" aria-label="MIDI"></select>
+        <label data-t="pick_dev"></label>
+        <div class="devs" id="devsel"><label><input type="radio" name="dev" value="FM-1" checked> FM-1</label><label><input type="radio" name="dev" value="SMK-37 Pro"> SMK-37 Pro</label><label><input type="radio" name="dev" value="SMK-37 Elite"> SMK-37 Elite</label><label><input type="radio" name="dev" value="MKE-P37"> MKE-P37</label></div>
+        <button id="portgo" type="button" data-t="pick_b"></button><button id="portno" type="button" class="ghost" data-t="pick_c"></button></dialog>
       <div class="busywarn" role="alert"><b data-t="busy_t"></b><span data-t="busy_d"></span></div>
       <div class="prog">
         <div class="meter" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="fill"></div></div>
@@ -388,13 +435,15 @@
       <div class="side">
       <p class="note" data-t="intro"></p>
       <p class="note" data-t="compat"></p>
+      <p class="note" data-t="smknote"></p>
       <p class="note warn" data-t="warn"></p>
       <p class="note" data-t="direct"></p>
       <p class="note" data-t="beta"></p>
 
       <details>
         <summary data-t="logT"></summary>
-        <p><a id="fwdl" class="fwdl" href="#" download data-t="fwdl"></a></p>
+        <p data-t="fwdl"></p>
+        <ul class="fwlist" id="fwlist"></ul>
         <p class="fwother"><button id="fwpick" type="button" data-t="fw_pick"></button><input type="file" id="fwfile" accept=".fwsc" hidden></p>
         <pre id="log"></pre>
       </details>
@@ -419,89 +468,95 @@
 const $ = (id) => document.getElementById(id);
 const TEXT = {
   pt: {
-    intro: "Conecte o FM-1 por USB. (Funciona no Chrome ou no Edge.)",
+    intro: "Conecte o FM-1 ou o SMK-37 por USB. O instalador reconhece o aparelho e grava o firmware certo. (Funciona no Chrome ou no Edge.)",
     compat: "Compatível com as novas versões do FM-1 (com o chip de flash UC25HQ80).",
     warn: "Não desconecte o cabo USB durante a gravação.",
     install: "Instalar", other: "English",
-    fw_pick: "Instalar outro firmware (.fwsc)…", fw_bad: "Este arquivo não é um firmware FM-1 válido.",
+    fw_pick: "Instalar outro firmware (.fwsc)…", fw_bad: "Este arquivo não é um firmware válido para o FM-1 ou o SMK-37.",
+    smknote: "SMK-37 (Pro, Elite e MKE-P37): a primeira inicialização apaga as configurações do firmware original. Para voltar ao original, use o firmware e o atualizador da M-Vave para o seu modelo.",
+    det: "Dispositivo detectado: ", det_ota: " (em modo de atualização)", det_fw: " · instalando o FMini-1 ",
     editor: "Editor",
     direct: "Ligue o cabo USB direto no computador. Não precisa de Probe nem de Transporter.",
-    beta: "O FMini-1 é uma versão experimental. O autor não se responsabiliza se o seu FM-1 for danificado ou se comportar de forma estranha por causa deste firmware personalizado. Use por sua conta e risco.",
+    beta: "O FMini-1 é uma versão experimental. O autor não se responsabiliza se o seu FM-1 ou SMK-37 for danificado ou se comportar de forma estranha por causa deste firmware personalizado. Use por sua conta e risco.",
     nomidi: "Este navegador não consegue. Abra a página no Chrome ou no Edge.", loadfail: "Não foi possível carregar: ",
     start: "Iniciando", verify: "Verificando", loader: "Entrando no modo de atualização", write: "Gravando",
-    reboot: "Reiniciando", done: "Pronto! O FM-1 agora é um FMini-1", e_support: "Apoio", h_support: "Suporte o projeto", l_support: "Foram mais de cem horas de trabalho voluntário (mesmo com a ajuda de IA). E sigo corrigindo bugs e implementando novas funções. Seria ótimo se você me apoiasse para continuar este trabalho!!!", btn_support: "Doar", tip_t: "Firmware instalado!", tip_b: "Se você gostar dele, considere dar uma ajuda para o projeto para continuar o aprimoramento dele. Obrigado!", tip_go: "Apoiar no Ko-fi", tip_x: "Fechar", donate: "Apoiar", donate_s: "☕", stopped: "Interrompido. Desconecte e reconecte o USB e aperte Instalar de novo.",
+    reboot: "Reiniciando", done: "Pronto! Seu teclado agora é um FMini-1", e_support: "Apoio", h_support: "Suporte o projeto", l_support: "Foram mais de cem horas de trabalho voluntário (mesmo com a ajuda de IA). E sigo corrigindo bugs e implementando novas funções. Seria ótimo se você me apoiasse para continuar este trabalho!!!", btn_support: "Doar", tip_t: "Firmware instalado!", tip_b: "Se você gostar dele, considere dar uma ajuda para o projeto para continuar o aprimoramento dele. Obrigado!", tip_go: "Apoiar no Ko-fi", tip_x: "Fechar", donate: "Apoiar", donate_s: "☕", stopped: "Interrompido. Desconecte e reconecte o USB e aperte Instalar de novo.",
     error: "Erro: ",
     denied: "O acesso ao MIDI (SysEx) não foi permitido. Permita o MIDI nas configurações do site (barra de endereço) e aperte Instalar de novo.",
-    notfound: "FM-1 não encontrado. Confira o cabo USB (precisa ser de dados), feche outros apps que usam MIDI e aperte Instalar de novo.",
-    model: "O aparelho conectado não é um FM-1.",
+    notfound: "Nenhum FM-1 ou SMK-37 encontrado. Confira o cabo USB (precisa ser de dados), feche outros apps que usam MIDI e aperte Instalar de novo.",
+    model: "O firmware não combina com o aparelho conectado: ",
+    unknown: "O aparelho conectado não é um FM-1 nem um SMK-37: ",
     lost: "A conexão USB caiu. Reconecte e aperte Instalar de novo.",
-    noloader: "O FM-1 em modo de atualização não foi encontrado. Reconecte o USB e aperte Instalar de novo (ele fica em modo de atualização até terminar).",
-    noreturn: "O FM-1 não voltou. Desligue e ligue de novo.",
-    mismatch: "Gravado, mas o FM-1 informa outra versão: ",
+    noloader: "O aparelho em modo de atualização não foi encontrado. Reconecte o USB e aperte Instalar de novo (ele fica em modo de atualização até terminar).",
+    noreturn: "O aparelho não voltou. Desligue e ligue de novo.",
+    mismatch: "Gravado, mas o aparelho informa outra versão: ",
     badpkg: "O arquivo a instalar está danificado. Recarregue a página.",
     leave: "Gravando. Não feche a página.",
-    pick_t: "Qual destes é o seu FM-1?", pick_d: "Não achei o FM-1 pelo nome: outro firmware personalizado pode dar outro nome ao USB. Escolha na lista o dispositivo MIDI que é o FM-1 (com o USB dele conectado):", pick_b: "Instalar neste dispositivo", pick_c: "Cancelar",
-    busy_t: "Instalação em andamento: não feche esta página!", busy_d: "Pode trocar de aba ou de programa. Não feche a página, não desconecte o USB nem desligue o FM-1 até aparecer \"Pronto\". A tela do FM-1 pode ficar apagada ou reiniciar durante o processo: é normal.",
+    pick_t: "Qual é o seu teclado?", pick_d: "Não achei o FM-1 nem o SMK-37 pelo nome: outro firmware personalizado pode dar outro nome ao USB. Escolha a entrada MIDI do aparelho (com o USB dele conectado) e qual é o aparelho:", pick_port: "Entrada MIDI", pick_dev: "Dispositivo", pick_b: "Instalar neste dispositivo", pick_c: "Cancelar",
+    busy_t: "Instalação em andamento: não feche esta página!", busy_d: "Pode trocar de aba ou de programa. Não feche a página, não desconecte o USB nem desligue o teclado até aparecer \"Pronto\". A tela pode ficar apagada ou reiniciar durante o processo: é normal.",
     license: "GPL-3.0, sem garantia. Código-fonte:",
-    ready: "Pronto. Conecte o FM-1 e aperte Instalar.",
+    ready: "Pronto. Conecte o FM-1 ou o SMK-37 e aperte Instalar.",
     step1: "Conectar", step2: "Instalar", step3: "Tocar",
-    s1: "Ligue o FM-1 ao computador com um cabo USB de dados.", s2: "Aperte Instalar e mantenha o cabo conectado até aparecer Pronto.", s3: "O FM-1 reinicia como FMini-1, com a tela de abertura.",
+    s1: "Ligue o FM-1 ou o SMK-37 ao computador com um cabo USB de dados.", s2: "Aperte Instalar: o aparelho é detectado e o firmware certo é gravado. Mantenha o cabo conectado até aparecer Pronto.", s3: "O teclado reinicia como FMini-1, com a tela de abertura.",
     ph_verify: "Verificar", ph_loader: "Modo de atualização", ph_write: "Gravar", ph_reboot: "Reiniciar", ph_done: "Pronto",
-    tagline: "Emulação do Minimoog para o FM-1 (mono/poly)",
+    tagline: "Emulação do Minimoog para o FM-1 e o SMK-37 (mono/poly)",
     feat: "3 osciladores · filtro ladder · 200 presets · arpejador · MIDI",
     risk: "Use por sua conta e risco", logT: "Detalhes", fw: "Firmware",
-    fwdl: "Baixar este firmware (.fwsc): a versão desta página",
+    fwdl: "Os firmwares desta página (.fwsc), para baixar:",
   },
   en: {
-    intro: "Connect the FM-1 by USB. (Works in Chrome or Edge.)",
+    intro: "Connect the FM-1 or the SMK-37 by USB. The installer recognises it and writes the right firmware. (Works in Chrome or Edge.)",
     compat: "Supports the new FM-1 versions (with the UC25HQ80 flash chip).",
     warn: "Do not unplug the USB cable while writing.",
     install: "Install", other: "Português",
-    fw_pick: "Install another firmware (.fwsc)…", fw_bad: "This file is not a valid FM-1 firmware.",
+    fw_pick: "Install another firmware (.fwsc)…", fw_bad: "This file is not a valid firmware for the FM-1 or the SMK-37.",
+    smknote: "SMK-37 (Pro, Elite and MKE-P37): the first start clears the stock firmware's settings. To go back to the stock firmware, use M-Vave's firmware and updater for your model.",
+    det: "Detected device: ", det_ota: " (in update mode)", det_fw: " · installing FMini-1 ",
     editor: "Editor (after installing: edit sounds and sequences from the computer)",
     direct: "Connect the USB cable directly to the computer. No probe or Transporter is needed.",
-    beta: "FMini-1 is an experimental release. The author accepts no responsibility if your FM-1 is damaged or misbehaves because of this custom firmware. Use it at your own risk.",
+    beta: "FMini-1 is an experimental release. The author accepts no responsibility if your FM-1 or SMK-37 is damaged or misbehaves because of this custom firmware. Use it at your own risk.",
     nomidi: "This browser cannot do it. Open the page in Chrome or Edge.", loadfail: "Could not load: ",
     start: "Starting", verify: "Verifying", loader: "Switching to update mode", write: "Writing",
-    reboot: "Restarting", done: "Done", e_support: "Support", h_support: "Buy me a Coffee", l_support: "It took over a hundred hours for this voluntary work (even with the help of AI). And I am still fixing bugs and implementing new features. It would be great if you support me to continue this work!!!", btn_support: "Tip", tip_t: "Firmware installed!", tip_b: "If you like it, consider a tip to support the project. Thank you!", tip_go: "Support on Ko-fi", tip_x: "Close", donate: "Support", donate_s: "☕", stopped: "Stopped. Replug the USB cable and press Install again.",
+    reboot: "Restarting", done: "Done! Your keyboard is now an FMini-1", e_support: "Support", h_support: "Buy me a Coffee", l_support: "It took over a hundred hours for this voluntary work (even with the help of AI). And I am still fixing bugs and implementing new features. It would be great if you support me to continue this work!!!", btn_support: "Tip", tip_t: "Firmware installed!", tip_b: "If you like it, consider a tip to support the project. Thank you!", tip_go: "Support on Ko-fi", tip_x: "Close", donate: "Support", donate_s: "☕", stopped: "Stopped. Replug the USB cable and press Install again.",
     error: "Error: ",
     denied: "MIDI (SysEx) access was not allowed. Allow MIDI in the site settings (address bar) and press Install again.",
-    notfound: "FM-1 not found. Check the USB cable (a data cable), close other apps that use MIDI, and press Install again.",
-    model: "The connected device is not an FM-1.",
+    notfound: "No FM-1 or SMK-37 found. Check the USB cable (a data cable), close other apps that use MIDI, and press Install again.",
+    model: "The firmware does not match the connected device: ",
+    unknown: "The connected device is neither an FM-1 nor an SMK-37: ",
     lost: "The USB connection was lost. Replug it and press Install again.",
-    noloader: "The FM-1 in update mode was not found. Replug the USB cable and press Install again (it stays in update mode until it is finished).",
-    noreturn: "The FM-1 did not come back. Power-cycle it.",
-    mismatch: "Written, but the FM-1 reports another version: ",
+    noloader: "The device in update mode was not found. Replug the USB cable and press Install again (it stays in update mode until it is finished).",
+    noreturn: "The device did not come back. Power-cycle it.",
+    mismatch: "Written, but the device reports another version: ",
     badpkg: "The file to install is damaged. Reload the page.",
     leave: "Writing. Do not close the page.",
-    pick_t: "Which one is your FM-1?", pick_d: "I could not find the FM-1 by name: another custom firmware may name its USB device differently. Pick the MIDI device that is the FM-1 from the list (with its USB connected):", pick_b: "Install on this device", pick_c: "Cancel",
-    busy_t: "Installing: do not close this page!", busy_d: "You can switch tabs or apps. Do not close the page, unplug the USB cable or power off the FM-1 until it says Done. The FM-1 screen may go blank or restart meanwhile: that is normal.",
+    pick_t: "Which is your keyboard?", pick_d: "I could not find the FM-1 or the SMK-37 by name: another custom firmware may name its USB device differently. Pick the device's MIDI input (with its USB connected) and which device it is:", pick_port: "MIDI input", pick_dev: "Device", pick_b: "Install on this device", pick_c: "Cancel",
+    busy_t: "Installing: do not close this page!", busy_d: "You can switch tabs or apps. Do not close the page, unplug the USB cable or power off the keyboard until it says Done. The screen may go blank or restart meanwhile: that is normal.",
     license: "GPL-3.0, no warranty. Source:",
-    ready: "Ready. Connect your FM-1 and press Install.",
+    ready: "Ready. Connect your FM-1 or SMK-37 and press Install.",
     step1: "Connect", step2: "Install", step3: "Play",
-    s1: "Plug the FM-1 into the computer with a USB data cable.", s2: "Press Install and keep the cable connected until it says Done.", s3: "The FM-1 restarts as FMini-1 with its splash screen.",
+    s1: "Plug the FM-1 or the SMK-37 into the computer with a USB data cable.", s2: "Press Install: the device is detected and the right firmware is written. Keep the cable connected until it says Done.", s3: "The keyboard restarts as FMini-1 with its splash screen.",
     ph_verify: "Verify", ph_loader: "Update mode", ph_write: "Write", ph_reboot: "Restart", ph_done: "Done",
-    tagline: "A Minimoog emulation for the M-Vave FM-1 (mono/poly)",
+    tagline: "A Minimoog emulation for the M-Vave FM-1 and SMK-37 (mono/poly)",
     feat: "3 oscillators · ladder filter · 200 presets · arpeggiator · MIDI",
     risk: "Use at your own risk", logT: "Details", fw: "Firmware",
-    fwdl: "Download this firmware (.fwsc): this page's version",
+    fwdl: "This page's firmwares (.fwsc), to download:",
   },
 };
 /* ---- the site: texts (PT / EN / JA) and the parts it draws itself ---- */
 const SITE = {
   pt: {
     nav_f: "Som", nav_s: "Telas", nav_ft: "Features", nav_ed: "Editor", nav_i: "Instalar",
-    sub: "Um firmware aberto que transforma o M-VAVE FM-1 em um sintetizador monofônico e polifônico. O FMini-1 usa a técnica de Analog Circuit Modelling, criada a partir dos esquemas reais do Minimoog para reproduzir com precisão o comportamento do instrumento original: três osciladores, filtro ladder, contornos, efeitos e tudo ao alcance dos botões do FM-1.",
+    sub: "Um firmware aberto que transforma o M-VAVE FM-1 e o SMK-37 em sintetizadores monofônicos e polifônicos. O FMini-1 usa a técnica de Analog Circuit Modelling, criada a partir dos esquemas reais do Minimoog para reproduzir com precisão o comportamento do instrumento original: três osciladores, filtro ladder, contornos, efeitos e tudo ao alcance dos botões e knobs do seu teclado.",
     chip_f: "Filtro ladder", chip_p: "200 presets",
     cta_install: "Instalar agora", cta_screens: "Ver as telas",
-    h_sound: "O som", l_sound: "Cada bloco do painel do Minimoog tem seu lugar na tela de 240 × 240 do FM-1, com quatro knobs físicos para tocar de verdade.",
+    h_sound: "O som", l_sound: "Cada bloco do painel do Minimoog tem seu lugar na tela de 240 × 240, a mesma no FM-1 e no SMK-37, com knobs físicos para tocar de verdade.",
     f1t: "Banco de osciladores", f1d: "Três osciladores com faixas de LO a 2', forma de onda individual, ajuste fino (detune) independente nos osciladores 2 e 3 e uma leve deriva de afinação, como a dos VCOs analógicos.",
     f2t: "Filtro ladder", f2d: "Ladder de 4 polos, 24 dB/oitava, com saturação em cada estágio e o atraso de realimentação do circuito do Minimoog. Com a ênfase a partir de 8 o filtro auto-oscila numa senoide pura que acompanha o teclado em 1 V/oitava. O corte é lido de −5 a +5, como no painel.",
     f3t: "Contornos", f3d: "Dois contornos (filtro e volume) com ataque, decaimento e sustentação. O ataque é exponencial, como o do circuito original. Glide, LFO e modulação completam a seção.",
     f4t: "200 presets", f4d: "Vinte grupos de dez: uma vitrine de estilos, hard leads, soft leads, baixos, pads e cordas, metais, plucks, teclas, atmosferas e efeitos sonoros.",
-    f5t: "Arpejador e sequenciador", f5d: "Um toque no ARP liga e desliga; segurar ativa o HOLD. O sequenciador grava até 64 notas (REC) e toca (PLAY). Os LEDs das teclas acendem junto com as notas.",
+    f5t: "Arpejador e sequenciador", f5d: "Um toque no ARP liga e desliga; segurar ativa o HOLD. O sequenciador grava até 64 notas (REC) e toca (PLAY). Os LEDs das teclas (no SMK-37, os pads) acendem junto com as notas.",
     f6t: "Efeitos por preset", f6d: "Reverb, delay, chorus e drive, cada preset com a sua própria combinação, para que baixos, leads e pads tenham ambientes bem diferentes.",
-    h_screens: "As telas", l_screens: "O painel foi desenhado para a tela do FM-1, com knobs estriados, chaves vermelhas e azuis e gráficos de filtro e contornos. Escolha uma página:",
+    h_screens: "As telas", l_screens: "O painel foi desenhado para a tela do FM-1 e do SMK-37, com knobs estriados, chaves vermelhas e azuis e gráficos de filtro e contornos. Escolha uma página:",
     views: [
       { t: "CTRL · Controladores", d: "Afinação geral, glide, quantidade de modulação e velocidade do LFO (botão LFO).", l: ["Quatro knobs: TUNE, GLIDE, MOD MIX e LFO RATE", "Chaves MOD OSC, MOD FLT, GLIDE e LFO SQR"] },
       { t: "OSC · Banco de osciladores", d: "Os três osciladores: faixa de oitava, forma de onda e detune dos osciladores 2 e 3.", l: ["Faixas LO, 32', 16', 8', 4' e 2'", "Seis formas de onda, desenhadas nas caixas da tela"] },
@@ -526,26 +581,35 @@ const SITE = {
     ft2t: "Mono e 12 vozes", ft2d: "Monofônico como o Minimoog, ou polifônico com 12 vozes.",
     ft3t: "Emulação perfeita", ft3d: "Três osciladores, mixer com saturação suave e filtro ladder de 24 dB/oitava com auto-oscilação, modelados no Minimoog Model D.",
     ft4t: "Efeitos", ft4d: "5 reverbs (Room, Hall, Plate, Spring, Cloud), 7 delays (Analog, Digital, Tape, Ping-Pong, Multi, Slap, Reverse), 3 chorus (Stereo, Juno, Multi) e drive (Soft, Tube).",
-    ft5t: "MIDI CC para controladores", ft5d: "50 controles com CC próprio, que você pode trocar, e o FMini-1 aprende o CC que o controlador enviar. Entrada USB e TRS, filtro de canal, pitch bend e roda de modulação (vibrato).",
+    ft5t: "MIDI CC para controladores", ft5d: "50 controles com CC próprio, que você pode trocar, e o FMini-1 aprende o CC que o controlador enviar. Entrada USB (e TRS no FM-1), filtro de canal, pitch bend e roda de modulação (vibrato).",
     ft6t: "Sequenciador de 64 notas", ft6d: "Grave até 64 notas (REC) e toque (PLAY).",
     ft7t: "Arpegiador", ft7d: "Um toque liga e desliga, segurar ativa o HOLD.",
     ft8t: "Editor web", ft8d: "Edite sons e presets pelo navegador, ligado ao FM-1 por USB-MIDI.",
-    ft9t: "Emulador online", ft9d: "Experimente o FMini-1 no navegador, sem instalar nada.",
-    h_install: "Instalar", l_install: "O instalador roda aqui mesmo, no navegador, e grava o firmware no FM-1 pelo cabo USB.",
+    ft9t: "Emuladores online", ft9d: "Experimente o FMini-1 no navegador, no FM-1 ou no SMK-37, sem instalar nada.",
+    h_install: "Instalar", l_install: "O instalador roda aqui mesmo, no navegador: reconhece se o aparelho é um FM-1 ou um SMK-37 e grava o firmware certo pelo cabo USB.",
+    h_smk: "Também no SMK-37", l_smk: "O mesmo FMini-1, a mesma tela e os mesmos 200 presets no teclado de 37 teclas da M-Vave, com tudo o que ele tem a mais: pads, faders, oito knobs e MIDI OUT completo.",
+    k1t: "37 teclas com velocity", k1d: "Três oitavas inteiras, com OCTAVE− e OCTAVE+. No PRESET SETTINGS, VELOCITY SENS. liga ou desliga a dinâmica de cada preset.",
+    k2t: "16 pads", k2d: "Escolhem os presets da página atual (o selecionado aceso) e, no sequenciador, mostram os 64 passos em quatro janelas coloridas.",
+    k3t: "4 faders, 4 bancos", k3d: "FADER BANK alterna entre A.ENV, F.ENV, MIX e os knobs da tela, com um aviso na tela a cada troca.",
+    k4t: "8 knobs, 4 bancos", k4d: "K1 é o volume, K2 a K4 trocam de preset e navegam, e K5 a K8 controlam FILTER, LFO, FX ou os knobs da tela (KNOB BANK).",
+    k5t: "MIDI OUT completo", k5d: "Teclas, pads, knobs, faders e as rodas saem por USB e pela saída TRS, com canal de saída próprio.",
+    k6t: "Pro, Elite e MKE-P37", k6d: "Um firmware para cada modelo. O instalador reconhece qual é o seu e grava o certo.",
+    btn_smkemu: "Testar o SMK-37 no navegador",
+    try_fm1: "emulador", try_smk: "emulador",
   },
   en: {
     nav_f: "Sound", nav_s: "Screens", nav_ft: "Features", nav_ed: "Editor", nav_i: "Install",
-    sub: "An open firmware that turns the M-VAVE FM-1 into a monophonic and polyphonic synth. FMini-1 uses Analog Circuit Modelling, built from the actual Minimoog schematics to accurately reproduce the behaviour of the real instrument: three oscillators, a ladder filter, contours and effects, all within reach of the FM-1's buttons.",
+    sub: "An open firmware that turns the M-VAVE FM-1 and SMK-37 into monophonic and polyphonic synths. FMini-1 uses Analog Circuit Modelling, built from the actual Minimoog schematics to accurately reproduce the behaviour of the real instrument: three oscillators, a ladder filter, contours and effects, all within reach of your keyboard's buttons and knobs.",
     chip_f: "Ladder filter", chip_p: "200 presets",
     cta_install: "Install now", cta_screens: "See the screens",
-    h_sound: "The sound", l_sound: "Each block of the Minimoog panel has its place on the FM-1's 240 × 240 screen, with four real knobs to play it for real.",
+    h_sound: "The sound", l_sound: "Each block of the Minimoog panel has its place on the 240 × 240 screen, the same on the FM-1 and the SMK-37, with real knobs to play it for real.",
     f1t: "Oscillator bank", f1d: "Three oscillators with ranges from LO to 2', a waveform each, independent detune on oscillators 2 and 3 and a touch of pitch drift, like analog VCOs.",
     f2t: "Ladder filter", f2d: "A four-pole ladder, 24 dB/octave, with saturation in every stage and the feedback lag of the Minimoog circuit. From emphasis 8 up it self-oscillates as a pure sine that follows the keyboard at 1 V/octave. Cutoff reads -5 to +5, as on the panel.",
     f3t: "Contours", f3d: "Two contours (filter and loudness) with attack, decay and sustain. The attack is exponential, like the original circuit. Glide, LFO and modulation complete the section.",
     f4t: "200 presets", f4d: "Twenty groups of ten: a showcase of styles, hard leads, soft leads, basses, pads and strings, brass, plucks, keys, atmospheres and sound effects.",
-    f5t: "Arpeggiator and sequencer", f5d: "One tap on ARP turns it on and off; holding it sets HOLD. The sequencer records up to 64 notes (REC) and plays them (PLAY). The key LEDs light with the notes.",
+    f5t: "Arpeggiator and sequencer", f5d: "One tap on ARP turns it on and off; holding it sets HOLD. The sequencer records up to 64 notes (REC) and plays them (PLAY). The key LEDs (the pads on the SMK-37) light with the notes.",
     f6t: "Effects per preset", f6d: "Reverb, delay, chorus and drive, each preset with its own combination, so basses, leads and pads live in very different spaces.",
-    h_screens: "The screens", l_screens: "The panel is drawn for the FM-1's screen, with fluted knobs, red and blue rocker switches and graphs of the filter and contours. Pick a page:",
+    h_screens: "The screens", l_screens: "The panel is drawn for the screen of the FM-1 and the SMK-37, with fluted knobs, red and blue rocker switches and graphs of the filter and contours. Pick a page:",
     views: [
       { t: "CTRL · Controllers", d: "Master tune, glide, modulation amount and LFO speed (the LFO button).", l: ["Four knobs: TUNE, GLIDE, MOD MIX and LFO RATE", "Switches MOD OSC, MOD FLT, GLIDE and LFO SQR"] },
       { t: "OSC · Oscillator bank", d: "The three oscillators: octave range, waveform and detune for oscillators 2 and 3.", l: ["Ranges LO, 32', 16', 8', 4' and 2'", "Six waveforms, drawn in the boxes on the screen"] },
@@ -570,25 +634,34 @@ const SITE = {
     ft2t: "Mono and 12 voices", ft2d: "Monophonic like the Minimoog, or polyphonic with 12 voices.",
     ft3t: "Minimoog model", ft3d: "Three oscillators, a mixer that overloads softly and a 24 dB/oct ladder filter that self-oscillates, modelled on the Minimoog Model D.",
     ft4t: "Effects", ft4d: "5 reverbs (Room, Hall, Plate, Spring, Cloud), 7 delays (Analog, Digital, Tape, Ping-Pong, Multi, Slap, Reverse), 3 choruses (Stereo, Juno, Multi) and drive (Soft, Tube).",
-    ft5t: "MIDI CC for controllers", ft5d: "50 controls with their own CC, which you can change, and the FMini-1 learns the CC your controller sends. USB and TRS input, channel filter, pitch bend and mod wheel (vibrato).",
+    ft5t: "MIDI CC for controllers", ft5d: "50 controls with their own CC, which you can change, and the FMini-1 learns the CC your controller sends. USB input (and TRS on the FM-1), channel filter, pitch bend and mod wheel (vibrato).",
     ft6t: "64-note sequencer", ft6d: "Record up to 64 notes (REC) and play them back (PLAY).",
     ft7t: "Arpeggiator", ft7d: "One tap turns it on and off, holding it enables HOLD.",
     ft8t: "Web editor", ft8d: "Edit sounds and presets in the browser, connected to the FM-1 over USB-MIDI.",
-    ft9t: "Online emulator", ft9d: "Try the FMini-1 in your browser, with nothing to install.",
-    h_install: "Install", l_install: "The installer runs right here, in the browser, and writes the firmware to the FM-1 over the USB cable.",
+    ft9t: "Online emulators", ft9d: "Try the FMini-1 in your browser, on the FM-1 or the SMK-37, with nothing to install.",
+    h_install: "Install", l_install: "The installer runs right here, in the browser: it recognises whether the device is an FM-1 or an SMK-37 and writes the right firmware over the USB cable.",
+    h_smk: "On the SMK-37 too", l_smk: "The same FMini-1, the same screen and the same 200 presets on M-Vave's 37-key keyboard, with everything it adds: pads, faders, eight knobs and a full MIDI OUT.",
+    k1t: "37 keys with velocity", k1d: "Three whole octaves, with OCTAVE− and OCTAVE+. In PRESET SETTINGS, VELOCITY SENS. turns each preset's dynamics on or off.",
+    k2t: "16 pads", k2d: "They pick the presets of the current page (the chosen one lit) and, in the sequencer, show the 64 steps in four coloured windows.",
+    k3t: "4 faders, 4 banks", k3d: "FADER BANK switches between A.ENV, F.ENV, MIX and the screen's knobs, with a note on the screen at each change.",
+    k4t: "8 knobs, 4 banks", k4d: "K1 is the volume, K2 to K4 change presets and navigate, and K5 to K8 set FILTER, LFO, FX or the screen's knobs (KNOB BANK).",
+    k5t: "Full MIDI OUT", k5d: "Keys, pads, knobs, faders and the wheels go out over USB and the TRS jack, on their own output channel.",
+    k6t: "Pro, Elite and MKE-P37", k6d: "A firmware for each model. The installer recognises yours and writes the right one.",
+    btn_smkemu: "Try the SMK-37 in your browser",
+    try_fm1: "emulator", try_smk: "emulator",
   },
 };
 for (const l in SITE) Object.assign(TEXT[l], SITE[l]);
 const SITE2 = {
-  pt: { announce: "Firmware gratuito e de código aberto para o M-VAVE FM-1", e_sound: "Som", h_sound: "Três osciladores, um filtro ladder e muito corpo", e_screens: "Telas", h_screens: "Cada página, uma seção do painel",
+  pt: { announce: "Firmware gratuito e de código aberto para o M-VAVE FM-1 e SMK-37", e_sound: "Som", h_sound: "Três osciladores, um filtro ladder e muito corpo", e_screens: "Telas", h_screens: "Cada página, uma seção do painel",
         e_feat: "Features", h_feat: "Tudo o que o FMini-1 faz", e_install: "Instalar", h_install: "Instale direto do navegador" },
-  en: { announce: "Free, open-source firmware for the M-VAVE FM-1", e_sound: "Sound", h_sound: "Three oscillators, a ladder filter and plenty of body", e_screens: "Screens", h_screens: "Every page, one section of the panel",
+  en: { announce: "Free, open-source firmware for the M-VAVE FM-1 and SMK-37", e_sound: "Sound", h_sound: "Three oscillators, a ladder filter and plenty of body", e_screens: "Screens", h_screens: "Every page, one section of the panel",
         e_feat: "Features", h_feat: "Everything the FMini-1 does", e_install: "Install", h_install: "Install straight from the browser" },
 };
 for (const l in SITE2) Object.assign(TEXT[l], SITE2[l]);
 const SITE3 = {
-  pt: { hero2_t: "Um clássico dentro do FM-1.", hero2_s: "Firmware gratuito. Instale direto do navegador e volte ao original quando quiser.", hint: "Role" },
-  en: { hero2_t: "A classic, inside the FM-1.", hero2_s: "Free firmware. Install straight from the browser and go back to the original whenever you like.", hint: "Scroll" },
+  pt: { hero2_t: "Um clássico dentro do FM-1 e do SMK-37.", hero2_s: "Firmware gratuito. Instale direto do navegador e volte ao original quando quiser.", hint: "Role" },
+  en: { hero2_t: "A classic, inside the FM-1 and the SMK-37.", hero2_s: "Free firmware. Install straight from the browser and go back to the original whenever you like.", hint: "Scroll" },
 };
 for (const l in SITE3) Object.assign(TEXT[l], SITE3[l]);
 const SITE4 = {
@@ -643,20 +716,25 @@ const nl = (navigator.language || "en").toLowerCase();
 let lang = nl.startsWith("pt") ? "pt" : "en";
 const LANGS = ["pt", "en"];
 const t = (k) => TEXT[lang][k];
-let lastKey = null, lastArg = "";
+let lastKey = null, lastArg = "", detKey = null;   /* (detKey: the device step 1 found, shown again on a language change) */
 function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-t]").forEach((e) => { e.textContent = t(e.dataset.t); });
   $("tipx").textContent = t("tip_x");
   $("lang").textContent = lang === "pt" ? "PT" : "EN";
   if (lastKey) $("status").textContent = t(lastKey) + lastArg;
+  if (detKey) showDetected(detKey.label, detKey.ota, detKey.pk);
   renderSite();
 }
 $("tipx").addEventListener("click", () => { $("tip").hidden = true; });
+/* "Try in browser": the two emulators, FM-1 and SMK-37 */
+$("trybtn").addEventListener("click", (e) => { e.stopPropagation(); const open = $("trymenu").hidden; $("trymenu").hidden = !open; $("trybtn").setAttribute("aria-expanded", String(open)); });
+document.addEventListener("click", (e) => { if (!$("trymenu").hidden && !e.target.closest(".trywrap")) { $("trymenu").hidden = true; $("trybtn").setAttribute("aria-expanded", "false"); } });
+addEventListener("keydown", (e) => { if (e.key === "Escape") { $("trymenu").hidden = true; $("trybtn").setAttribute("aria-expanded", "false"); } });
 $("tip").addEventListener("click", (e) => { if (e.target.id === "tip") $("tip").hidden = true; });
 $("lang").addEventListener("click", () => { lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]; applyLang(); });
 applyLang();
-const sayK = (k, arg = "") => { lastKey = k; lastArg = arg; $("status").textContent = t(k) + arg; if (k === "done") $("tip").hidden = false; document.body.classList.toggle("bad", ["error","denied","notfound","model","lost","noloader","noreturn","mismatch","badpkg","stopped","loadfail","nomidi","fw_bad"].includes(k)); };
+const sayK = (k, arg = "") => { lastKey = k; lastArg = arg; $("status").textContent = t(k) + arg; if (k === "done") $("tip").hidden = false; document.body.classList.toggle("bad", ["error","denied","notfound","model","unknown","lost","noloader","noreturn","mismatch","badpkg","stopped","loadfail","nomidi","fw_bad"].includes(k)); };
 const say = (txt) => { lastKey = null; $("status").textContent = txt; };
 const log = (t) => { $("log").textContent += t + "\n"; };
 const PHASES = ["verify", "loader", "write", "reboot", "done"];
@@ -690,12 +768,20 @@ function writeBar(n) {
   }, 100);
 }
 function stopCrawl() { if (crawl) clearInterval(crawl); crawl = null; }
-let image = null;
+/* the packages: the FM-1's and the SMK-37's (Pro, Elite, MKE-P37), each for exactly one model (fm1ota.js sameModel) */
 const meta = /*META*/;
-let product = meta.product;                 /* the package to install: the site's, or one chosen below */
-document.querySelectorAll(".curver").forEach((e) => { e.textContent = "v" + meta.version; });
-document.querySelectorAll(".curver-b").forEach((e) => { e.textContent = "(v" + meta.version + ")"; });
-{ const dl = document.getElementById("fwdl"); if (dl) { dl.href = meta.pkg; dl.download = "FMini-1-" + meta.version + ".fwsc"; } }
+const PKGS = meta.pkgs;                       /* [{product, label, file, version, pkg}] */
+const modelOf = (product) => product.split("_")[0];
+const images = {};                            /* product -> the logical image */
+let picked = null;                            /* "Install another firmware": {image, product} */
+let ready = false;
+document.querySelectorAll(".curver").forEach((e) => { e.textContent = "FM-1 v" + meta.version + " · SMK-37 v" + meta.smkVersion; });
+document.querySelectorAll(".curver-b").forEach((e) => { e.textContent = ""; });
+for (const p of PKGS) {
+  const li = document.createElement("li"), a = document.createElement("a"), sp = document.createElement("span");
+  a.href = p.pkg; a.download = p.file; a.textContent = p.label + " · v" + p.version; sp.textContent = p.file;
+  li.append(a, sp); $("fwlist").appendChild(li);
+}
 
 let writing = false;
 let wake = null;
@@ -722,28 +808,41 @@ const holdPage = (on) => {
     if (holdAudio) { holdAudio.close().catch(() => {}); holdAudio = null; }
   }
 };
-const lockInstaller = (on) => { keepAwake(on); holdPage(on); writing = on; $("go").disabled = on || !image; };
+const lockInstaller = (on) => { keepAwake(on); holdPage(on); writing = on; $("go").disabled = on || !ready; };
 document.addEventListener("visibilitychange", () => { if (!document.hidden && writing) keepAwake(true); });
 window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = t("leave"); } });
 
 (async () => {
   if (!navigator.requestMIDIAccess) { sayK("nomidi"); return; }
   try {
-    const r = await fetch(meta.pkg);
-    if (!r.ok) throw new Error(`${meta.pkg}: HTTP ${r.status}`);
-    const pkg = new Uint8Array(await r.arrayBuffer());
-    if (productOf(pkg) !== product) { sayK("badpkg"); return; }
-    image = logicalImage(pkg);
+    for (const p of PKGS) {
+      const r = await fetch(p.pkg);
+      if (!r.ok) throw new Error(`${p.file}: HTTP ${r.status}`);
+      const pkg = new Uint8Array(await r.arrayBuffer());
+      if (productOf(pkg) !== p.product) { sayK("badpkg"); return; }
+      images[p.product] = logicalImage(pkg);
+    }
+    ready = true;
     say(t("ready"));
     $("go").disabled = false;
     setBar(0, null);
   } catch (e) { sayK("loadfail", e.message); }
 })();
 
-async function runInstall(portName) {
+/* step 1 done: which device, and what goes on it */
+function showDetected(label, ota, pk) {
+  detKey = { label, ota, pk };
+  const box = $("detected");
+  box.innerHTML = "";
+  const b = document.createElement("b"); b.textContent = label;
+  box.append(t("det"), b, (ota ? t("det_ota") : "") + (pk ? t("det_fw") + "v" + pk.version : ""));
+  box.hidden = false;
+}
+async function runInstall(portName, chosen) {
   if (writing) return;
   if ($("portpick").open) $("portpick").close();
   lockInstaller(true);
+  $("detected").hidden = true; detKey = null;
   let midi;
   try { midi = await navigator.requestMIDIAccess({ sysex: true }); }
   catch (e) { sayK("denied"); lockInstaller(false); return; }
@@ -761,13 +860,18 @@ async function runInstall(portName) {
       if (k === "reboot") { stopCrawl(); sayK("reboot"); setBar(100, "reboot"); }
       if (k === "done") { stopCrawl(); setBar(100, "done"); sayK("done"); }
     };
-    const ota = await up.find((id) => /^ota-/i.test(id.model));
-    if (ota) {
-      ota.link.close();
-      sayK((await up.resume(image, step, product)) ? "done" : "stopped");
-    } else {
-      await up.install(image, product, step);
-    }
+    /* which device is it: its identity (the running firmware's, or the update loader's) */
+    const dev = await up.find(() => true);
+    if (!dev && !portName) { sayK("notfound"); offerPorts(midi); lockInstaller(false); return; }
+    const ota = !!dev && /^ota-/i.test(dev.id.model);
+    const model = dev ? dev.id.model.replace(/^ota-/i, "") : chosen;
+    if (dev) dev.link.close();
+    const pk = picked ? { product: picked.product, version: picked.version || "?", label: modelOf(picked.product) } : PKGS.find((p) => modelOf(p.product) === model);
+    if (!pk) { sayK("unknown", dev ? dev.id.text : String(model)); lockInstaller(false); return; }
+    showDetected(dev ? model : chosen, ota, pk);
+    const image = picked ? picked.image : images[pk.product];
+    if (ota) sayK((await up.resume(image, step, pk.product)) ? "done" : "stopped");
+    else await up.install(image, pk.product, step);
   } catch (e) {
     if (e && e.code && TEXT[lang][e.code]) sayK(e.code, e.detail || "");
     else sayK("error", e && e.message);
@@ -776,7 +880,8 @@ async function runInstall(portName) {
   }
   lockInstaller(false);
 }
-// not found by name (another custom firmware may name its USB device differently): the player picks the MIDI port
+// not found by name (another custom firmware may name its USB device differently): the player picks the MIDI port and
+// the device
 function offerPorts(midi) {
   const names = [...new Set([...midi.inputs.values()].filter((i) => i.state !== "disconnected").map((i) => i.name).filter(Boolean))];
   const sel = $("portsel");
@@ -785,9 +890,13 @@ function offerPorts(midi) {
   sel.selectedIndex = 0;
   if (names.length && $("portpick").showModal) $("portpick").showModal();
 }
-$("portgo").addEventListener("click", () => { const n = $("portsel").value; $("portpick").close(); if (n) runInstall(n); });
+$("portgo").addEventListener("click", () => {
+  const n = $("portsel").value, d = (document.querySelector('#devsel input:checked') || {}).value || "FM-1";
+  $("portpick").close();
+  if (n) runInstall(n, d);
+});
 $("portno").addEventListener("click", () => $("portpick").close());
-$("go").addEventListener("click", () => runInstall(null));
+$("go").addEventListener("click", () => runInstall(null, null));
 const hasMarker = (b) => { const m = "FELUCCA-LOADER-1"; for (let i = 0; i + m.length <= b.length; i++) { let k = 0; while (k < m.length && b[i + k] === m.charCodeAt(k)) k++; if (k === m.length) return true; } return false; };
 $("fwpick").addEventListener("click", () => $("fwfile").click());
 $("fwfile").addEventListener("change", async (e) => {
@@ -797,63 +906,93 @@ $("fwfile").addEventListener("change", async (e) => {
   try {
     const pkg = new Uint8Array(await file.arrayBuffer());
     const prod = productOf(pkg);
-    if (!/^FM-1_9\d\d$/.test(prod) || !hasMarker(pkg)) { sayK("fw_bad"); $("go").disabled = true; image = null; return; }
-    image = logicalImage(pkg);
-    product = prod;
+    if (!/^(FM-1|SMK-37 Pro|SMK-37 Elite|MKE-P37)_9\d\d$/.test(prod) || !hasMarker(pkg)) { sayK("fw_bad"); picked = null; return; }
+    picked = { image: logicalImage(pkg), product: prod, version: (file.name.match(/(\d+\.\d+\.\d+)/) || [])[1] };
     say(`${file.name} (${prod})`);
-    $("go").disabled = false;
+    $("go").disabled = !ready;
     setBar(0, null);
-  } catch (_) { sayK("fw_bad"); $("go").disabled = true; image = null; }
+  } catch (_) { sayK("fw_bad"); picked = null; }
 });
 
 
-/* ---- hero: the Minimoog goes into the FM-1's screen as the page scrolls (reduced motion: the finished picture) ---- */
+/* ---- hero: the Minimoog splits in two as the page scrolls: one dives into the FM-1's screen, the other into the
+ * SMK-37's; the two keyboards then show the real screens, each its own page (reduced motion: the finished picture) ---- */
 (() => {
-  const hero = $("top"), stage = $("stage"), mm = $("mm"), fm = $("fm"), lcd = $("lcd"), copy1 = $("copy1"), copy2 = $("copy2"), hint = $("hint");
-  const A = $("lcd-a"), B = $("lcd-b");
+  const hero = $("top"), stage = $("stage"), mm = $("mm"), mm2 = $("mm2"), fm = $("fm"), smk = $("smkfig"), lcd = $("lcd"), lcd2 = $("lcd2");
+  const copy1 = $("copy1"), copy2 = $("copy2"), hint = $("hint");
+  const A = $("lcd-a"), B = $("lcd-b"), A2 = $("lcd2-a"), B2 = $("lcd2-b");
   $("fm-body").src = IMG.fm1;
+  $("smk-body").src = IMG.smk37;
+  mm2.src = mm.src;
   const ROT = ["splash", "ctrl", "osc", "mix", "filt", "fenv", "aenv", "fx"];
   const rm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (rm) document.body.classList.add("rm");
   A.src = IMG.splash; A.style.opacity = 1; B.style.opacity = 0;
+  A2.src = IMG.splash; A2.style.opacity = 1; B2.style.opacity = 0;
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
   const ease = (x) => x * x * (3 - 2 * x);
-  let prog = 0, W = 0, H = 0, fmW = 0, fmH = 0, fmX = 0, fmY = 0, mmW0 = 0, mmX0 = 0, mmY0 = 0, p = -1, rot = 0, rotAt = 0;
-  const MR = 452 / 900, FR = 512 / 859;
+  /* the two pictures: the FM-1 (859 x 512) and the SMK-37 (1872 x 827); where each screen is in its picture */
+  const MR = 452 / 900, FR = 512 / 859, SR = 827 / 1872;
+  const FL = [0.3073, 0.1523, 0.1676, 0.283], SL = [0.13702, 0.11423, 0.17107, 0.38713];
+  let prog = 0, W = 0, H = 0, mob = false, p = -1, rot = 0, rotAt = 0;
+  let fmW = 0, fmH = 0, fmX = 0, fmY = 0, smW = 0, smH = 0, smX = 0, smY = 0, mmW0 = 0, mmX0 = 0, mmY0 = 0;
   function layout() {
     W = stage.clientWidth; H = stage.clientHeight;
-    const mob = W < 820;
-    const c2h = copy2.offsetHeight || 200, gap = mob ? 22 : 30;
-    fmY = mob ? H * 0.2 : Math.max(18, H * 0.05);
-    fmW = Math.min(W * (mob ? 0.94 : 0.86), 980, (H * (mob ? 0.5 : 0.62)) / FR, (H - fmY - c2h - gap - 28) / FR);
-    fmH = fmW * FR; fmX = (W - fmW) / 2;
+    mob = W < 820;
+    const c2h = copy2.offsetHeight || 200, gap = mob ? 18 : 30;
+    if (mob) {                                   /* a phone: the FM-1 above, the SMK-37 below */
+      fmY = Math.max(12, H * 0.07);
+      fmW = W * 0.8; smW = W * 0.96;
+      const room = H - fmY - c2h - gap - 28, need = fmW * FR + 14 + smW * SR;
+      if (need > room) { const k = room / need; fmW *= k; smW *= k; }
+      fmH = fmW * FR; smH = smW * SR;
+      fmX = (W - fmW) / 2; smX = (W - smW) / 2; smY = fmY + fmH + 14;
+      copy2.style.top = smY + smH + gap + "px";
+    } else {                                     /* side by side, the SMK-37 a little wider */
+      fmY = Math.max(18, H * 0.06);
+      const gx = Math.max(24, W * 0.03), tot = Math.min(W * 0.94, 1560);
+      fmW = Math.min((tot - gx) / 2.3, (H * 0.6) / FR, (H - fmY - c2h - gap - 28) / FR);
+      smW = fmW * 1.3;
+      fmH = fmW * FR; smH = smW * SR;
+      fmX = (W - fmW - gx - smW) / 2; smX = fmX + fmW + gx;
+      smY = fmY + (fmH - smH) / 2;
+      copy2.style.top = fmY + fmH + gap + "px";
+    }
     fm.style.width = fmW + "px"; fm.style.left = fmX + "px"; fm.style.top = fmY + "px";
-    copy2.style.top = fmY + fmH + gap + "px";
+    smk.style.width = smW + "px"; smk.style.left = smX + "px"; smk.style.top = smY + "px";
     mmW0 = mob ? W * 1.5 : Math.min(W * 0.98, 1500);
     mmX0 = mob ? -W * 0.2 : Math.max(W * 0.5, W - 1.0 * mmW0 * 0.62);
     mmY0 = mob ? H * 0.52 : (H - mmW0 * MR) / 2;
     p = -1; draw(prog);
+  }
+  /* a Minimoog picture from where it starts to the screen of a figure (x, y, w its box; L the screen in it; sc its scale) */
+  function fly(img, q, x, y, w, h, L, sc, fade) {
+    const cx = x + w * (L[0] + L[2] / 2), cy = y + h * (L[1] + L[3] / 2);
+    const tw = w * L[2] * sc * 1.02;
+    const ex = x + w / 2 + (cx - x - w / 2) * sc, ey = y + h / 2 + (cy - y - h / 2) * sc;
+    const ww = mmW0 + (tw - mmW0) * q, hh = ww * MR;
+    const sx = mmX0 + mmW0 / 2, sy = mmY0 + mmW0 * MR / 2;
+    const mx = sx + (ex - sx) * q, my = sy + (ey - sy) * q;
+    img.style.width = ww + "px"; img.style.left = mx - ww / 2 + "px"; img.style.top = my - hh / 2 + "px";
+    img.style.opacity = fade;
   }
   function draw(np) {
     if (np === undefined) np = p < 0 ? prog : p;
     if (Math.abs(np - p) < 0.0004) return;
     p = np;
     const q = ease(clamp((p - 0.08) / 0.72));
-    const mob = W < 820;
-    const sc = 0.9 + 0.1 * q;
+    /* the SMK-37's half leaves a moment later and lands a moment later: the split shows */
+    const q2 = ease(clamp((p - 0.16) / 0.66));
+    const sc = 0.9 + 0.1 * q, sc2 = 0.9 + 0.1 * q2;
     fm.style.opacity = clamp(q / 0.35);
     fm.style.transform = "scale(" + sc + ")";
-    /* where the screen is now, in the stage */
-    const cx = fmX + fmW * (0.3073 + 0.0838), cy = fmY + fmH * (0.1523 + 0.1415);
-    const tw = fmW * 0.1676 * sc * 1.02;
-    const ex = fmX + fmW / 2 + (cx - fmX - fmW / 2) * sc, ey = fmY + fmH / 2 + (cy - fmY - fmH / 2) * sc;
-    const w = mmW0 + (tw - mmW0) * q, h = w * MR;
-    const sx = mmX0 + mmW0 / 2, sy = mmY0 + mmW0 * MR / 2;
-    const mx = sx + (ex - sx) * q, my = sy + (ey - sy) * q;
-    mm.style.width = w + "px"; mm.style.left = mx - w / 2 + "px"; mm.style.top = my - h / 2 + "px";
-    mm.style.opacity = 1 - clamp((q - 0.88) / 0.12);
-    lcd.style.opacity = 1;
+    smk.style.opacity = clamp(q2 / 0.35);
+    smk.style.transform = "scale(" + sc2 + ")";
+    fly(mm, q, fmX, fmY, fmW, fmH, FL, sc, 1 - clamp((q - 0.88) / 0.12));
+    fly(mm2, q2, smX, smY, smW, smH, SL, sc2, 1 - clamp((q2 - 0.88) / 0.12));
+    lcd.style.opacity = 1; lcd2.style.opacity = 1;
     $("scr").style.opacity = clamp((p - 0.9) / 0.1);
+    $("scr2").style.opacity = clamp((p - 0.92) / 0.08);
     copy1.style.opacity = 1 - clamp((p - 0.04) / 0.16);
     copy1.style.transform = (mob ? "" : "translateY(-50%) ") + "translateX(" + (-clamp(p / 0.2) * 40) + "px)";
     copy1.style.pointerEvents = p > 0.12 ? "none" : "";
@@ -862,13 +1001,15 @@ $("fwfile").addEventListener("change", async (e) => {
     hint.style.opacity = 1 - clamp(p / 0.05);
   }
   /* the first scroll down plays the film by itself; scrolling up at the top plays it backwards */
-  const DUR = 1400;
+  const DUR = 1600;
   if (rm) prog = 1;
   let state = rm ? 2 : 0, t0 = 0, dir = 1;         /* 0 start picture, 1 playing forward, 2 finished, 3 playing backwards */
   const hold = (e) => { if (state === 1 || state === 3) e.preventDefault(); };
   function done() {
     prog = 1; state = 2; draw(1);
-    A.src = IMG.splash; A.style.opacity = 1; B.style.opacity = 0; rot = 0; rotAt = performance.now();
+    A.src = IMG.splash; A.style.opacity = 1; B.style.opacity = 0;
+    A2.src = IMG.splash; A2.style.opacity = 1; B2.style.opacity = 0;
+    rot = 0; rotAt = performance.now();
   }
   function home() { prog = 0; state = 0; draw(0); }
   function frame(now) {
@@ -900,13 +1041,20 @@ $("fwfile").addEventListener("change", async (e) => {
   document.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener("click", () => { if (state !== 2) done(); }));
   addEventListener("resize", layout);
   if ((!rm && location.hash.length > 1) || scrollY > 40) { state = 2; prog = 1; }   /* a reload further down, or a link to a section: the finished picture */
-  /* the finished FM-1 shows the real screens, one after the other */
-  function show(i) {
-    const on = A.style.opacity === "1" ? A : B, off = on === A ? B : A;
-    off.src = IMG[ROT[i]]; off.style.opacity = 1; on.style.opacity = 0;
+  /* the finished keyboards show the real screens, one after the other, the SMK-37 four pages ahead of the FM-1 */
+  function show(a, b, src) {
+    const on = a.style.opacity === "1" ? a : b, off = on === a ? b : a;
+    off.src = src; off.style.opacity = 1; on.style.opacity = 0;
   }
-  const next = () => { rot = rot + 1 >= ROT.length ? 1 : rot + 1; show(rot); rotAt = performance.now(); };
+  const N = ROT.length - 1;
+  const next = () => {
+    rot = rot + 1 > N ? 1 : rot + 1;
+    show(A, B, IMG[ROT[rot]]);
+    show(A2, B2, IMG[ROT[1 + (rot - 1 + 4) % N]]);
+    rotAt = performance.now();
+  };
   lcd.addEventListener("click", next);
+  lcd2.addEventListener("click", next);
   if (!rm) setInterval(() => { if (state === 2 && performance.now() - rotAt >= 1000) next(); }, 100);
   layout();
 })();
