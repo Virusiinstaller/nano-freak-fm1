@@ -55,6 +55,7 @@ int main(int argc, char **argv)
     song.g[G_BPM] = 120;                               /* the tempo the ARP and the SEQ show */
     fa_splash();
     shot("splash");
+    page(0, "ctrl");
     page(1, "osc");
     page(2, "mix");
     fa_page = 3; fmg_cur[3] = 1; redraw(); shot("filter");   /* the cursor on EMPHASIS */
@@ -77,7 +78,12 @@ int main(int argc, char **argv)
     fa_ar = 0; trk[0].p[P_AMODE] = 0;
     fa_page = 1; fa_gl = 1; fa_gl_row = 0; redraw();       /* GLO: the list (MIDI IN, CHANNEL, MIDI CC, PITCH BEND, ABOUT) */
     shot("glo");
-    fa_gl = 0; fa_page = 0; redraw();
+    fa_gl = 2; redraw(); shot("cc");                     /* GLO, MIDI CC: the control list */
+    fa_gl = 0; fa_page = 4; fmg_cur[4] = 0; redraw(); shot("fenv");
+    fa_page = 5; fmg_cur[5] = 0; redraw(); shot("aenv");
+    fa_page = 0; redraw();
+    fa_sv_open(); redraw(); shot("save");                /* SAVE: the name dialog */
+    fa_sv = 0; fa_page = 0; redraw();
     fpress(B_SEQ);                                     /* SEQ: a take of eight notes, playing */
     fpress(B_REC);
     for (i = 0; i < 8u; i++) { input_on(&trk[0], RIFF[i], 100); trk_all_off(&trk[0]); }
@@ -88,6 +94,6 @@ int main(int argc, char **argv)
     redraw();
     if (!fa_sq || !song.playing) { printf("seq not open / not playing\n"); return 1; }
     shot("seq");
-    printf("11 shots in %s\n", dir);
+    printf("shots in %s\n", dir);
     return 0;
 }
