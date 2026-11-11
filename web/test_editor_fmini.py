@@ -282,6 +282,27 @@ with sync_playwright() as pw:
     pg.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
     check("  .. and the current firmware gives all 200 again, with no notice", pg.evaluate("__fmini.S.names.filter(Boolean).length") == 200 and "Update" not in pg.inner_text("#msg") and "Atualiz" not in pg.inner_text("#msg"))
 
+    # ---- ORDER tab: the arrows move a row, SAVE TO THE DEVICE writes the 200 presets in that order (the bridge answers YES)
+    names0 = pg.evaluate("__fmini.S.names.slice(0, 200)")
+    pg.click("#tabs button:text-is('ORDEM'), #tabs button:text-is('ORDER')"); pg.wait_for_selector("ol.orderlist li.orow")
+    check("ORDER tab: the 200 presets in the device's order", pg.locator("ol.orderlist li.orow").count() == 200)
+    for i in range(2):                                                  # the old 0 (row 0), down twice: 1, 2, 0 ..
+        pg.locator("ol.orderlist li.orow").nth(i).locator("button").nth(1).click()
+    check("  .. the arrows move the row (the list shows 1, 2, 0 now)", pg.locator("ol.orderlist li.orow .oname").nth(2).inner_text() == names0[0])
+    pg.evaluate("document.getElementById('msg').textContent = ''")
+    pg.click("button:text-is('Salvar no dispositivo'), button:text-is('Save to device')")
+    try: pg.wait_for_function("/Ordem gravada|Order saved/.test(document.getElementById('msg').textContent)", timeout=120000)
+    except Exception: print("DEBUG msg:", repr(pg.inner_text("#msg")), "busy:", pg.evaluate("document.body.className"), "names0:", pg.evaluate("__fmini.S.names.length")); raise
+    check("SAVE TO THE DEVICE: the device's presets are in that order (1, 2, 0 ..)",
+          pg.evaluate("__fmini.S.names.slice(0, 200)") == names0[1:3] + [names0[0]] + names0[3:])
+    pg.click("#tabs button:text-is('ORDEM'), #tabs button:text-is('ORDER')"); pg.wait_for_selector("ol.orderlist li.orow")
+    for i in (2, 1):                                                    # the third row (the old 0) up twice: back to 0, 1, 2
+        pg.locator("ol.orderlist li.orow").nth(i).locator("button").nth(0).click()
+    pg.evaluate("document.getElementById('msg').textContent = ''")
+    pg.click("button:text-is('Salvar no dispositivo'), button:text-is('Save to device')")
+    pg.wait_for_function("/Ordem gravada|Order saved/.test(document.getElementById('msg').textContent)", timeout=300000)
+    check("  .. and the original order is back on the device", pg.evaluate("__fmini.S.names.slice(0, 200)") == names0)
+
     if SHOTS:
         SHOTS.mkdir(parents=True, exist_ok=True)
         for i, name in enumerate(["CTRL", "OSC", "MIX", "FILT", "F.ENV", "A.ENV", "FX", "ARP", "PRESETS"]):
