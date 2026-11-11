@@ -154,13 +154,13 @@
 /* ------------------------------------------------------------------ texts --- */
 const TX = {
   pt: { editor: "Editor", connect: "Conectar", disconnect: "Desconectar", connecting: "Conectando…", disc: "Desconectado",
-    conn: "Conectado — FMini-1", save: "Salvar som", open: "Abrir som", home: "Site do FMini-1", donate: "Apoie o projeto (Ko-fi)",
+    conn: "Conectado — FMini-1 (%d)", save: "Salvar som", open: "Abrir som", home: "Site do FMini-1", donate: "Apoie o projeto (Ko-fi)",
     foot1: "Funciona no Chrome, Edge e Android (Web MIDI com SysEx). Os ajustes valem para o som que está tocando; para guardar, use o SAVE do próprio aparelho.",
     nomidi: "Este navegador não tem Web MIDI com SysEx. Use o Chrome ou o Edge (computador) ou o Chrome no Android.",
     denied: "O navegador negou o acesso MIDI. Libere “MIDI” nas permissões do site e tente de novo.",
-    none: "Nenhum FM-1 encontrado. Conecte o cabo USB, feche outros programas que usam a porta MIDI e toque em Conectar.",
-    pick: "Escolha a porta MIDI do FM-1 na lista ao lado e toque em Conectar.",
-    noedit: "Este firmware não parece ser o FMini-1. O editor é só para o FMini-1.",
+    none: "Nenhum FM-1 ou SMK-37 encontrado. Conecte o cabo USB, feche outros programas que usam a porta MIDI e toque em Conectar.",
+    pick: "Escolha a porta MIDI do seu FM-1 ou SMK-37 na lista ao lado e toque em Conectar.",
+    noedit: "Este firmware não parece ser o FMini-1. O editor é só para o FM-1 e o SMK-37.",
     oldfw: "Este FMini-1 tem um firmware antigo. Atualize pelo instalador atual e conecte de novo.",
     getlink: "Abrir o instalador atual",
     fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar", usbTitle: "Áudio USB de saída: contadores", usbAlt: "Interface de saída ativa (alt)", usbPlay: "Tocando agora", usbSetIf: "Vezes que o Windows selecionou a saída", usbIrq: "Interrupções do endpoint 3", usbPkts: "Pacotes recebidos", usbFrames: "Quadros guardados", usbDrops: "Pacotes descartados (fila cheia)", usbDry: "Blocos sem quadro (fila vazia)", usbSkip: "Quadros descartados (fila acima da faixa)", usbRep: "Quadros repetidos (fila abaixo da faixa)", usbFill: "Fila agora (quadros, de 0 a 512)", usbOvr: "Pacotes com overrun (não lidos a tempo)", usbCrc: "Pacotes com erro de dados", usbYes: "sim", usbNo: "não",
@@ -178,13 +178,13 @@ const TX = {
     restdone: "Presets restaurados.", refused: "Restauração recusada no aparelho (ou sem resposta).", restfail: "Falhou ao gravar no aparelho. Os presets gravados até aqui ficaram; refaça a restauração.",
     badbkp: "Arquivo de backup inválido.", recfail: "O aparelho não devolveu um preset.", busyread: "Lendo…", loaded: "Som carregado no aparelho.", saved: "Som salvo em arquivo." },
   en: { editor: "Editor", connect: "Connect", disconnect: "Disconnect", connecting: "Connecting…", disc: "Disconnected",
-    conn: "Connected — FMini-1", save: "Save sound", open: "Open sound", home: "FMini-1 site", donate: "Support the project (Ko-fi)",
+    conn: "Connected — FMini-1 (%d)", save: "Save sound", open: "Open sound", home: "FMini-1 site", donate: "Support the project (Ko-fi)",
     foot1: "Works in Chrome, Edge and Android (Web MIDI with SysEx). Edits change the sound that is playing; to keep it, use the device's own SAVE.",
     nomidi: "This browser has no Web MIDI with SysEx. Use Chrome or Edge (desktop) or Chrome on Android.",
     denied: "The browser denied MIDI access. Allow “MIDI” in the site permissions and try again.",
-    none: "No FM-1 found. Plug in the USB cable, close other programs using the MIDI port and press Connect.",
-    pick: "Pick the FM-1's MIDI port in the list and press Connect.",
-    noedit: "This firmware does not look like the FMini-1. The editor is for the FMini-1 only.",
+    none: "No FM-1 or SMK-37 found. Plug in the USB cable, close other programs using the MIDI port and press Connect.",
+    pick: "Pick your FM-1's or SMK-37's MIDI port in the list and press Connect.",
+    noedit: "This firmware does not look like the FMini-1. The editor is for the FM-1 and the SMK-37 only.",
     oldfw: "This FMini-1 runs an old firmware. Update it with the current installer and connect again.",
     getlink: "Open the current installer",
     fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close", usbTitle: "USB audio out: counters", usbAlt: "Playback interface alt setting", usbPlay: "Playing now", usbSetIf: "Times Windows selected the output", usbIrq: "Endpoint 3 interrupts", usbPkts: "Packets received", usbFrames: "Frames stored", usbDrops: "Packets dropped (ring full)", usbDry: "Blocks without a frame (ring empty)", usbSkip: "Frames dropped (fill above the band)", usbRep: "Frames repeated (fill below the band)", usbFill: "Fill now (frames, 0 to 512)", usbOvr: "Packets with overrun (not read in time)", usbCrc: "Packets with data error", usbYes: "yes", usbNo: "no",
@@ -242,6 +242,7 @@ function req(cmd, args = [], ms = 900) {
 
 /* ------------------------------------------------------------------ state --- */
 const S = {
+  device: "FM-1",                                  /* "FM-1" or "SMK-37": from the port the page connected to */
   pe0: 103, patch: new Array(FG.SIZE).fill(0), p: [], g: [], slot: 0, engine: 0, fmini: -1, desc: {},
   names: [], canPatch: false, extras: false, oct: 0, page: 0,
 };
@@ -468,7 +469,9 @@ function fail(e) {
 function closePorts() {
   if (dev.inp) dev.inp.onmidimessage = null; dev.inp = dev.out = null; dev.open = false; dev.waiter = null; dev.chain = Promise.resolve();
 }
-const MATCH = /fm-1|fmini|felucca/i;
+const MATCH = /fm-1|fmini|felucca|smk|mke|p37|elite/i;   /* the FM-1, the SMK-37 (Pro, Elite, MKE-P37) */
+/* the device the port belongs to, for the status line */
+const deviceName = (port) => (/smk|mke|p37|elite/i.test(port || "") ? "SMK-37" : "FM-1");
 function ports() {
   const outs = [...dev.access.outputs.values()];
   return [...dev.access.inputs.values()].filter((i) => i.state !== "disconnected").map((i) => ({ i, o: outs.find((o) => o.name === i.name && o.state !== "disconnected") })).filter((x) => x.o);
@@ -498,7 +501,8 @@ async function connect() {
     await pick.i.open(); await pick.o.open();
     dev.inp = pick.i; dev.out = pick.o; dev.inp.onmidimessage = onMsg; dev.open = true;
     await handshake();
-    setStatus(true, T("conn")); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
+    S.device = deviceName(dev.inp.name);
+    setStatus(true, T("conn", { d: S.device })); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
     startPoll();
     fwCheck();
   } catch (e) {
