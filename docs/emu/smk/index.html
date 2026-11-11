@@ -146,7 +146,7 @@ footer a { color:var(--dim); }
   <span>Faders and wheels: drag</span>
 </p>
 <footer>
-  <span class="version">@VERSION@</span><br>
+  <span class="version">FMini-1 v2.5.12</span><br>
   FMini-1 by Guilherme Ruppert, a fork of Felucca by Leo Kuroshita, Hügelton Instruments · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a><br>
   The SMK-37 panel is the simulator of <a href="https://github.com/ChanceTheMaker/felucca-smk">Felucca SMK</a> by Chance Roth (GPL-3.0), restyled; the firmware behind it is FMini-1's.<br>
   <small>M-VAVE, SMK-37 and FM-1 are trademarks of their respective owners. FMini-1 is not affiliated with or endorsed by them.</small>
@@ -182,7 +182,7 @@ toolbar.append(title, picker, screenOnly, expand, full, status);
 
 const shell = el("div", "smk-simulator-shell");
 function chooseFinish(id, save = true) {
-  const f = finishes.find((x) => x[0] === id) || finishes[0];
+  const f = finishes.find((x) => x[0] === id) || finishes.find((x) => x[0] === "charcoal");
   shell.dataset.finish = f[0]; swatch.style.background = f[2]; finish.title = "Finish: " + f[1];
   for (const b of menu.children) b.setAttribute("aria-selected", String(b.dataset.finish === f[0]));
   if (save) try { localStorage.setItem(FINISH, f[0]); } catch {}
@@ -194,7 +194,7 @@ for (const [id, name, color] of finishes) {
 }
 finish.onclick = () => { menu.hidden = !menu.hidden; };
 document.addEventListener("pointerdown", (e) => { if (!picker.contains(e.target)) menu.hidden = true; });
-let saved = "red"; try { saved = localStorage.getItem(FINISH) || "red"; } catch {}
+let saved = "charcoal"; try { saved = localStorage.getItem(FINISH) || "charcoal"; } catch {}   // the choice is kept in this browser
 chooseFinish(saved, false);
 screenOnly.onclick = () => { releaseAll(); host.classList.toggle("sim-screen-only"); };
 expand.onclick = () => host.classList.toggle("sim-expanded");

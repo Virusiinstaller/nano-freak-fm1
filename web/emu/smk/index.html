@@ -182,7 +182,7 @@ toolbar.append(title, picker, screenOnly, expand, full, status);
 
 const shell = el("div", "smk-simulator-shell");
 function chooseFinish(id, save = true) {
-  const f = finishes.find((x) => x[0] === id) || finishes[0];
+  const f = finishes.find((x) => x[0] === id) || finishes.find((x) => x[0] === "charcoal");
   shell.dataset.finish = f[0]; swatch.style.background = f[2]; finish.title = "Finish: " + f[1];
   for (const b of menu.children) b.setAttribute("aria-selected", String(b.dataset.finish === f[0]));
   if (save) try { localStorage.setItem(FINISH, f[0]); } catch {}
@@ -194,7 +194,7 @@ for (const [id, name, color] of finishes) {
 }
 finish.onclick = () => { menu.hidden = !menu.hidden; };
 document.addEventListener("pointerdown", (e) => { if (!picker.contains(e.target)) menu.hidden = true; });
-let saved = "red"; try { saved = localStorage.getItem(FINISH) || "red"; } catch {}
+let saved = "charcoal"; try { saved = localStorage.getItem(FINISH) || "charcoal"; } catch {}   // the choice is kept in this browser
 chooseFinish(saved, false);
 screenOnly.onclick = () => { releaseAll(); host.classList.toggle("sim-screen-only"); };
 expand.onclick = () => host.classList.toggle("sim-expanded");
