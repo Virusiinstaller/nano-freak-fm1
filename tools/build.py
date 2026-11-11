@@ -418,8 +418,7 @@ def main():
         BOARD_PREFIX[BOARD] = BOARD_PREFIX[BOARD].replace(MODELS["pro"], MODELS[model])
         stem += "-" + model
     core_h = (FW / "src" / "core.h").read_text()
-    m0 = re.search(r'#define FMINI_SMK_VERSION "v(\d+\.\d+\.\d+)"', core_h) if BOARD == "smk37" else None
-    m0 = m0 or re.search(r'#define FMINI_VERSION "v(\d+\.\d+\.\d+)"', core_h)   # (the SMK-37's own, else the FM-1's)
+    m0 = re.search(r'#define FMINI_VERSION "v(\d+\.\d+\.\d+)"', core_h)   # (one version for the FM-1 and the SMK-37)
     STEM = f"{stem}-" + (m0[1] if m0 else "dev")   # fmini-1-fm1-<version>, fmini-1-smk37[-elite|-mke]-<version>
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)

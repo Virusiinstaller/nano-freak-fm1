@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 [ -f build/gen/felucca_tables.h ] || { echo "emu: run ./build.sh once first (build/gen)"; exit 1; }
 if [ "${SMK:-0}" = 1 ]; then
     OUT=${OUT:-docs/emu/smk}
-    VERSION=$(sed -n 's/^#define FMINI_SMK_VERSION "\([^"]*\)".*/\1/p' firmware/src/core.h | head -n 1)
+    VERSION=$(sed -n 's/^#define FMINI_VERSION "\([^"]*\)".*/\1/p' firmware/src/core.h | head -n 1)
     BOARD="-DBOARD_SMK37=1 -Itests/smk_fake"     # (smk_midi_out.c's TRS UART: the test's recorder)
     PAGE=web/emu/smk
 else

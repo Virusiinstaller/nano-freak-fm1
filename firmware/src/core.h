@@ -16,19 +16,12 @@
 #define NPART 4                  /* synth parts: tracks 1..4 */
 #define NTRK NPART               /* tracks (the formats and the protocol count these): every track is a part */
 #define NSTEP 64
-/* FMini-1 firmware version: the one the device shows and INFO reports (tag 0x49). Bump it on every firmware change. */
-#if BOARD_SMK37                  /* the SMK-37 build has its own version (tools/build.py, the installer workflow read it) */
+/* FMini-1 firmware version: the one the device shows and INFO reports (tag 0x49). Bump it on every firmware change.
+ * One number for the FM-1 and the SMK-37 builds: one release carries the four packages. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
 #define FMINI_VER_PATCH 12u
-#define FMINI_SMK_VERSION "v2.5.12"
-#define FMINI_VERSION FMINI_SMK_VERSION
-#else
-#define FMINI_VER_MAJ 2u
-#define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 5u
-#define FMINI_VERSION "v2.5.5"
-#endif
+#define FMINI_VERSION "v2.5.12"
 extern volatile uint8_t fm_vel_sens;   /* seq.c: the preset's VELOCITY SENS. (2.5.5): 0 OFF, the sound at 127 whatever the
                                          * velocity (MIDI OUT keeps it); 1 ON, the velocity is the loudness (FMini-1) */
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */

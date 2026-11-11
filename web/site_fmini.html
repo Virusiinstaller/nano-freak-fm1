@@ -743,7 +743,7 @@ const modelOf = (product) => product.split("_")[0];
 const images = {};                            /* product -> the logical image */
 let picked = null;                            /* "Install another firmware": {image, product} */
 let ready = false;
-document.querySelectorAll(".curver").forEach((e) => { e.textContent = "FM-1 v" + meta.version + " · SMK-37 v" + meta.smkVersion; });
+document.querySelectorAll(".curver").forEach((e) => { e.textContent = meta.smkVersion && meta.smkVersion !== meta.version ? "FM-1 v" + meta.version + " · SMK-37 v" + meta.smkVersion : "v" + meta.version + " · FM-1 · SMK-37"; });
 document.querySelectorAll(".curver-b").forEach((e) => { e.textContent = ""; });
 for (const p of PKGS) {
   const li = document.createElement("li"), a = document.createElement("a"), sp = document.createElement("span");

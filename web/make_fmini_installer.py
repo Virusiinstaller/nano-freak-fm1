@@ -5,7 +5,7 @@
 # FM-1's package and the SMK-37's three (Pro, Elite, MKE-P37), each for exactly its model; the device found picks it.
 #   web/make_fmini_installer.py build/fmini-1-fm1-<version>.fwsc OUT.html [VERSION [SMK_VERSION]]
 # The SMK-37 packages are build/fmini-1-smk37[-elite|-mke]-<SMK_VERSION>.fwsc (BOARD=smk37 [MODEL=...] ./build.sh);
-# SMK_VERSION defaults to FMINI_SMK_VERSION in firmware/src/core.h.
+# SMK_VERSION defaults to VERSION (one version for both boards, FMINI_VERSION in firmware/src/core.h).
 # Serve it over https or http://localhost (Web MIDI with SysEx needs a secure context), in Chrome / Edge.
 import base64
 import json
@@ -30,8 +30,7 @@ def package(path, want, label, version):
 
 def main(pkg, out, version="1.4.2", smk_version=None):
     if smk_version is None:
-        m = re.search(r'#define FMINI_SMK_VERSION "v(\d+\.\d+\.\d+)"', (HERE.parent / "firmware" / "src" / "core.h").read_text())
-        smk_version = m.group(1) if m else version
+        smk_version = version
     build = Path(pkg).resolve().parent
     pkgs = [package(pkg, "FM-1", "FM-1", version)]
     for stem, model in SMK_STEMS:
