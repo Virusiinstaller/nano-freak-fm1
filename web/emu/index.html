@@ -6,17 +6,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>FMini-1 — in your browser</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22/%3E%3Crect x=%224%22 y=%224%22 width=%228%22 height=%228%22 fill=%22%23fff%22/%3E%3C/svg%3E">
 <meta name="description" content="FMini-1, the Minimoog emulation firmware for the M-Vave FM-1, mono and polyphonic, running in your browser: the same code the instrument runs.">
 <style>
 /* DotGothic16 (SIL OFL 1.1, fonts/OFL.txt), cut to printable ASCII, for the knob labels */
 @font-face { font-family: "DotGothic16"; src: url("fonts/DotGothic16-subset.woff") format("woff"); font-display: swap; }
-:root { --bg: #8e8e93; --fg: #111; --dim: #2c2c2e; --rule: #5a5a5e;
+:root { --bg: #0d0c10; --fg: #f4f0ea; --dim: #a29cab; --mute: #6f6a78; --rule: #2a2631; --line: #2a2631;
+        --or: #ff7a1a; --or2: #ff9a4d; --sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
         --body: #1d1d1f; --tray: #141415; --part: #2a2a2d; --edge: #3a3a3e; --label: #d6d6d8;
-        --lit: #fff4d6; --green: #5fe08a; color-scheme: light; }
+        --lit: #fff4d6; --green: #5fe08a; color-scheme: dark; }
 html, body { background: var(--bg); }
-body { margin: 0; color: var(--fg); font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+body { margin: 0; color: var(--fg); font: 13px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+/* the site's bar (the same as the SMK-37 emulator's, emu/smk/) */
+header.nav { position: sticky; top: 0; z-index: 30; background: rgba(13,12,16,.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+header.nav .wrap { display: flex; align-items: center; gap: 14px; height: 56px; max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
+.brand { font-weight: 900; font-style: italic; letter-spacing: -.04em; font-size: 22px; color: var(--fg); text-decoration: none; }
+.brand i { color: var(--or); font-style: italic; }
+.brand small { font: 600 12px/1 var(--mono); font-style: normal; letter-spacing: 0; color: var(--dim); margin-left: 8px; }
+header.nav nav { display: flex; gap: 6px; margin-left: auto; }
+header.nav nav a { color: var(--dim); text-decoration: none; font-size: 13.5px; font-weight: 600; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); }
+header.nav nav a:hover { color: var(--fg); border-color: var(--mute); }
+header.nav nav a.keep { color: #1a0e05; background: var(--or); border-color: var(--or); }
+header.nav nav a.keep:hover { background: var(--or2); }
+header.nav nav a.donate { color: var(--or2); border-color: var(--or); }
+header.nav nav a.donate:hover { background: #2a1a0e; color: var(--or2); }
+@media (max-width: 560px) { header.nav nav a:not(.keep):not(.donate) { display: none; } .brand small { display: none; } }
 main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 32px; }
 @media (orientation: portrait) and (max-width: 700px) { main { padding: 8px 8px 24px; } }
 a { color: inherit; }
@@ -57,12 +74,6 @@ a { color: inherit; }
 .dimlo .mid .slit { fill: #8a8a8e; }
 .held .face { stroke: var(--lit); stroke-width: 3; }
 .latched .face { stroke: #79b8ff; stroke-width: 3; }
-.site { display: block; width: fit-content; margin: 0 auto 14px; padding: 10px 20px; border-radius: 10px; background: #ff7a1a; color: #1a0e05; font-weight: 800; font-size: 15px; text-decoration: none; }
-.site:hover { background: #ff9440; }
-.sitebar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 auto 14px; }
-.sitebar .site { margin: 0; }
-.sitebar .donate { background: transparent; color: #ff9a4d; border: 1px solid #ff7a1a; }
-.sitebar .donate:hover { background: #2a1a0e; }
 .start { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px;
          background: rgba(0, 0, 0, .5); border-radius: 4% / 6%; }
 .start[hidden] { display: none; }
@@ -70,20 +81,23 @@ a { color: inherit; }
 .start button:disabled { opacity: .4; cursor: progress; }
 .start p { margin: 0; max-width: 32em; text-align: center; color: #fff; }
 .keys, footer { margin: 16px 0 0; color: var(--dim); text-align: center; }
+.keys { font-size: 12.5px; }
+footer { color: var(--mute); line-height: 1.7; }
+footer a { color: var(--dim); }
 .keys span { white-space: nowrap; margin: 0 8px; }
 .keys select { font: inherit; font-size: 12px; }
-kbd { font: 600 11px ui-monospace, Menlo, monospace; border: 1px solid var(--rule); padding: 0 4px; color: var(--fg); }
+kbd { font: 600 11px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--fg); }
 footer { margin-top: 12px; font-size: 12px; }
 footer nav a { margin: 0 6px; }
 footer small { font-size: 11px; opacity: .8; }
 </style>
 </head>
 <body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../"><i>FM</i>ini-<i>1</i><small>FM-1</small></a>
+  <nav><a href="smk/">SMK-37 emulator</a><a href="../" class="keep">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener">Support Us &#9749;</a></nav>
+</div></header>
 <main>
-<div class="sitebar">
-<a class="site" href="../">FMini-1 official website &rarr;</a>
-<a class="site donate" href="https://ko-fi.com/ruppert" target="_blank" rel="noopener">Support the project &#9749;</a>
-</div>
 <div class="device" id="device">
   <svg id="panel" viewBox="0 0 1000 624" aria-hidden="true"></svg>
   <canvas id="screen" width="240" height="240" role="img" aria-label="The screen"></canvas>
