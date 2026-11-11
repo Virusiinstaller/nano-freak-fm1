@@ -7,7 +7,7 @@ name: Installer
 on:
   push:
     branches: [main]
-    paths: ["firmware/**", "web/**", "tools/**", "assets/**", "build.sh", "docs/emu/**", "docs/fmini-ad*", "docs/smk.html", ".github/workflows/installer.yml"]
+    paths: ["firmware/**", "web/**", "tools/**", "assets/**", "build.sh", "docs/emu/**", "docs/fmini-ad*", ".github/workflows/installer.yml"]
   workflow_dispatch:
 
 permissions:
@@ -50,7 +50,6 @@ jobs:
           python3 web/make_fmini_installer.py "$(ls build/fmini-1-fm1-*.fwsc | head -1)" _site/index.html "$VERSION"
           cp "$(ls build/fmini-1-fm1-*.fwsc | head -1)" "_site/fmini-1-$VERSION.fwsc"
           cp docs/fmini-ad.mp4 docs/fmini-ad-poster.jpg _site/
-          cp docs/smk.html _site/smk.html           # the SMK-37 installer (beta), built on the fmini-smk37 branch
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
           cp -r docs/emu _site/emu                 # the browser emulator (web/emu/build_wasi.sh builds docs/emu)
           echo "FMini-1 v$VERSION" >> "$GITHUB_STEP_SUMMARY"
