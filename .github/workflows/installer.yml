@@ -41,14 +41,15 @@ jobs:
               https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"
 
       - name: Build the firmware
-        run: ./build.sh
+        run: |
+          ./build.sh
 
       - name: Make the installer page
         run: |
           VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
           mkdir -p _site
-          python3 web/make_fmini_installer.py "$(ls build/fmini-1-fm1-*.fwsc | head -1)" _site/index.html "$VERSION"
-          cp "$(ls build/fmini-1-fm1-*.fwsc | head -1)" "_site/fmini-1-$VERSION.fwsc"
+          python3 web/make_fmini_installer.py "build/fmini-1-fm1-$VERSION.fwsc" _site/index.html "$VERSION"
+          cp "build/fmini-1-fm1-$VERSION.fwsc" "_site/fmini-1-$VERSION.fwsc"
           cp docs/fmini-ad.mp4 docs/fmini-ad-poster.jpg _site/
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
           cp -r docs/emu _site/emu                 # the browser emulator (web/emu/build_wasi.sh builds docs/emu)

@@ -1183,7 +1183,8 @@ static void persist_boot(void)                    /* before settings_init / pane
     irq_restore(f);
     if (!flash_ok)
         return;
-    fl_plain_window_init();                        /* flash above 0x93000 reads as plaintext through XIP */
+    fl_plain_window_init();                        /* flash above 0x93000 (SMK 0x9D000) reads as plaintext through XIP */
+    st_owner_check();                              /* SMK: never parse another ported firmware's store (storage.c) */
     {
         int n = st_load(OBJ_SETTINGS, &p, sizeof p);
         if (settings_import(&p, n))

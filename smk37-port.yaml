@@ -1,0 +1,161 @@
+# smk37-port.yaml: every decision for the SMK-37 port of FMini-1, in one place.
+#
+# From the fm1-to-smk37 kit (github.com/genkigenki/fm1-to-smk37, AGENTS.md step 0). Change this file first, then
+# the code. Patterns: the kit's docs/06-mapping-patterns.md.
+
+firmware:
+  name: FMini-1             # unchanged on the SMK-37 (no "xxx37"): same name, splash and look
+  upstream: ""              # FMini-1 is the owner's own firmware (a Felucca 1.6.1 tree without shared git history)
+  base: "main 2.5.0 (d8b64c8)"
+  family: felucca           # firmware/hal and firmware/loader are Felucca 1.6.1's (+ FL_JEDEC_OK)
+  board_layer: felucca      # genkigenki/Felucca branch smk37 (b67312c on Felucca 1.6.1 a53ecf4, = hugelton/Felucca#237);
+                            # a trial apply took 42 of its 43 files with about 18 conflict blocks; eng_sample.c is
+                            # gone in FMini-1 (no sample engine), so that part is dropped
+  lost_on_smk:
+    - TRS MIDI IN (and MIDI clock in over TRS): PH8 is a key-matrix row on the SMK; MIDI in over USB stays
+  priorities:
+    - playing the Minimoog: all keys with velocity, wheels, the panel's knobs
+    - sound browsing (the 200 presets)
+    - ARP and SEQ
+
+delivery:
+  mode: own                 # the owner's firmware: builds in this repository, no upstream pull request
+  pr: ""
+  fork: ""                  # branch fmini-smk37 of ruppert/fmini-1
+  package: "fmini-1-smk37-<version>.fwsc, fmini-1-smk37-elite-<version>.fwsc, fmini-1-smk37-mke-<version>.fwsc"
+  usb_name: FMini-1's own (unchanged); every installer's filter includes it
+  data_family: FMINI        # its own store family: other firmwares' data is cleared on a switch
+  copyright: "Guilherme Ruppert"   # in the new SMK files' headers (the layer's own files keep genkigenki's line)
+  storage_note: >
+    The 200 preset slots (13 objects, 26 sectors) do not fit the layer's extra window (0xB1000-0xBAFFF, 10 sectors).
+    FMini-1 has no sample engine, so they go to the SMK's sample window (0xC2000-0xE9FFF), keeping the layer's rule
+    on the stock mapping marker (0xEA000) and every protected range.
+
+models:                     # assumed (question not answered): all three, and the web installer offers them
+  - pro                     # SMK-37 Pro; also Starrykey 37 Play
+  - elite                   # SMK-37 Elite
+  - mke                     # MKE-P37
+installer: site             # the site's installer detects the connected model and writes that model's package
+
+keys:
+  middle: fm1               # keys 5..31 (F3..G5) = the FM-1's 27 keys, velocity from the unit's factory curves
+  outer: extend             # assumed: the 10 outer keys play notes too (a 37-key Minimoog)
+  velocity: factory
+
+pads:
+  pattern: custom           # owner: "Picker + steps"
+  order: reading            # pads 1-8 top row (hardware pads 0..7), 9-16 bottom (8..15)
+  colours: blue             # owner (2.5.10): the picker dim blue; the loaded preset bright white
+  idle: dim
+  playhead: bright
+  picker:                   # the normal mode
+    enabled: true
+    what: the 16 presets of the current page of the bank; a pad loads its preset, the loaded one bright
+    page: "follows the loaded preset (PRESETS knob, < >): the page of 16 that holds it"
+  steps:                    # inside the SEQ pop-up
+    what: the SEQ's 16 steps (as the FM-1's white keys are there); the playing step bright
+  velocity: false           # the picker and the steps take no velocity
+  notes: "other pop-ups and grids that use the FM-1's keys as a grid keep the layer's rule (steps 1-8 top row)"
+
+faders:                     # owner, 2026-11-09
+  pattern: banks
+  takeover: soft            # a fader acts only once it moves (also after a bank change)
+  bank_button: FADER BANK
+  banks:                    # each bank = the four knobs of its panel page
+    A: A.ENV page's four knobs (default)
+    B: F.ENV page's four knobs
+    C: MIX page's four knobs
+    D: the four knobs of the page on the screen (the FM-1's K1..K4)
+  order: A -> B -> C -> D -> A
+  screen: popup             # owner (2026-11-09): pressing FADER BANK shows a 1.2 s pop-up naming the bank (it no
+                            # longer opens the page); a fader moved in A..C: its page
+
+wheels:                     # assumed (question not answered)
+  pitch:
+    target: bend
+    range_semitones: preset # owner: the preset's PITCH BEND range (fm_bend_mode), as an incoming MIDI bend
+    applies_to: selected
+  mod:
+    target: as CC1          # owner: exactly what FMini-1 on the FM-1 (main) does with CC1 today (vibrato, +-1 semitone
+                            # at full wheel); may change later, on both boards
+    detail: "the same path as a MIDI CC1"
+  calibration: auto
+
+rules:
+  no_doubles: true          # (the faders repeat panel knobs: allowed below, they are the reason for the faders)
+  doubles_allowed:
+    - faders A..C repeat the A.ENV / F.ENV / MIX knobs of the panel pages
+
+knobs:
+  layout: fm1
+  K1: master                # owner: K1..K4 = MASTER, PRESETS, SELECT, ALGORITHM
+  K2: presets
+  K3: select
+  K4: algorithm
+  K5: knob 1
+  K6: knob 2
+  K7: knob 3
+  K8: knob 4
+  step: detent
+
+buttons:                    # owner, 2026-11-09 (the SMK-37's 18 buttons)
+  map: printed              # 1..14 at the FM-1 buttons' places, as the Felucca layer
+  PATCH: "HOME: the FILT page (K5..K8 = CUTOFF, EMPHASIS, CONTOUR AMOUNT, KEYBOARD), the pop-ups close"
+  PARA: "EDIT: FILT; again on FILT: PRESET SETTINGS"
+  SCALE: "SCL: OSC, again MIX; in the delay pop-up: tap tempo"
+  CHORD: "ENV: F.ENV, again A.ENV"
+  NOTE REPEAT: "LFO: CTRL"
+  FX: "FX; again: round the four FX pop-ups"
+  GLOBE: "GLO: the GLOBAL pop-up; in a list, one level back"
+  BT: "SAVE: the save dialog; again: write"
+  ARP: ARP pop-up
+  SEQ: "SEQ pop-up (the pads become its 16 steps)"
+  SEQ PLAY: PLAY / STOP
+  SEQ REC: REC
+  OCTAVE-: OCT-
+  OCTAVE+: OCT+
+  "<": "preset -1, loaded on release; held 0.66 s: runs on, 10 presets a second (the pop-up shows the slot reached)"
+  ">": "preset +1, loaded on release; held 0.66 s: runs on, 10 presets a second (the pop-up shows the slot reached)"
+  FADER BANK: "AMP ENV (default) -> FILTER ENV -> MIXER -> Screen Knobs (the page on the screen); a pop-up
+    'Faders: <bank>' for 1.2 s; lit off the default"
+  KNOB BANK: "K5..K8: FILTER (default) -> LFO (CTRL) -> FX -> Screen Knobs; a pop-up 'Knobs K5-K8: <bank>' for
+    1.2 s; lit off the default"
+  temporary_page: "a fader or K5..K8 moved shows its bank's page for 1 s after the last move, then the page before
+    comes back; meanwhile the Screen Knobs banks keep that page before; a button brings it back at once"
+  bank_popup: "two lines in AF_N (a step under the preset pop-up), '(default)' on a third line"
+  power_on: "the FILT page, as PATCH (FMini-1 already starts on FILT)"
+  calibration: "OCTAVE- + OCTAVE+ held at power-on: HARDWARE CALIBRATION (the layer's)"
+
+screen:
+  style: keep               # FMini-1's 240x240 UI unchanged; the hints name the SMK knobs (owner): K2 for PRESETS,
+                            # K3 for SELECT, K4 for ALGO, K5..K8 where the FM-1 says K1..K4; HARDWARE CALIBRATION
+                            # asks for the SMK's printed button and knob names; the hints name the buttons GLOBE,
+                            # PARA, BT (REC and PLAY stay)
+  colours: FMini-1's palette
+
+pedal: none
+
+midi:                       # owner, 2026-11-09: GLO > MIDI SETTINGS on the SMK-37
+  in: usb                   # fixed (no MIDI IN row): the TRS jack is an output
+  settings:
+    - "MIDI OUT: ALL (USB and TRS, default), USB, TRS"
+    - "MIDI OUT CH: 1..16, default 1 (the keys, the wheels, the ARP and SEQ notes)"
+    - "MIDI IN CH: ANY (default), 1..16"
+    - "MIDI IN CC: the CC list (was MIDI CC)"
+    - "MIDI CLOCK: OFF, USB (no TRS clock in)"
+    - "MIDI IN MONITOR (was MIDI MONITOR)"
+  out:                      # owner, 2026-11-09: the SMK as a MIDI controller too
+    keys: "the 37, MIDI OUT CH, velocity, the octave"
+    pads: "notes 36..43 bottom row, 44..51 top row, channel 10, velocity and note-off; still the preset picker"
+    knobs: "K1..K8 = CC 102..109 (fixed, absolute 0..127 kept per encoder; K1 the MASTER value)"
+    faders: "CC 110..113 (fixed)"
+  trs_out: "UART1 TX on PC7, the kit's pattern (docs/06-mapping-patterns.md); not yet confirmed on a unit"
+
+modes: {}
+
+emulator: "the SMK-37 emulator comes from the current Felucca (hugelton/Felucca), not written here"
+
+open_questions:
+  - "the owner wrote that after PRESET (PATCH) the knobs K5..K8 set the F.ENV; FILT's four knobs are CUTOFF,
+     EMPHASIS, CONTOUR AMOUNT, KEYBOARD (the F.ENV page is CHORD): taken as FILT, to confirm"
+  - "outer keys (extend) and models (all three, site installer) were assumed (not answered)"

@@ -31,3 +31,9 @@ thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICE
   [jasonpersinger](https://github.com/jasonpersinger) (the ROOM reverb click fix, #121),
   [renebohne](https://github.com/renebohne) (MIDI Program Change, #179),
   [gospodindilly-ops](https://github.com/gospodindilly-ops) (the second core, #247)
+
+## SMK-37 port
+
+The SMK-37 board layer (input HAL, display, pad LEDs, flash map, update path, installers and their tests) is
+genkigenki's (M. Geisler), from [genkigenki/Felucca](https://github.com/genkigenki/Felucca) branch `smk37`
+(hugelton/Felucca#237), GPL-3.0, with the [fm1-to-smk37](https://github.com/genkigenki/fm1-to-smk37) kit's guide.

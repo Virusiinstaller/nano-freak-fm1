@@ -25,6 +25,9 @@ void fm1_timer5_irq(void)
     fm1_timer5_ack();
     felucca_dbg.timer_irqs++;
     fm1_input_tick();
+#if BOARD_SMK37
+    smk_trs_tick();                             /* the TRS MIDI OUT: one byte when the last has gone (smk_midi_out.c) */
+#endif
     {   /* milliseconds from the 24 MHz TIMER4 (robust to a late tick) */
         static uint32_t last, acc;
         acc += t0 - last;
@@ -76,6 +79,99 @@ static void hexs(char *b, uint32_t v)
         b[i] = "0123456789ABCDEF"[(v >> (28u - 4u * i)) & 15u];
     b[8] = 0;
 }
+
+#if BOARD_SMK37
+/* pads as a step grid (1-8 top row): the DRUM grid, NAME, the layers' tiles (not SCL: notes) */
+static void smk_grid(void)
+{
+    uint32_t l = ui.layer ? ui.layer : ui.ly;
+    smk_pad_grid = (uint8_t)(grid_on() || (name_on() && !ui.menu) || (l && l != LAYER_SCL));
+}
+
+/* the SMK-37 Pro's 4 faders, tracks 1..4, by FADER BANK (ui_input.c smk_fbank), as the MIXER page: A LEVEL,
+ * B PAN (the middle centre), C REV send, D DLY send. A fader takes over only once it moves (also after a bank
+ * change), so nothing jumps. */
+static void smk_faders(void)
+{
+    static uint8_t last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    uint32_t i;
+#if FELUCCA_FMINI_ONLY
+    fa_smk_faders();                                      /* FMini-1: the faders set the A.ENV / F.ENV / MIX knobs */
+    return;
+#endif
+    if (smk_fbank_new) {                                  /* a new bank: wait for each fader to move */
+        smk_fbank_new = 0;
+        for (i = 0; i < 4u; i++)
+            last[i] = 0xFF;
+    }
+    for (i = 0; i < 4u && i < NTRK; i++) {
+        uint32_t v = fm1_in.fader[i];
+        int16_t *pv;
+        if (last[i] == 0xFF || fm1_in.frames < 200u) {   /* (the first readings settle) */
+            last[i] = (uint8_t)v;
+            continue;
+        }
+        if (v == last[i])
+            continue;
+        last[i] = (uint8_t)v;
+        pv = smk_fbank == 1 ? &trk[i].p[P_PAN] : smk_fbank == 2 ? &trk[i].p[P_REV] :
+             smk_fbank == 3 ? &trk[i].p[P_DLY] : &trk[i].p[P_LEVEL];
+        *pv = (int16_t)(smk_fbank == 1 ? (int32_t)v - 64 : (int32_t)v);   /* (PAN -64..63) */
+        ui.force = 1;
+    }
+}
+
+/* the wheels (stock: mux C address 4 = pitch, 5 = mod), self-calibrating: the pitch wheel's rest is its centre
+ * (taken at power-on, followed slowly while it rests), each wheel's range grows to what it has reached (the
+ * travel is short: raw ~445..640 pitch, ~474..629 mod on a unit). Pitch: a 14-bit bend -8192..8191 with a dead
+ * band around the centre; mod: 0..127, up (lower raw) = more. The audio ISR plays them as the selected track's
+ * MIDI pitch bend and CC1 (seq.c smk_wheels_block) */
+static void smk_wheels(void)
+{
+    enum { DEAD = 12, SPAN0 = 80, MOD_LO = 485, MOD_HI = 615 };
+    static int32_t pc, plo, phi, mlo, mhi;
+    static uint32_t rest_t, drift_t;
+    int32_t p = fm1_in.wheel[0], m = fm1_in.wheel[1], d, b, mw;
+    if (fm1_in.frames < 300u)                     /* (the readings settle) */
+        return;
+    if (!pc) {
+        pc = p;
+        plo = p - SPAN0;
+        phi = p + SPAN0;
+        mlo = m < MOD_LO ? m : MOD_LO;
+        mhi = m > MOD_HI ? m : MOD_HI;
+    }
+    if (p < plo)
+        plo = p;
+    if (p > phi)
+        phi = p;
+    if (m < mlo)
+        mlo = m;
+    if (m > mhi)
+        mhi = m;
+    d = p - pc;
+    if (d > -DEAD && d < DEAD) {
+        /* resting: the centre follows a slow drift, one count every 0.5 s once the wheel has been in the dead band for
+         * 1 s (FMini-1 2.5.8: it was one count every 200 calls, and this runs thousands of times a second, so the centre
+         * followed a slow push of the wheel and stayed there: let go, the wheel was off centre, a bend that stayed) */
+        b = 0;
+        if (!rest_t)
+            rest_t = fm1_ms | 1u;
+        if (fm1_ms - rest_t >= 1000u && fm1_ms - drift_t >= 500u) {
+            pc += d > 0 ? 1 : d < 0 ? -1 : 0;
+            drift_t = fm1_ms;
+        }
+    } else {
+        rest_t = 0;
+        b = d > 0 ? (d - DEAD) * 8191 / (phi - pc - DEAD > 1 ? phi - pc - DEAD : 1)
+                  : (d + DEAD) * 8192 / (pc - plo - DEAD > 1 ? pc - plo - DEAD : 1);
+        b = clamp(b, -8192, 8191);
+    }
+    mw = mhi - m <= DEAD ? 0 : (mhi - m - DEAD) * 127 / (mhi - mlo - DEAD > 1 ? mhi - mlo - DEAD : 1);
+    smk_bend14 = (int16_t)b;
+    smk_modw = (uint8_t)clamp(mw, 0, 127);
+}
+#endif
 
 static void fm1_fault(const fm1_crash_t *c)
 {
@@ -198,6 +294,10 @@ static void fm1_main(void)
     felucca_dbg.prev_rst = fm1_boot.p3_rst;
     fm1_input_init();
     fm1_adc_init();
+#if BOARD_SMK37 && FELUCCA_FLASH
+    if (flash_ok)                                   /* the factory key / pad velocity curves (USRTRIM, read only) */
+        smk_trim_load(fm1_xip_ptr(SMK_TRIM_FLASH));
+#endif
     panel_init();
     felucca_init();
     master_boot();
@@ -218,12 +318,15 @@ static void fm1_main(void)
 #if FELUCCA_UART
     uart_midi_init();
 #endif
+#if BOARD_SMK37
+    smk_trs_init();                           /* the TRS jack: MIDI OUT (UART1 TX on PC7) */
+#endif
     boot_leds();
     timer5_start();
     fm1_guard_lock_top();
     fm1_irq_enable_all();
     fm1_delay_ms(30);
-    if ((fm1_in.buttons & 3u) == 3u) {
+    if ((fm1_in.buttons & FM1_OCT_BOTH) == FM1_OCT_BOTH) {
         panel_setup();                        /* OCT- + OCT+ held at power-on */
         settings_save();
     }
@@ -332,11 +435,23 @@ static void fm1_main(void)
         settings_poll();                              /* queued settings save: only while stopped */
         autosave_poll();                              /* (1.2) the music, stopped and idle: project.c */
         felucca_dbg.stage = 2;
+#if BOARD_SMK37
+        smk_grid();
+#endif
         UI_LEDS();
+#if BOARD_SMK37
+        smk_faders();
+        smk_wheels();
+        padled_flush();                                 /* the pads' colours, between LCD transfers */
+#endif
         UI_DRAW();
         felucca_dbg.stage = 9;
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
             UI_INPUT();
+#if BOARD_SMK37
+            smk_wheels();                       /* (bends follow the wheel, not the screen) */
+            smk_grid();
+#endif
 #if FELUCCA_OTA
             ed_service();                       /* editor replies without waiting for the next frame */
 #endif

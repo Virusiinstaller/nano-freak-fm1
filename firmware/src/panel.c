@@ -9,11 +9,28 @@
 enum { B_FX, B_SCL, B_ENV, B_LFO, B_EDIT, B_GLO, B_HOME, B_SAVE, B_ARP, B_SEQ, B_PLAY, B_REC,
        B_OCTDN, B_OCTUP, NB };
 enum { EN_SELECT, EN_ALGO, EN_PRESET, EN_K1, EN_K2, EN_K3, EN_K4, NE };
+#if BOARD_SMK37                         /* HARDWARE CALIBRATION asks for them by the SMK-37's printed names */
+static const char *const B_NAME[NB] = {"FX", "SCALE", "CHORD", "NOTE REPEAT", "PARA", "GLOBE", "PATCH", "BT",
+                                        "ARP", "SEQ", "SEQ PLAY", "SEQ REC", "OCTAVE-", "OCTAVE+"};
+static const char *const E_NAME[NE] = {"K3", "K4", "K2", "K5", "K6", "K7", "K8"};
+#else
 static const char *const B_NAME[NB] = {"FX", "SCL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE",
                                         "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"};
 static const char *const E_NAME[NE] = {"SELECT", "ALGORITHM", "PRESETS", "KNOB 1", "KNOB 2",
                                         "KNOB 3", "KNOB 4"};
+#endif
+#ifndef FM1_NBTN                        /* (host tests without a HAL: the FM-1's buttons and encoders) */
+#define FM1_NBTN 14u
+#endif
+#ifndef FM1_NENC
+#define FM1_NENC 7u
+#endif
+#if BOARD_SMK37
+#define PANEL_MAGIC 0x464E5331u          /* "FNS1" (FMini-1 on the SMK-37: K2 PRESETS, K3 SELECT, K4 ALGORITHM): bump when
+                                          * PANEL_DEFAULT changes */
+#else
 #define PANEL_MAGIC 0x50414E35u          /* "PAN5": bump when PANEL_DEFAULT changes */
+#endif
 
 typedef struct {
     uint32_t magic;
@@ -23,22 +40,37 @@ typedef struct {
 } panel_t;
 panel_t panel __attribute__((section(".noinit")));
 
+#if BOARD_SMK37
+/* SMK-37 Pro (smk_input.h button ids, confirmed on a unit; the printed SMK label -> the FM-1 function):
+ * FX = FX, SCALE = SEL, CHORD = ENV, NOTE REPEAT = LFO, PARA = EDIT, GLOBE = GLO, PATCH = HOME, BT = SAVE,
+ * ARP, SEQ as printed, SEQ PLAY = PLAY, SEQ REC = REC, OCTAVE- / + as printed. KNOB BANK (the menu), FADER BANK,
+ * < and > (pages) keep SMK functions (ui_input.c). Knobs as the FM-1's top row: K1 = MASTER (smk_input.h: the FM-1's MASTER pot, as a virtual one),
+ * FMini-1 (the owner's order): K2 = PRESETS, K3 = SELECT, K4 = ALGORITHM; K5..K8 = KNOB 1..4 (the screen's four dials).
+ * HARDWARE CALIBRATION (OCT- + OCT+ at power-on) re-teaches all of it. */
+static const panel_t PANEL_DEFAULT = {
+    PANEL_MAGIC,
+    {14, 8, 9, 7, 13, 10, 12, 11, 6, 15, 16, 17, 4, 5},
+    {2, 3, 1, 4, 5, 6, 7},                           /* SELECT = K3, ALGORITHM = K4, PRESETS = K2 (encoders 2, 3, 1) */
+    {1, 1, 1, 1, 1, 1, 1},
+};
+#else
 static const panel_t PANEL_DEFAULT = {
     PANEL_MAGIC,
     {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1},   /* PLAY = 12, REC = 13 (measured on hardware) */
     {0, 1, 6, 2, 3, 4, 5},                           /* SELECT = enc 0, ALGORITHM = enc 1, PRESETS = enc 6 (printed labels) */
     {1, 1, 1, 1, 1, 1, 1},
 };
+#endif
 
 static void panel_init(void)                     /* also after a flash load: ids are used as array indexes and shifts */
 {
     uint32_t i, buttons = 0, encoders = 0, ok = panel.magic == PANEL_MAGIC;
     for (i = 0; ok && i < NB; i++) {
-        ok = panel.btn[i] < NB && !(buttons & (1u << panel.btn[i]));
+        ok = panel.btn[i] < FM1_NBTN && !(buttons & (1u << panel.btn[i]));
         if (ok) buttons |= 1u << panel.btn[i];
     }
     for (i = 0; ok && i < NE; i++) {
-        ok = panel.enc[i] < NE && !(encoders & (1u << panel.enc[i])) &&
+        ok = panel.enc[i] < FM1_NENC && !(encoders & (1u << panel.enc[i])) &&
              (panel.dir[i] == 1 || panel.dir[i] == -1);
         if (ok) encoders |= 1u << panel.enc[i];
     }
@@ -62,6 +94,9 @@ static int32_t panel_enc(uint32_t role)
     int32_t s = fm1_enc_take(panel.enc[role]) * panel.dir[role];
     if (s)
         panel_moved = 1;
+#if BOARD_SMK37 && FELUCCA_FMINI_ONLY
+    smk_out_knob(panel.enc[role], s);              /* the knob's own CC on MIDI OUT (smk_midi_out.c) */
+#endif
     return s;
 }
 /* 1 if a knob turned since the last call (the FMini-1 screen takes it each frame: its input is fa_input, not ui.c's) */
