@@ -33,7 +33,9 @@ header.nav nav a { color: var(--dim); text-decoration: none; font-size: 13.5px; 
 header.nav nav a:hover { color: var(--fg); border-color: var(--mute); }
 header.nav nav a.keep { color: #1a0e05; background: var(--or); border-color: var(--or); }
 header.nav nav a.keep:hover { background: var(--or2); }
-@media (max-width: 560px) { header.nav nav a:not(.keep) { display: none; } .brand small { display: none; } }
+header.nav nav a.donate { color: var(--or2); border-color: var(--or); }
+header.nav nav a.donate:hover { background: #2a1a0e; color: var(--or2); }
+@media (max-width: 560px) { header.nav nav a:not(.keep):not(.donate) { display: none; } .brand small { display: none; } }
 main { max-width: 1240px; margin: 0 auto; padding: 8px 20px 32px; }
 
 /* the toolbar and the panel: after Felucca SMK's smk-studio.css (Chance Roth, GPL-3.0) */
@@ -133,7 +135,7 @@ footer a { color:var(--dim); }
 <body>
 <header class="nav"><div class="wrap">
   <a class="brand" href="../../"><i>FM</i>ini-<i>1</i><small>SMK-37</small></a>
-  <nav><a href="../">FM-1 emulator</a><a href="../../" class="keep">FMini-1 website</a></nav>
+  <nav><a href="../">FM-1 emulator</a><a href="../../" class="keep">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener">Support Us &#9749;</a></nav>
 </div></header>
 <main>
 <section id="smk" aria-label="SMK-37 running FMini-1"></section>
