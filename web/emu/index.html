@@ -16,7 +16,7 @@
 :root { --bg: #0d0c10; --fg: #f4f0ea; --dim: #a29cab; --mute: #6f6a78; --rule: #2a2631; --line: #2a2631;
         --or: #ff7a1a; --or2: #ff9a4d; --sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        --body: #1d1d1f; --tray: #141415; --part: #2a2a2d; --edge: #3a3a3e; --label: #d6d6d8;
+        --body: #1d1d1f; --tray: #141415; --part: #2a2a2d; --edge: #3a3a3e; --label: #d6d6d8; --outline: rgba(255, 255, 255, .45);
         --lit: #fff4d6; --green: #5fe08a; color-scheme: dark; }
 html, body { background: var(--bg); }
 body { margin: 0; color: var(--fg); font: 13px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
@@ -40,6 +40,8 @@ a { color: inherit; }
 .device { position: relative; width: 100%; aspect-ratio: 1000 / 624; user-select: none; -webkit-user-select: none;
           -webkit-touch-callout: none; touch-action: manipulation; }
 .device svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* the black FM-1 on the dark page: a light edge and a soft glow around the body */
+.device svg { filter: drop-shadow(0 0 22px rgba(255, 255, 255, .10)); }
 .device canvas { position: absolute; image-rendering: crisp-edges; image-rendering: pixelated; background: #000; }
 .hit { position: absolute; touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; border-radius: 10px; }
 .hit.knob { cursor: ns-resize; border-radius: 50%; }
@@ -195,7 +197,7 @@ function build(name) {
   device.style.aspectRatio = `${L.w} / ${L.h}`;
   for (const d of device.querySelectorAll(".hit")) d.remove();
   knobs.length = buttons.length = keys.length = 0;
-  el("rect", { x: 4, y: 4, width: L.w - 8, height: L.h - 8, rx: 40, fill: "var(--body)" });
+  el("rect", { x: 4, y: 4, width: L.w - 8, height: L.h - 8, rx: 40, fill: "var(--body)", stroke: "var(--outline)", "stroke-width": 2 });
   for (const [x, y, w, h] of L.trays) el("rect", { x, y, width: w, height: h, rx: 14, fill: "var(--tray)" });
   const [sx, sy, ss] = L.screen;
   el("rect", { x: sx, y: sy, width: ss, height: ss, rx: 18, fill: "#0b0b0c" });
