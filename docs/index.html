@@ -279,7 +279,6 @@
       <a href="#features" data-t="nav_f"></a>
       <a href="#screens" data-t="nav_s"></a>
       <a href="#feat" data-t="nav_ft"></a>
-      <a href="#smk37">SMK-37</a>
       <a href="editor/" data-t="nav_ed"></a>
       <div class="trywrap"><button type="button" class="try" id="trybtn" aria-haspopup="true" aria-expanded="false"><span class="tl" data-t="nav_try"></span><span class="ts" data-t="nav_try_s"></span><span class="car">▾</span></button>
         <div class="trymenu" id="trymenu" hidden><a href="emu/">FM-1 <small data-t="try_fm1"></small></a><a href="emu/smk/">SMK-37 <small data-t="try_smk"></small></a></div></div>
@@ -347,21 +346,6 @@
       <article class="feat"><span class="n">05</span><h3 data-t="f5t"></h3><p data-t="f5d"></p></article>
       <article class="feat"><span class="n">06</span><h3 data-t="f6t"></h3><p data-t="f6d"></p></article>
     </div>
-  </section>
-
-  <section class="s wrap" id="smk37">
-    <p class="eyebrow">SMK-37</p>
-    <h2 data-t="h_smk"></h2>
-    <p class="lead" data-t="l_smk"></p>
-    <div class="grid">
-      <article class="feat"><span class="n">01</span><h3 data-t="k1t"></h3><p data-t="k1d"></p></article>
-      <article class="feat"><span class="n">02</span><h3 data-t="k2t"></h3><p data-t="k2d"></p></article>
-      <article class="feat"><span class="n">03</span><h3 data-t="k3t"></h3><p data-t="k3d"></p></article>
-      <article class="feat"><span class="n">04</span><h3 data-t="k4t"></h3><p data-t="k4d"></p></article>
-      <article class="feat"><span class="n">05</span><h3 data-t="k5t"></h3><p data-t="k5d"></p></article>
-      <article class="feat"><span class="n">06</span><h3 data-t="k6t"></h3><p data-t="k6d"></p></article>
-    </div>
-    <p class="cta"><a class="btn sec2" href="emu/smk/" data-t="btn_smkemu"></a></p>
   </section>
 
   <section class="s wrap" id="screens">
@@ -1315,14 +1299,6 @@ const SITE = {
     ft8t: "Editor web", ft8d: "Edite sons e presets pelo navegador, ligado ao FM-1 por USB-MIDI.",
     ft9t: "Emuladores online", ft9d: "Experimente o FMini-1 no navegador, no FM-1 ou no SMK-37, sem instalar nada.",
     h_install: "Instalar", l_install: "O instalador roda aqui mesmo, no navegador: reconhece se o aparelho é um FM-1 ou um SMK-37 e grava o firmware certo pelo cabo USB.",
-    h_smk: "Também no SMK-37", l_smk: "O mesmo FMini-1, a mesma tela e os mesmos 200 presets no teclado de 37 teclas da M-Vave, com tudo o que ele tem a mais: pads, faders, oito knobs e MIDI OUT completo.",
-    k1t: "37 teclas com velocity", k1d: "Três oitavas inteiras, com OCTAVE− e OCTAVE+. No PRESET SETTINGS, VELOCITY SENS. liga ou desliga a dinâmica de cada preset.",
-    k2t: "16 pads", k2d: "Escolhem os presets da página atual (o selecionado aceso) e, no sequenciador, mostram os 64 passos em quatro janelas coloridas.",
-    k3t: "4 faders, 4 bancos", k3d: "FADER BANK alterna entre A.ENV, F.ENV, MIX e os knobs da tela, com um aviso na tela a cada troca.",
-    k4t: "8 knobs, 4 bancos", k4d: "K1 é o volume, K2 a K4 trocam de preset e navegam, e K5 a K8 controlam FILTER, LFO, FX ou os knobs da tela (KNOB BANK).",
-    k5t: "MIDI OUT completo", k5d: "Teclas, pads, knobs, faders e as rodas saem por USB e pela saída TRS, com canal de saída próprio.",
-    k6t: "Pro, Elite e MKE-P37", k6d: "Um firmware para cada modelo. O instalador reconhece qual é o seu e grava o certo.",
-    btn_smkemu: "Testar o SMK-37 no navegador",
     try_fm1: "emulador", try_smk: "emulador",
   },
   en: {
@@ -1368,14 +1344,6 @@ const SITE = {
     ft8t: "Web editor", ft8d: "Edit sounds and presets in the browser, connected to the FM-1 over USB-MIDI.",
     ft9t: "Online emulators", ft9d: "Try the FMini-1 in your browser, on the FM-1 or the SMK-37, with nothing to install.",
     h_install: "Install", l_install: "The installer runs right here, in the browser: it recognises whether the device is an FM-1 or an SMK-37 and writes the right firmware over the USB cable.",
-    h_smk: "On the SMK-37 too", l_smk: "The same FMini-1, the same screen and the same 200 presets on M-Vave's 37-key keyboard, with everything it adds: pads, faders, eight knobs and a full MIDI OUT.",
-    k1t: "37 keys with velocity", k1d: "Three whole octaves, with OCTAVE− and OCTAVE+. In PRESET SETTINGS, VELOCITY SENS. turns each preset's dynamics on or off.",
-    k2t: "16 pads", k2d: "They pick the presets of the current page (the chosen one lit) and, in the sequencer, show the 64 steps in four coloured windows.",
-    k3t: "4 faders, 4 banks", k3d: "FADER BANK switches between A.ENV, F.ENV, MIX and the screen's knobs, with a note on the screen at each change.",
-    k4t: "8 knobs, 4 banks", k4d: "K1 is the volume, K2 to K4 change presets and navigate, and K5 to K8 set FILTER, LFO, FX or the screen's knobs (KNOB BANK).",
-    k5t: "Full MIDI OUT", k5d: "Keys, pads, knobs, faders and the wheels go out over USB and the TRS jack, on their own output channel.",
-    k6t: "Pro, Elite and MKE-P37", k6d: "A firmware for each model. The installer recognises yours and writes the right one.",
-    btn_smkemu: "Try the SMK-37 in your browser",
     try_fm1: "emulator", try_smk: "emulator",
   },
 };
