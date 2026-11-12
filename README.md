@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  The emulation of the classic Minimoog Model D for the M-Vave FM1, plus onboard effects, arpeggiator, sequencer and more.
+  The emulation of the classic Minimoog Model D for the M-Vave FM1 and SMK-37, plus onboard effects, arpeggiator, sequencer and more.
 </p>
 
 <p align="center">
