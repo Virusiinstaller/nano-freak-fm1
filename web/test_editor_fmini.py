@@ -332,14 +332,22 @@ with sync_playwright() as pw:
     pg2.expose_function("__tx", on_tx)
     pg2.add_init_script(MOCK2)
     pg2.goto((ROOT / "web" / "editor_fmini.html").as_uri())
+    pg2.click("#connect")                                               # nothing picked: the silent one, then the next
+    pg2.wait_for_function("!document.body.classList.contains('off')", timeout=20000)
+    labels = pg2.evaluate("[...document.querySelectorAll('#port option')].map((o) => o.textContent)")
+    check("two devices named FM-1 Midi, the first silent: Connect goes on to FM-1 Midi (2), and the list shows it",
+          labels == ["FM-1 Midi", "FM-1 Midi (2)"] and pg2.is_visible("#port") and pg2.input_value("#port") == "FM-1 Midi (2)")
+    check("  .. the second one connects through its own output", "FMini-1" in pg2.inner_text("#stxt") and pg2.evaluate("__fmini.S.names.length") == 200 and not errs2)
+    pg2.click("#connect")                                               # disconnect
+    pg2.wait_for_function("document.body.classList.contains('off')", timeout=5000)
+    pg2.select_option("#port", "FM-1 Midi")                             # picked by hand: that port alone
     pg2.click("#connect")
     pg2.wait_for_function("document.getElementById('connect').disabled === false && document.body.classList.contains('off')", timeout=15000)
-    labels = pg2.evaluate("[...document.querySelectorAll('#port option')].map((o) => o.textContent)")
-    check("two devices named FM-1 Midi: the list shows FM-1 Midi and FM-1 Midi (2)", labels == ["FM-1 Midi", "FM-1 Midi (2)"] and pg2.is_visible("#port"))
+    check("  .. a port picked in the list is the only one tried (the silent one: no connection)", pg2.input_value("#port") == "FM-1 Midi")
     pg2.select_option("#port", "FM-1 Midi (2)")
     pg2.click("#connect")
     pg2.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
-    check("  .. the second one connects through its own output", "FMini-1" in pg2.inner_text("#stxt") and pg2.evaluate("__fmini.S.names.length") == 200 and not errs2)
+    check("  .. and picking FM-1 Midi (2) connects again", "FMini-1" in pg2.inner_text("#stxt"))
     if errs2: print(errs2)
     pg2.close()
 

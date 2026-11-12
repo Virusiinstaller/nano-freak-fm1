@@ -536,13 +536,28 @@ async function connect() {
     const all = fillPorts($("port").value);                /* keeps the port picked in the list */
     if (!all.length) { msg(T("none"), true); throw 0; }
     const m = all.filter((x) => MATCH.test(x.i.name));
+    const user = !!$("port").dataset.user;
     let pick = all.find((x) => x.label === $("port").value);
-    if (!pick || (!MATCH.test(pick.i.name) && m.length && !$("port").dataset.user)) pick = m[0] || pick;
-    if (!m.length && all.length > 1 && !$("port").dataset.user) { $("port").hidden = false; msg(T("pick")); throw 0; }
-    await pick.i.open(); await pick.o.open();
-    dev.inp = pick.i; dev.out = pick.o; dev.inp.onmidimessage = onMsg; dev.open = true;
-    console.info("editor: connecting to input", dev.inp.name, "output", dev.out.name);
-    await handshake();
+    if (!pick || (!MATCH.test(pick.i.name) && m.length && !user)) pick = m[0] || pick;
+    if (!m.length && all.length > 1 && !user) { $("port").hidden = false; msg(T("pick")); throw 0; }
+    /* the port picked in the list, alone; else the first FMini-1 port, then the others: the first one that answers
+     * (another device can come first, an FM-1 next to an SMK-37). The list shows the one that answered */
+    const cands = user ? [pick] : [pick, ...m.filter((x) => x !== pick)];
+    let first = null;
+    for (const c of cands) {
+      try {
+        await c.i.open(); await c.o.open();
+        dev.inp = c.i; dev.out = c.o; dev.inp.onmidimessage = onMsg; dev.open = true;
+        console.info("editor: connecting to input", dev.inp.name, "output", dev.out.name);
+        await handshake();
+        $("port").value = c.label; first = null;
+        break;
+      } catch (e) {
+        if (!(e instanceof Error)) throw e;
+        closePorts(); if (!first) first = e;
+      }
+    }
+    if (first) throw first;
     setStatus(true, T("conn") + (/smk-37/i.test(dev.inp.name) ? " (SMK-37)" : "")); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
     startPoll();
     fwCheck();
