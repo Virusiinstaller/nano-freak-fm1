@@ -239,14 +239,18 @@ const dev = { access: null, inp: null, out: null, waiter: null, chain: Promise.r
 
 function onMsg(ev) {
   const d = ev.data;
-  if (d[0] !== 0xF0 || d[1] !== 0x7D || d[2] !== 0x46 || d[3] !== 0x4C || !dev.waiter || dev.waiter.cmd !== d[4]) return;
+  if (d[0] !== 0xF0 || d[1] !== 0x7D || d[2] !== 0x46 || d[3] !== 0x4C || !dev.waiter || dev.waiter.cmd !== d[4]) {
+    /* diagnostics (the browser console): a SysEx that is not the answer waited for, with its first bytes */
+    if (d[0] === 0xF0) console.info("editor: SysEx not expected:", Array.from(d.slice(0, 8)), "waiting for command", dev.waiter ? dev.waiter.cmd : "none");
+    return;
+  }
   const w = dev.waiter; dev.waiter = null;
   w.res(Array.from(d.slice(5, d.length - 1)));
 }
 function req(cmd, args = [], ms = 900) {
   const p = dev.chain.then(() => new Promise((res, rej) => {
     if (!dev.out || dev.out.state === "disconnected") return rej(new Error("lost"));
-    const t = setTimeout(() => { dev.waiter = null; rej(new Error("timeout")); }, ms);
+    const t = setTimeout(() => { dev.waiter = null; console.warn("editor: no reply to command", cmd, "within", ms, "ms"); rej(new Error("timeout")); }, ms);
     dev.waiter = { cmd, res: (a) => { clearTimeout(t); res(a); } };
     try { dev.out.send([0xF0, 0x7D, 0x46, 0x4C, cmd, ...args, 0xF7]); } catch (e) { clearTimeout(t); dev.waiter = null; rej(new Error("lost")); }
   }));
@@ -516,6 +520,7 @@ async function connect() {
     if (!m.length && all.length > 1 && !$("port").dataset.user) { $("port").hidden = false; msg(T("pick")); throw 0; }
     await pick.i.open(); await pick.o.open();
     dev.inp = pick.i; dev.out = pick.o; dev.inp.onmidimessage = onMsg; dev.open = true;
+    console.info("editor: connecting to input", dev.inp.name, "output", dev.out.name);
     await handshake();
     S.device = deviceName(dev.inp.name);
     setStatus(true, T("conn", { d: S.device })); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
