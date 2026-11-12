@@ -296,6 +296,7 @@ with sync_playwright() as pw:
 
     # ---- PRESETS, MANAGE PRESETS, CHANGE ORDER: a pop-up with the 200 in four columns; the grid moves while dragging;
     # Shift+click selects a run that moves as one; SAVE TO THE DEVICE writes the 200 in that order (the bridge answers YES)
+    check("the panel's question on the FM-1 names SAVE", "SAVE" in pg.evaluate("__fmini.waitText()"))
     names0 = pg.evaluate("__fmini.S.names.slice(0, 200)")
     pg.click("#tabs button:text-is('PRESETS')")
     pg.click("button:text-is('Alterar ordem'), button:text-is('Change order')")
@@ -377,6 +378,7 @@ with sync_playwright() as pw:
     pg3.click("#connect")
     pg3.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
     check("a port named SMK-37 connects, and the status line says SMK-37", "SMK-37" in pg3.inner_text("#stxt"))
+    check("  .. and the panel's question names its keys: K4 and BT (not SAVE)", "BT" in pg3.evaluate("__fmini.waitText()") and "SAVE" not in pg3.evaluate("__fmini.waitText()"))
     br.close()
 
 proc.stdin.close(); proc.wait(timeout=5)

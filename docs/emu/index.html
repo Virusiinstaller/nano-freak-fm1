@@ -20,6 +20,9 @@
         --lit: #fff4d6; --green: #5fe08a; color-scheme: dark; }
 html, body { background: var(--bg); }
 body { margin: 0; color: var(--fg); font: 13px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+/* the language button (PT / EN), as on the site */
+.lang { font: 600 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--dim); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; cursor: pointer; flex: none; }
+.lang:hover { color: var(--fg); border-color: var(--mute); }
 /* the site's bar (the same as the SMK-37 emulator's, emu/smk/) */
 header.nav { position: sticky; top: 0; z-index: 30; background: rgba(13,12,16,.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 header.nav .wrap { display: flex; align-items: center; gap: 14px; height: 56px; max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
@@ -92,44 +95,75 @@ kbd { font: 600 11px var(--mono); border: 1px solid var(--line); border-radius: 
 footer { margin-top: 12px; font-size: 12px; }
 footer nav a { margin: 0 6px; }
 footer small { font-size: 11px; opacity: .8; }
+@media (max-width: 560px) {   /* the bar on a phone: the language button fits beside the links */
+  header.nav .wrap { gap: 8px; padding: 0 12px; }
+  .brand { white-space: nowrap; font-size: 19px; }
+  header.nav nav { gap: 5px; }
+  header.nav nav a { white-space: nowrap; padding: 7px 8px; font-size: 12px; }
+  .lang { padding: 8px 9px; }
+}
 </style>
 </head>
 <body>
 <header class="nav"><div class="wrap">
   <a class="brand" href="../"><i>FM</i>ini-<i>1</i><small>FM-1</small></a>
-  <nav><a href="smk/">SMK-37 emulator</a><a href="../" class="keep">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener">Support Us &#9749;</a></nav>
+  <nav><a href="smk/" data-t="n_smk">SMK-37 emulator</a><a href="../" class="keep" data-t="n_site">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener" data-t="n_don">Support Us &#9749;</a></nav>
+  <button class="lang" id="lang" type="button" aria-label="Language"></button>
 </div></header>
 <main>
 <div class="device" id="device">
   <svg id="panel" viewBox="0 0 1000 624" aria-hidden="true"></svg>
-  <canvas id="screen" width="240" height="240" role="img" aria-label="The screen"></canvas>
-  <div class="start" id="start"><button id="go" type="button">Switch on</button><p id="status" hidden></p></div>
+  <canvas id="screen" width="240" height="240" role="img" aria-label="The screen" data-ta="a_screen"></canvas>
+  <div class="start" id="start"><button id="go" type="button" data-t="go_on">Switch on</button><p id="status" hidden></p></div>
 </div>
 
 <p class="keys">
-  <span><kbd>Z</kbd>–<kbd>'</kbd> <kbd>Q</kbd>–<kbd>O</kbd> keys</span>
+  <span><kbd>Z</kbd>–<kbd>'</kbd> <kbd>Q</kbd>–<kbd>O</kbd> <span data-t="k_keys">keys</span></span>
   <span><kbd>1</kbd>–<kbd>=</kbd> FX … REC</span>
-  <span>Turn the knobs: drag, scroll or arrow keys</span>
+  <span data-t="k_knobs">Turn the knobs: drag, scroll or arrow keys</span>
   <span><kbd>[</kbd> <kbd>]</kbd> OCT</span>
   <span><kbd>↑</kbd> <kbd>↓</kbd> SELECT</span>
   <span><kbd>←</kbd> <kbd>→</kbd> ALGORITHM</span>
-  <span><kbd>Shift</kbd>-click holds a button</span>
-  <span id="midiknobs" hidden><label><input type="checkbox" id="knobson"> MIDI CC 20–27 turn the panel's knobs</label>
-  <select id="knobmode" aria-label="How the controller sends CC 20–26" hidden>
-    <option value="abs">absolute</option>
-    <option value="bin">relative 64±n</option>
-    <option value="twos">relative 2's complement</option>
-    <option value="sign">relative sign bit</option>
+  <span><kbd>Shift</kbd><span data-t="k_hold">-click holds a button</span></span>
+  <span id="midiknobs" hidden><label><input type="checkbox" id="knobson"><span data-t="k_midi"> MIDI CC 20–27 turn the panel's knobs</span></label>
+  <select id="knobmode" aria-label="How the controller sends CC 20–26" data-ta="a_kmode" hidden>
+    <option value="abs" data-t="m_abs">absolute</option>
+    <option value="bin" data-t="m_bin">relative 64±n</option>
+    <option value="twos" data-t="m_twos">relative 2's complement</option>
+    <option value="sign" data-t="m_sign">relative sign bit</option>
   </select></span>
 </p>
 
 <footer>
   <small class="version">FMini-1 v2.5.13</small><br>
-  FMini-1 by Guilherme Ruppert, a fork of Felucca by Leo Kuroshita, Hügelton Instruments · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> · browser build after charlesvestal's <a href="https://github.com/charlesvestal/fm1-x0x">X0X</a> · DotGothic16 font, <a href="fonts/OFL.txt">SIL OFL 1.1</a><br>
-  <nav><a href="../">Install on the FM-1</a><a href="https://github.com/ruppert/fmini-1">Source</a></nav>
-  <small>M-VAVE and FM-1 are trademarks of their respective owners. FMini-1 is not affiliated with or endorsed by them.</small>
+  <span data-t="f_by">FMini-1 by Guilherme Ruppert, a fork of Felucca by Leo Kuroshita, Hügelton Instruments</span> · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> · <span data-t="f_after">browser build after charlesvestal's</span> <a href="https://github.com/charlesvestal/fm1-x0x">X0X</a> · <span data-t="f_font">DotGothic16 font,</span> <a href="fonts/OFL.txt">SIL OFL 1.1</a><br>
+  <nav><a href="../" data-t="f_inst">Install on the FM-1</a><a href="https://github.com/ruppert/fmini-1" data-t="f_src">Source</a></nav>
+  <small data-t="f_tm">M-VAVE and FM-1 are trademarks of their respective owners. FMini-1 is not affiliated with or endorsed by them.</small>
 </footer>
 </main>
+<script>
+/* the language: PT / EN, the same choice as the site, the editor and the other emulator (localStorage "fmini-lang"; else the browser's) */
+const TXT = {
+  pt: { n_smk: "Emulador SMK-37", n_fm1: "Emulador FM-1", n_site: "Site do FMini-1", n_don: "Apoiar ☕", a_screen: "A tela", go_on: "Ligar", go_starting: "Ligando…", go_ok: "Ligado", nostart: "Não foi possível iniciar: ", nostart2: ". Um Chrome, Edge, Firefox ou Safari atual deve funcionar.", k_keys: "teclas", k_knobs: "Girar os knobs: arrastar, rolar ou setas", k_hold: "+clique segura um botão", k_midi: " MIDI CC 20–27 giram os knobs do painel", a_kmode: "Como o controlador envia os CC 20–26", m_abs: "absoluto", m_bin: "relativo 64±n", m_twos: "relativo, complemento de 2", m_sign: "relativo, bit de sinal", f_by: "FMini-1 por Guilherme Ruppert, um fork do Felucca de Leo Kuroshita, Hügelton Instruments", f_after: "versão para navegador baseada no", f_font: "fonte DotGothic16,", f_inst: "Instalar no FM-1", f_src: "Código-fonte", f_tm: "M-VAVE e FM-1 são marcas de seus respectivos donos. O FMini-1 não é afiliado nem endossado por eles.", a_smk: "SMK-37 rodando o FMini-1", k_knobs2: "Knobs: arrastar, rolar ou setas", k_fad: "Faders e rodas: arrastar", f_panel1: "O painel do SMK-37 é o simulador do", f_panel2: "de Chance Roth (GPL-3.0), com outro visual; o firmware por trás dele é o do FMini-1.", f_tm2: "M-VAVE, SMK-37 e FM-1 são marcas de seus respectivos donos. O FMini-1 não é afiliado nem endossado por eles.", t_full: "Tela cheia", t_finish: "Acabamento: " },
+  en: { n_smk: "SMK-37 emulator", n_fm1: "FM-1 emulator", n_site: "FMini-1 website", n_don: "Support Us ☕", a_screen: "The screen", go_on: "Switch on", go_starting: "Starting…", go_ok: "On", nostart: "Could not start: ", nostart2: ". A current Chrome, Edge, Firefox or Safari should work.", k_keys: "keys", k_knobs: "Turn the knobs: drag, scroll or arrow keys", k_hold: "-click holds a button", k_midi: " MIDI CC 20–27 turn the panel's knobs", a_kmode: "How the controller sends CC 20–26", m_abs: "absolute", m_bin: "relative 64±n", m_twos: "relative 2's complement", m_sign: "relative sign bit", f_by: "FMini-1 by Guilherme Ruppert, a fork of Felucca by Leo Kuroshita, Hügelton Instruments", f_after: "browser build after charlesvestal's", f_font: "DotGothic16 font,", f_inst: "Install on the FM-1", f_src: "Source", f_tm: "M-VAVE and FM-1 are trademarks of their respective owners. FMini-1 is not affiliated with or endorsed by them.", a_smk: "SMK-37 running FMini-1", k_knobs2: "Knobs: drag, scroll or arrow keys", k_fad: "Faders and wheels: drag", f_panel1: "The SMK-37 panel is the simulator of", f_panel2: "by Chance Roth (GPL-3.0), restyled; the firmware behind it is FMini-1's.", f_tm2: "M-VAVE, SMK-37 and FM-1 are trademarks of their respective owners. FMini-1 is not affiliated with or endorsed by them.", t_full: "Fullscreen", t_finish: "Finish: " },
+};
+let LANG = (() => { try { const v = localStorage.getItem("fmini-lang"); if (v === "pt" || v === "en") return v; } catch (_) { /* (no storage) */ } return /^pt/i.test(navigator.language || "") ? "pt" : "en"; })();
+window.tr = (k) => (TXT[LANG] && TXT[LANG][k] !== undefined ? TXT[LANG][k] : TXT.en[k] !== undefined ? TXT.en[k] : k);
+function applyLang() {
+  document.documentElement.lang = LANG === "pt" ? "pt-BR" : "en";
+  document.querySelectorAll("[data-t]").forEach((e) => { e.textContent = tr(e.dataset.t); });
+  document.querySelectorAll("[data-ta]").forEach((e) => { e.setAttribute("aria-label", tr(e.dataset.ta)); });
+  document.querySelectorAll("[data-tt]").forEach((e) => { e.title = tr(e.dataset.tt); });
+  document.getElementById("lang").textContent = LANG === "pt" ? "PT" : "EN";
+  window.dispatchEvent(new Event("langchange"));
+}
+document.getElementById("lang").addEventListener("click", () => {
+  LANG = LANG === "pt" ? "en" : "pt";
+  try { localStorage.setItem("fmini-lang", LANG); } catch (_) { /* (no storage) */ }
+  applyLang();
+});
+applyLang();
+</script>
 
 <script type="module">
 import { midiKnob, KNOB_MODES } from "./worklet.js";
@@ -578,7 +612,7 @@ async function startSilent(ac, wasm) {
 async function switchOn() {
   const go = document.getElementById("go");
   go.disabled = true;
-  go.textContent = "Starting…";
+  go.dataset.t = "go_starting"; go.textContent = tr("go_starting");
   try {
     const ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
     ac.resume().catch(() => {});
@@ -588,7 +622,7 @@ async function switchOn() {
     if (ac.state === "running") await startWorklet(ac, wasm);
     else await startSilent(ac, wasm);
     document.getElementById("start").hidden = true;
-    go.textContent = "On";
+    go.dataset.t = "go_ok"; go.textContent = tr("go_ok");
     if (ac.sampleRate !== 44100) console.warn(`FMini-1: the browser plays at ${ac.sampleRate} Hz, the pitch is off by ${(1200 * Math.log2(ac.sampleRate / 44100)).toFixed(0)} cents.`);
     syncButtons();
     syncKeys();
@@ -597,8 +631,8 @@ async function switchOn() {
   } catch (err) {
     node = null;
     go.disabled = false;
-    go.textContent = "Switch on";
-    say("Could not start: " + (err && err.message || err) + ". A current Chrome, Edge, Firefox or Safari should work.");
+    go.dataset.t = "go_on"; go.textContent = tr("go_on");
+    say(tr("nostart") + (err && err.message || err) + tr("nostart2"));
   }
 }
 document.getElementById("go").addEventListener("click", switchOn);

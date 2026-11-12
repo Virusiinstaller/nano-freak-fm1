@@ -681,7 +681,8 @@ function renderSite() {
 }
 
 const nl = (navigator.language || "en").toLowerCase();
-let lang = nl.startsWith("pt") ? "pt" : "en";
+/* the language: PT / EN, kept for the editor and the emulators too (localStorage "fmini-lang"; else the browser's) */
+let lang = (() => { try { const v = localStorage.getItem("fmini-lang"); if (v === "pt" || v === "en") return v; } catch (_) { /* (no storage) */ } return nl.startsWith("pt") ? "pt" : "en"; })();
 const LANGS = ["pt", "en"];
 const t = (k) => TEXT[lang][k];
 let lastKey = null, lastArg = "", detKey = null;   /* (detKey: the device step 1 found, shown again on a language change) */
@@ -700,7 +701,11 @@ $("trybtn").addEventListener("click", (e) => { e.stopPropagation(); const open =
 document.addEventListener("click", (e) => { if (!$("trymenu").hidden && !e.target.closest(".trywrap")) { $("trymenu").hidden = true; $("trybtn").setAttribute("aria-expanded", "false"); } });
 addEventListener("keydown", (e) => { if (e.key === "Escape") { $("trymenu").hidden = true; $("trybtn").setAttribute("aria-expanded", "false"); } });
 $("tip").addEventListener("click", (e) => { if (e.target.id === "tip") $("tip").hidden = true; });
-$("lang").addEventListener("click", () => { lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]; applyLang(); });
+$("lang").addEventListener("click", () => {
+  lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+  try { localStorage.setItem("fmini-lang", lang); } catch (_) { /* (no storage) */ }
+  applyLang();
+});
 applyLang();
 const sayK = (k, arg = "") => { lastKey = k; lastArg = arg; $("status").textContent = t(k) + arg; if (k === "done") $("tip").hidden = false; document.body.classList.toggle("bad", ["error","denied","notfound","model","unknown","lost","noloader","noreturn","mismatch","badpkg","stopped","loadfail","nomidi","fw_bad"].includes(k)); };
 const say = (txt) => { lastKey = null; $("status").textContent = txt; };

@@ -34,6 +34,8 @@
   header.nav nav a.keep:hover { background: var(--or2); }
   header.nav nav a.donate { color: var(--or2); border-color: var(--or); }
   header.nav nav a.donate:hover { background: #2a1a0e; color: var(--or2); }
+  .lang { font: 600 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--dim); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; cursor: pointer; flex: none; }
+  .lang:hover { color: var(--fg); border-color: var(--mute); }
   @media (max-width: 560px) { .brand small { display: none; } header.nav nav a { padding: 7px 9px; font-size: 12.5px; } }
   /* the connection: status, port, CONNECT, USB */
   .connbar { background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -134,6 +136,13 @@
   footer .wrap > * { margin: 4px 0; }
   .off main.panel, .off .bar, .off nav.tabs { opacity: .35; pointer-events: none; }
   @media (max-width: 560px) { .knob, .sw { width: 72px; } .row { gap: 16px 14px; } main.panel { padding: 18px 12px; } }
+@media (max-width: 560px) {   /* the bar on a phone: the language button fits beside the links */
+  header.nav .wrap { gap: 8px; padding: 0 12px; }
+  .brand { white-space: nowrap; font-size: 19px; }
+  header.nav nav { gap: 5px; }
+  header.nav nav a { white-space: nowrap; padding: 7px 8px; font-size: 12px; }
+  .lang { padding: 8px 9px; }
+}
 </style>
 </head>
 <body class="off">
@@ -143,7 +152,8 @@
 
 <header class="nav"><div class="wrap">
   <a class="brand" href="../"><i>FM</i>ini-<i>1</i><small data-t="editor">Editor</small></a>
-  <nav><a href="../" class="keep">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener">Support Us &#9749;</a></nav>
+  <nav><a href="../" class="keep" data-t="n_site">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener" data-t="n_don">Support Us &#9749;</a></nav>
+  <button class="lang" id="lang" type="button" aria-label="Language"></button>
 </div></header>
 <div class="connbar"><div class="wrap">
   <span id="status"><span class="dot" id="dot"></span><span id="stxt"></span></span>
@@ -186,7 +196,7 @@
 const TX = {
   pt: { editor: "Editor", connect: "Conectar", disconnect: "Desconectar", connecting: "Conectando…", disc: "Desconectado",
     conn: "Conectado — FMini-1", save: "Salvar som", open: "Abrir som", home: "Site do FMini-1", donate: "Apoie o projeto (Ko-fi)",
-    foot1: "Funciona no Chrome, Edge e Android (Web MIDI com SysEx). Os ajustes valem para o som que está tocando; para guardar, use o SAVE do próprio aparelho.",
+    foot1: "Funciona no Chrome, Edge e Android (Web MIDI com SysEx). Os ajustes valem para o som que está tocando; para guardar, use o SAVE do próprio aparelho (no SMK-37, a tecla BT).",
     nomidi: "Este navegador não tem Web MIDI com SysEx. Use o Chrome ou o Edge (computador) ou o Chrome no Android.",
     denied: "O navegador negou o acesso MIDI. Libere “MIDI” nas permissões do site e tente de novo.",
     none: "Nenhum FM-1 ou SMK-37 encontrado. Conecte o cabo USB, feche outros programas que usam a porta MIDI e toque em Conectar.",
@@ -201,6 +211,7 @@ const TX = {
     badfile: "Arquivo de som inválido.", rnd: "Aleatorizar", amt: "Variação", abcopy: "Copiar A → B", abcopyb: "Copiar B → A", abtip: "Alterna entre dois ajustes para comparar",
     lib: "PRESETS", libload: "Carregar", libempty: "— vazio —", libtitle: "Backup", indiv: "Restaurar Presets individuais:",
     order: "Ordem dos presets", ordhint: "Arraste um preset para a nova posição. Para mover uma sequência, clique no primeiro e Shift+clique no último, e arraste. Salvar no dispositivo grava os 200 nessa ordem (confirme no painel). A categoria de cada um (o filtro do aparelho) continua a da posição antiga.",
+    n_site: "Site do FMini-1", n_don: "Apoiar ☕",
     mng: "Gerenciar Presets", ordbtn: "Alterar ordem", ordclose: "Fechar", orddiscard: "Descartar a nova ordem?",
     ordsave: "Salvar no dispositivo", ordundo: "Desfazer ordem", askorder: "Gravar os 200 presets nesta ordem no aparelho? Os presets atuais serão substituídos.",
     busyorder: "Gravando os 200 presets na nova ordem… não desconecte o USB.", orderdone: "Ordem gravada no aparelho.", ordnochange: "A ordem não mudou.",
@@ -209,12 +220,12 @@ const TX = {
     askresetall: "Restaurar os 200 presets de fábrica (000–199)? O que está gravado neles será substituído.", busyreset: "Restaurando os presets de fábrica… não desconecte o USB.",
     resetdone: "Presets de fábrica restaurados.", resetfail: "O aparelho não conseguiu restaurar o preset.",
     bakexp: "Fazer backup (.bkp)", bakimp: "Restaurar backup (.bkp)", busybak: "Lendo os 200 presets…", bakdone: "Backup salvo.",
-    busyrest: "Gravando os 200 presets… não desconecte o USB.", waitdev: "Confirme no aparelho: ALGORITHM = YES, depois SAVE. Qualquer botão de página cancela.",
+    busyrest: "Gravando os 200 presets… não desconecte o USB.", waitdev: "Confirme no aparelho: ALGORITHM = YES, depois SAVE. Qualquer botão de página cancela.", waitdev_smk: "Confirme no aparelho: ALGORITHM (K4) = YES, depois BT. Qualquer botão de página cancela.",
     restdone: "Presets restaurados.", refused: "Restauração recusada no aparelho (ou sem resposta).", restfail: "Falhou ao gravar no aparelho. Os presets gravados até aqui ficaram; refaça a restauração.",
     badbkp: "Arquivo de backup inválido.", recfail: "O aparelho não devolveu um preset.", busyread: "Lendo…", loaded: "Som carregado no aparelho.", saved: "Som salvo em arquivo." },
   en: { editor: "Editor", connect: "Connect", disconnect: "Disconnect", connecting: "Connecting…", disc: "Disconnected",
     conn: "Connected — FMini-1", save: "Save sound", open: "Open sound", home: "FMini-1 site", donate: "Support the project (Ko-fi)",
-    foot1: "Works in Chrome, Edge and Android (Web MIDI with SysEx). Edits change the sound that is playing; to keep it, use the device's own SAVE.",
+    foot1: "Works in Chrome, Edge and Android (Web MIDI with SysEx). Edits change the sound that is playing; to keep it, use the device's own SAVE (BT on the SMK-37).",
     nomidi: "This browser has no Web MIDI with SysEx. Use Chrome or Edge (desktop) or Chrome on Android.",
     denied: "The browser denied MIDI access. Allow “MIDI” in the site permissions and try again.",
     none: "No FM-1 or SMK-37 found. Plug in the USB cable, close other programs using the MIDI port and press Connect.",
@@ -229,6 +240,7 @@ const TX = {
     badfile: "Invalid sound file.", rnd: "Randomize", amt: "Amount", abcopy: "Copy A → B", abcopyb: "Copy B → A", abtip: "Switch between two settings to compare",
     lib: "PRESETS", libload: "Load", libempty: "— empty —", libtitle: "Backup", indiv: "Restore individual presets:",
     order: "Preset order", ordhint: "Drag a preset to its new place. To move a run, click the first one, Shift+click the last one, and drag. Save to device writes the 200 in that order (confirm on the panel). Each one's category (the device's filter) stays with its old slot.",
+    n_site: "FMini-1 website", n_don: "Support Us ☕",
     mng: "Manage presets", ordbtn: "Change order", ordclose: "Close", orddiscard: "Discard the new order?",
     ordsave: "Save to device", ordundo: "Undo order", askorder: "Write the 200 presets in this order to the device? The current presets will be replaced.",
     busyorder: "Writing the 200 presets in the new order… do not unplug USB.", orderdone: "Order saved to the device.", ordnochange: "The order has not changed.",
@@ -237,13 +249,13 @@ const TX = {
     askresetall: "Restore the 200 factory presets (000–199)? What is saved in them will be replaced.", busyreset: "Restoring the factory presets… do not unplug USB.",
     resetdone: "Factory presets restored.", resetfail: "The device could not restore the preset.",
     bakexp: "Make backup (.bkp)", bakimp: "Restore backup (.bkp)", busybak: "Reading the 200 presets…", bakdone: "Backup saved.",
-    busyrest: "Writing the 200 presets… do not unplug USB.", waitdev: "Confirm on the device: ALGORITHM = YES, then SAVE. Any page button cancels.",
+    busyrest: "Writing the 200 presets… do not unplug USB.", waitdev: "Confirm on the device: ALGORITHM = YES, then SAVE. Any page button cancels.", waitdev_smk: "Confirm on the device: ALGORITHM (K4) = YES, then BT. Any page button cancels.",
     restdone: "Presets restored.", refused: "Restore refused on the device (or no answer).", restfail: "The device refused a write. The presets written so far stay; run the restore again.",
     badbkp: "Invalid backup file.", recfail: "The device did not return a preset.", busyread: "Reading…", loaded: "Sound loaded into the device.", saved: "Sound saved to a file." },
 };
-const LANG = /^pt/i.test(navigator.language || "") ? "pt" : "en";
+/* the language: PT / EN, the same choice as the site and the emulators (localStorage "fmini-lang"; else the browser's) */
+let LANG = (() => { try { const v = localStorage.getItem("fmini-lang"); if (v === "pt" || v === "en") return v; } catch (_) { /* (no storage) */ } return /^pt/i.test(navigator.language || "") ? "pt" : "en"; })();
 const T = (k, o) => { let t = TX[LANG][k] || k; for (const x in o || {}) t = t.replace("%" + x, o[x]); return t; };
-document.documentElement.lang = LANG === "pt" ? "pt-BR" : "en";
 
 /* ---------------------------------------------------------------- protocol --- */
 const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, PRESET: 8, NAMES: 10, TRACK: 27, FMINI_GET: 82, FMINI_PUT: 83, FMINI_PRESET: 84, FMINI_REC: 85, FMINI_RPUT: 86, FMINI_RESTORE: 87, FMINI_RESET: 88 };
@@ -511,6 +523,8 @@ function fail(e) {
 function closePorts() {
   if (dev.inp) dev.inp.onmidimessage = null; dev.inp = dev.out = null; dev.open = false; dev.waiter = null; dev.chain = Promise.resolve();
 }
+/* the SMK-37's question on its panel: SAVE is its BT key, ALGORITHM its K4 (the port says "SMK-37" since 2.5.13) */
+const waitKey = () => (dev.inp && /smk-37/i.test(dev.inp.name) ? "waitdev_smk" : "waitdev");
 const MATCH = /fm-1|fmini|felucca|smk-37/i;   /* the FM-1 ("FM-1 Midi"); the SMK-37 ("SMK-37" since 2.5.13, "FM-1 Midi" before) */
 /* the input and output of one device: two devices can share a name (an FM-1 and an SMK-37 before 2.5.13 are both "FM-1 Midi"), so the
  * n-th input of a name goes with the n-th output of that name, and the list shows "NAME (2)" for the second */
@@ -831,7 +845,7 @@ async function refreshPresets() {
 async function askDevice(args, text) {
   let asked = false;
   try {
-    await withBusy(T("waitdev"), async () => {
+    await withBusy(T(waitKey()), async () => {
       const r = await req(CMD.FMINI_RESTORE, args, 1500);
       if (r[1] !== 0 || r[2] !== 1) throw bad("refused");
       asked = true;
@@ -1025,7 +1039,7 @@ async function restoreAll(o) {
 async function writeAll(recs, busyText) {
   let asked = false;
   try {
-    await withBusy(T("waitdev"), async () => {
+    await withBusy(T(waitKey()), async () => {
       const r = await req(CMD.FMINI_RESTORE, [0], 1500);
       if (r[1] !== 0 || r[2] !== 1) throw bad("refused");
       asked = true;
@@ -1051,10 +1065,23 @@ async function writeAll(recs, busyText) {
   }
   await req(CMD.FMINI_RESTORE, [2], 1500);
 }
-for (const el of document.querySelectorAll("[data-t]")) el.textContent = T(el.dataset.t);
-$("connect").textContent = T("connect"); setStatus(false, T("disc")); $("rnd").textContent = T("rnd"); abShow();
-tabs(); build();
-window.__fmini = { S, req, connect, commit, PAGES, pull, ab };   /* (the tests drive the page through this) */
+/* every text of the page in LANG: at the start and when PT / EN is pressed (the connection stays) */
+function applyLang() {
+  document.documentElement.lang = LANG === "pt" ? "pt-BR" : "en";
+  for (const el of document.querySelectorAll("[data-t]")) el.textContent = T(el.dataset.t);
+  $("lang").textContent = LANG === "pt" ? "PT" : "EN";
+  if (!$("connect").disabled) $("connect").textContent = T(dev.open ? "disconnect" : "connect");
+  if (dev.open) setStatus(true, T("conn") + (dev.inp && /smk-37/i.test(dev.inp.name) ? " (SMK-37)" : "")); else if (!$("connect").disabled) setStatus(false, T("disc"));
+  $("rnd").textContent = T("rnd"); abShow();
+  tabs(); build();
+}
+$("lang").addEventListener("click", () => {
+  LANG = LANG === "pt" ? "en" : "pt";
+  try { localStorage.setItem("fmini-lang", LANG); } catch (_) { /* (no storage) */ }
+  applyLang();
+});
+applyLang();
+window.__fmini = { S, req, connect, commit, PAGES, pull, ab, waitText: () => T(waitKey()) };   /* (the tests drive the page through this) */
 </script>
 </body>
 </html>
