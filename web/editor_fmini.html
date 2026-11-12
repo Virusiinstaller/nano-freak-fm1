@@ -21,10 +21,23 @@
   button, select { font: inherit; color: inherit; }
   .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
 
-  header.top { background: linear-gradient(#4a301b, #2e1d10); border-bottom: 3px solid #17100a; }
-  header.top .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
-  h1 { margin: 0; font-size: 19px; letter-spacing: .04em; font-weight: 700; }
-  h1 small { color: var(--or2); font-weight: 600; margin-left: 6px; letter-spacing: 0; font-size: 13px; }
+  /* the site's bar (the same as the emulators', emu/ and emu/smk/) */
+  header.nav { position: sticky; top: 0; z-index: 30; background: rgba(13,12,16,.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  header.nav .wrap { display: flex; align-items: center; gap: 14px; height: 56px; max-width: 1240px; padding: 0 20px; box-sizing: border-box; }
+  .brand { font-weight: 900; font-style: italic; letter-spacing: -.04em; font-size: 22px; color: var(--fg); text-decoration: none; }
+  .brand i { color: var(--or); font-style: italic; }
+  .brand small { font: 600 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-style: normal; letter-spacing: 0; color: var(--dim); margin-left: 8px; }
+  header.nav nav { display: flex; gap: 6px; margin-left: auto; }
+  header.nav nav a { color: var(--dim); text-decoration: none; font-size: 13.5px; font-weight: 600; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); white-space: nowrap; }
+  header.nav nav a:hover { color: var(--fg); border-color: var(--mute); }
+  header.nav nav a.keep { color: #1a0e05; background: var(--or); border-color: var(--or); }
+  header.nav nav a.keep:hover { background: var(--or2); }
+  header.nav nav a.donate { color: var(--or2); border-color: var(--or); }
+  header.nav nav a.donate:hover { background: #2a1a0e; color: var(--or2); }
+  @media (max-width: 560px) { .brand small { display: none; } header.nav nav a { padding: 7px 9px; font-size: 12.5px; } }
+  /* the connection: status, port, CONNECT, USB */
+  .connbar { background: var(--surface); border-bottom: 1px solid var(--line); }
+  .connbar .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
   .grow { flex: 1; }
   .btn { background: var(--surface2); color: var(--fg, #f4f0ea); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
   .btn:hover { border-color: var(--mute); }
@@ -118,14 +131,17 @@
   <radialGradient id="cap" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#f4f4f2"/><stop offset=".55" stop-color="#9a9a98"/><stop offset="1" stop-color="#55554f"/></radialGradient>
 </defs></svg>
 
-<header class="top"><div class="wrap">
-  <h1>FMini-1 <small data-t="editor">Editor</small></h1>
-  <span class="grow"></span>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="../"><i>FM</i>ini-<i>1</i><small data-t="editor">Editor</small></a>
+  <nav><a href="../" class="keep">FMini-1 website</a><a href="https://ko-fi.com/ruppert" class="donate" target="_blank" rel="noopener">Support Us &#9749;</a></nav>
+</div></header>
+<div class="connbar"><div class="wrap">
   <span id="status"><span class="dot" id="dot"></span><span id="stxt"></span></span>
+  <span class="grow"></span>
   <select id="port" class="btn" hidden aria-label="MIDI"></select>
   <button class="btn pri" id="connect"></button>
   <button class="btn" id="usbdiag" title="USB">USB</button>
-</div></header>
+</div></div>
 
 <div class="wrap" id="body">
   <div id="msg"></div>
