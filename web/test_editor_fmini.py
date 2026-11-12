@@ -294,26 +294,44 @@ with sync_playwright() as pw:
     pg.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
     check("  .. and the current firmware gives all 200 again, with no notice", pg.evaluate("__fmini.S.names.filter(Boolean).length") == 200 and "Update" not in pg.inner_text("#msg") and "Atualiz" not in pg.inner_text("#msg"))
 
-    # ---- ORDER tab: the arrows move a row, SAVE TO THE DEVICE writes the 200 presets in that order (the bridge answers YES)
+    # ---- PRESETS, MANAGE PRESETS, CHANGE ORDER: a pop-up with the 200 in four columns; the grid moves while dragging;
+    # Shift+click selects a run that moves as one; SAVE TO THE DEVICE writes the 200 in that order (the bridge answers YES)
     names0 = pg.evaluate("__fmini.S.names.slice(0, 200)")
-    pg.click("#tabs button:text-is('ORDEM'), #tabs button:text-is('ORDER')"); pg.wait_for_selector("ol.orderlist li.orow")
-    check("ORDER tab: the 200 presets in the device's order", pg.locator("ol.orderlist li.orow").count() == 200)
-    for i in range(2):                                                  # the old 0 (row 0), down twice: 1, 2, 0 ..
-        pg.locator("ol.orderlist li.orow").nth(i).locator("button").nth(1).click()
-    check("  .. the arrows move the row (the list shows 1, 2, 0 now)", pg.locator("ol.orderlist li.orow .oname").nth(2).inner_text() == names0[0])
+    pg.click("#tabs button:text-is('PRESETS')")
+    pg.click("button:text-is('Alterar ordem'), button:text-is('Change order')")
+    pg.wait_for_selector("#ordpop .ocell")
+    cells = pg.locator("#ordpop .ogrid .ocell")
+    order_now = lambda: [int(x) for x in pg.evaluate("[...document.querySelectorAll('#ordpop .ogrid .ocell')].map((c) => c.dataset.slot)")]
+    check("CHANGE ORDER: the pop-up holds the 200 presets in four columns",
+          cells.count() == 200 and pg.evaluate("getComputedStyle(document.querySelector('#ordpop .ogrid')).gridTemplateColumns.split(' ').length") == 4
+          and cells.nth(1).bounding_box()["y"] > cells.nth(0).bounding_box()["y"])
+    def center(i):
+        bb = cells.nth(i).bounding_box(); return bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2
+    x0, y0 = center(0); x2, y2 = center(2)
+    pg.mouse.move(x0, y0); pg.mouse.down(); pg.mouse.move(x2, y2, steps=12)
+    live = order_now()[:3]
+    pg.mouse.up()
+    check("  .. dragging 000 onto 002: the grid shows the new order before the button is let go", live == [1, 2, 0])
+    check("  .. and keeps it after", order_now()[:3] == [1, 2, 0])
+    cells.nth(3).click(); cells.nth(5).click(modifiers=["Shift"])
+    check("  .. click 003, Shift+click 005: the three are selected", pg.locator("#ordpop .ocell.osel").count() == 3)
+    x4, y4 = center(4); x8, y8 = center(8)
+    pg.mouse.move(x4, y4); pg.mouse.down(); pg.mouse.move(x8, y8, steps=20); pg.mouse.up()
+    check("  .. and dragged down, they move as one (6, 7, 8, then 3, 4, 5)", order_now()[:10] == [1, 2, 0, 6, 7, 8, 3, 4, 5, 9])
+    want = order_now()
     pg.evaluate("document.getElementById('msg').textContent = ''")
-    pg.click("button:text-is('Salvar no dispositivo'), button:text-is('Save to device')")
-    try: pg.wait_for_function("/Ordem gravada|Order saved/.test(document.getElementById('msg').textContent)", timeout=120000)
-    except Exception: print("DEBUG msg:", repr(pg.inner_text("#msg")), "busy:", pg.evaluate("document.body.className"), "names0:", pg.evaluate("__fmini.S.names.length")); raise
-    check("SAVE TO THE DEVICE: the device's presets are in that order (1, 2, 0 ..)",
-          pg.evaluate("__fmini.S.names.slice(0, 200)") == names0[1:3] + [names0[0]] + names0[3:])
-    pg.click("#tabs button:text-is('ORDEM'), #tabs button:text-is('ORDER')"); pg.wait_for_selector("ol.orderlist li.orow")
-    for i in (2, 1):                                                    # the third row (the old 0) up twice: back to 0, 1, 2
-        pg.locator("ol.orderlist li.orow").nth(i).locator("button").nth(0).click()
-    pg.evaluate("document.getElementById('msg').textContent = ''")
-    pg.click("button:text-is('Salvar no dispositivo'), button:text-is('Save to device')")
+    pg.click("#ordpop button:text-is('Salvar no dispositivo'), #ordpop button:text-is('Save to device')")
     pg.wait_for_function("/Ordem gravada|Order saved/.test(document.getElementById('msg').textContent)", timeout=300000)
-    check("  .. and the original order is back on the device", pg.evaluate("__fmini.S.names.slice(0, 200)") == names0)
+    check("SAVE TO THE DEVICE: the device's presets are in that order", pg.evaluate("__fmini.S.names.slice(0, 200)") == [names0[k] for k in want]
+          and pg.locator("#ordpop").count() == 0)
+    pg.click("button:text-is('Alterar ordem'), button:text-is('Change order')")
+    pg.wait_for_selector("#ordpop .ocell")
+    pg.locator("#ordpop .ogrid .ocell").nth(0).click()
+    x0, y0 = center(0); x1, y1 = center(1)
+    pg.mouse.move(x0, y0); pg.mouse.down(); pg.mouse.move(x1, y1, steps=8); pg.mouse.up()
+    pg.click("#ordpop button:text-is('Fechar'), #ordpop button:text-is('Close')")   # the confirm (accepted): discard
+    check("  .. CLOSE with a change: the pop-up goes and the order is discarded", pg.locator("#ordpop").count() == 0
+          and pg.evaluate("__fmini.S.names.slice(0, 200)") == [names0[k] for k in want])
 
     if SHOTS:
         SHOTS.mkdir(parents=True, exist_ok=True)

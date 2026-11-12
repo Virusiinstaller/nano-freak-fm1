@@ -59,12 +59,22 @@
   nav.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
   nav.tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; cursor: pointer; color: var(--dim); font-weight: 600; letter-spacing: .05em; font-size: 13px; white-space: nowrap; }
   nav.tabs button[aria-selected="true"] { color: var(--or2); border-bottom-color: var(--or); }
-  .orderlist { list-style: none; margin: 0; padding: 0; }
-  .orow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 6px; cursor: grab; user-select: none; }
-  .orow.drag { opacity: .4; }
-  .orow .onum { width: 3ch; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .orow .oname { flex: 1; font-weight: 600; }
-  .orow button { padding: 2px 9px; }
+  /* MANAGE PRESETS, CHANGE ORDER: the pop-up */
+  .opop { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .ocard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; width: min(1100px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; outline: none; }
+  .ohead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px 0; }
+  .ohead h2 { margin: 0; flex: 1; font-size: 16px; }
+  .obar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ohint { margin: 8px 16px 10px; color: var(--dim); font-size: 13px; }
+  .obody { overflow: auto; padding: 0 16px 16px; }
+  .ogrid { display: grid; grid-auto-flow: column; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 10px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .ocell { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); cursor: grab; font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+  .ocell .onum { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .ocell .oname { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .ocell.omoved { border-left: 3px solid var(--or2); }
+  .ocell.osel { border-color: var(--or); background: #2a1a0e; }
+  .ogrid.dragging, .ogrid.dragging .ocell { cursor: grabbing; }
+  .ogrid.dragging .ocell.osel { opacity: .75; }
 
   main.panel { margin: 18px 0 40px; padding: 22px 18px 26px; background: linear-gradient(#1c1922, #15131a); border: 1px solid var(--line); border-radius: 14px; min-height: 280px; }
   .grp { margin-bottom: 22px; }
@@ -140,7 +150,6 @@
   <span class="grow"></span>
   <select id="port" class="btn" hidden aria-label="MIDI"></select>
   <button class="btn pri" id="connect"></button>
-  <button class="btn" id="usbdiag" title="USB">USB</button>
 </div></div>
 
 <div class="wrap" id="body">
@@ -185,17 +194,17 @@ const TX = {
     noedit: "Este firmware não parece ser o FMini-1. O editor é só para o FM-1 e o SMK-37.",
     oldfw: "Este FMini-1 tem um firmware antigo. Atualize pelo instalador atual e conecte de novo.",
     getlink: "Abrir o instalador atual",
-    fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar", usbTitle: "Áudio USB de saída: contadores", usbAlt: "Interface de saída ativa (alt)", usbPlay: "Tocando agora", usbSetIf: "Vezes que o Windows selecionou a saída", usbIrq: "Interrupções do endpoint 3", usbPkts: "Pacotes recebidos", usbFrames: "Quadros guardados", usbDrops: "Pacotes descartados (fila cheia)", usbDry: "Blocos sem quadro (fila vazia)", usbSkip: "Quadros descartados (fila acima da faixa)", usbRep: "Quadros repetidos (fila abaixo da faixa)", usbFill: "Fila agora (quadros, de 0 a 512)", usbOvr: "Pacotes com overrun (não lidos a tempo)", usbCrc: "Pacotes com erro de dados", usbYes: "sim", usbNo: "não",
-    noext: "Atualização disponível: instale o FMini-1 v1.6.1 ou mais novo para editar a oitava e guardar tempo, oitava e efeitos na biblioteca.",
+    fwnew: "Há uma versão nova do firmware do FMini-1 (v%l). Seu aparelho tem %c. Atualize pelo instalador do site.", fwold: "uma versão anterior", fwok: "Abrir o instalador", fwclose: "Fechar", noext: "Atualização disponível: instale o FMini-1 v1.6.1 ou mais novo para editar a oitava e guardar tempo, oitava e efeitos na biblioteca.",
     noenv: "Atualização necessária: este firmware não tem o editor de osciladores e chaves. Instale a versão mais nova pelo site para editar tudo.",
     nonames: "Atualização disponível: este firmware envia só os nomes dos %n primeiros presets. Instale o FMini-1 v1.7.2 ou mais novo para ver todos.",
     noeng: "A trilha 1 não está com o motor FMINI.", lost: "A conexão com o aparelho foi perdida.", timeout: "O aparelho não respondeu.",
     badfile: "Arquivo de som inválido.", rnd: "Aleatorizar", amt: "Variação", abcopy: "Copiar A → B", abcopyb: "Copiar B → A", abtip: "Alterna entre dois ajustes para comparar",
     lib: "PRESETS", libload: "Carregar", libempty: "— vazio —", libtitle: "Backup", indiv: "Restaurar Presets individuais:",
-    order: "ORDEM", ordhint: "Arraste os presets para mudar a ordem, ou use as setas. Salvar no dispositivo grava os 200 nessa ordem (confirme no painel). A categoria de cada um (o filtro do aparelho) continua a da posição antiga.",
+    order: "Ordem dos presets", ordhint: "Arraste um preset para a nova posição. Para mover uma sequência, clique no primeiro e Shift+clique no último, e arraste. Salvar no dispositivo grava os 200 nessa ordem (confirme no painel). A categoria de cada um (o filtro do aparelho) continua a da posição antiga.",
+    mng: "Gerenciar Presets", ordbtn: "Alterar ordem", ordclose: "Fechar", orddiscard: "Descartar a nova ordem?",
     ordsave: "Salvar no dispositivo", ordundo: "Desfazer ordem", askorder: "Gravar os 200 presets nesta ordem no aparelho? Os presets atuais serão substituídos.",
     busyorder: "Gravando os 200 presets na nova ordem… não desconecte o USB.", orderdone: "Ordem gravada no aparelho.", ordnochange: "A ordem não mudou.",
-    ordnone: "Para reordenar é preciso ler os 200 presets do aparelho (firmware mais novo).", ordup: "Subir", orddown: "Descer",
+    ordnone: "Para reordenar é preciso ler os 200 presets do aparelho (firmware mais novo).",
     resetall: "Restaurar todos os presets de fábrica", resetone: "Restaurar", askreset: "Restaurar o preset %n para o de fábrica? O que está gravado nele será substituído.",
     askresetall: "Restaurar os 200 presets de fábrica (000–199)? O que está gravado neles será substituído.", busyreset: "Restaurando os presets de fábrica… não desconecte o USB.",
     resetdone: "Presets de fábrica restaurados.", resetfail: "O aparelho não conseguiu restaurar o preset.",
@@ -213,17 +222,17 @@ const TX = {
     noedit: "This firmware does not look like the FMini-1. The editor is for the FM-1 and the SMK-37 only.",
     oldfw: "This FMini-1 runs an old firmware. Update it with the current installer and connect again.",
     getlink: "Open the current installer",
-    fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close", usbTitle: "USB audio out: counters", usbAlt: "Playback interface alt setting", usbPlay: "Playing now", usbSetIf: "Times Windows selected the output", usbIrq: "Endpoint 3 interrupts", usbPkts: "Packets received", usbFrames: "Frames stored", usbDrops: "Packets dropped (ring full)", usbDry: "Blocks without a frame (ring empty)", usbSkip: "Frames dropped (fill above the band)", usbRep: "Frames repeated (fill below the band)", usbFill: "Fill now (frames, 0 to 512)", usbOvr: "Packets with overrun (not read in time)", usbCrc: "Packets with data error", usbYes: "yes", usbNo: "no",
-    noext: "Update available: install FMini-1 v1.6.1 or newer to edit the octave and keep tempo, octave and effects in the library.",
+    fwnew: "A new FMini-1 firmware is out (v%l). Your device has %c. Update it with the installer on the site.", fwold: "an earlier version", fwok: "Open the installer", fwclose: "Close", noext: "Update available: install FMini-1 v1.6.1 or newer to edit the octave and keep tempo, octave and effects in the library.",
     noenv: "Update needed: this firmware has no oscillator / switch editing. Install the newest version from the site to edit everything.",
     nonames: "Update available: this firmware sends only the names of the first %n presets. Install FMini-1 v1.7.2 or newer to see them all.",
     noeng: "Track 1 is not on the FMINI engine.", lost: "The connection to the device was lost.", timeout: "The device did not answer.",
     badfile: "Invalid sound file.", rnd: "Randomize", amt: "Amount", abcopy: "Copy A → B", abcopyb: "Copy B → A", abtip: "Switch between two settings to compare",
     lib: "PRESETS", libload: "Load", libempty: "— empty —", libtitle: "Backup", indiv: "Restore individual presets:",
-    order: "ORDER", ordhint: "Drag the presets to change the order, or use the arrows. Save to device writes the 200 in that order (confirm on the panel). Each one's category (the device's filter) stays with its old slot.",
+    order: "Preset order", ordhint: "Drag a preset to its new place. To move a run, click the first one, Shift+click the last one, and drag. Save to device writes the 200 in that order (confirm on the panel). Each one's category (the device's filter) stays with its old slot.",
+    mng: "Manage presets", ordbtn: "Change order", ordclose: "Close", orddiscard: "Discard the new order?",
     ordsave: "Save to device", ordundo: "Undo order", askorder: "Write the 200 presets in this order to the device? The current presets will be replaced.",
     busyorder: "Writing the 200 presets in the new order… do not unplug USB.", orderdone: "Order saved to the device.", ordnochange: "The order has not changed.",
-    ordnone: "Reordering needs the 200 presets read from the device (newer firmware).", ordup: "Move up", orddown: "Move down",
+    ordnone: "Reordering needs the 200 presets read from the device (newer firmware).",
     resetall: "Restore all factory presets", resetone: "Restore", askreset: "Restore preset %n to its factory preset? What is saved in it will be replaced.",
     askresetall: "Restore the 200 factory presets (000–199)? What is saved in them will be replaced.", busyreset: "Restoring the factory presets… do not unplug USB.",
     resetdone: "Factory presets restored.", resetfail: "The device could not restore the preset.",
@@ -237,7 +246,7 @@ const T = (k, o) => { let t = TX[LANG][k] || k; for (const x in o || {}) t = t.r
 document.documentElement.lang = LANG === "pt" ? "pt-BR" : "en";
 
 /* ---------------------------------------------------------------- protocol --- */
-const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, PRESET: 8, NAMES: 10, TRACK: 27, FMINI_GET: 82, FMINI_PUT: 83, FMINI_PRESET: 84, FMINI_REC: 85, FMINI_RPUT: 86, FMINI_RESTORE: 87, FMINI_RESET: 88, USBDIAG: 89 };
+const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, PRESET: 8, NAMES: 10, TRACK: 27, FMINI_GET: 82, FMINI_PUT: 83, FMINI_PRESET: 84, FMINI_REC: 85, FMINI_RPUT: 86, FMINI_RESTORE: 87, FMINI_RESET: 88 };
 const FG = { R1: 0, R2: 1, R3: 2, W1: 3, W2: 4, W3: 5, F2: 6, F3: 7, L1: 8, L2: 9, L3: 10, LN: 11, SW1: 12, SW2: 13, TUNE: 14, MMIX: 15, KBD: 16, GLID: 17, SIZE: 32 };
 const FS = { O1: 1, O2: 2, O3: 4, NZ: 8, PINK: 16, MOSC: 32, MFLT: 64 }, FT = { GLIDE: 1, SQR: 2 };
 /* track parameters (core.h; all but E0..E7 are fixed ids) and globals */
@@ -325,7 +334,6 @@ const PAGES = [
   { id: "ARP", groups: [
     { t: "Arpeggiator", c: [ { k: "sel", p: P.AMODE, lb: "MODE" }, { k: "par", p: P.ARATE, lb: "RATE" }, { k: "par", p: P.AOCT, lb: "OCTAVES" }, { k: "par", p: P.AGATE, lb: "GATE" }, { k: "glb", g: G.BPM, lb: "BPM" } ] } ] },
   { id: "LIB", lib: true, groups: [] },
-  { id: "ORDER", order: true, groups: [] },
 ];
 
 const pid = (c) => (c.pe !== undefined ? S.pe0 + c.pe : c.p);
@@ -460,7 +468,6 @@ function mkSel(c) {
 function build() {
   const panel = document.getElementById("panel"); panel.textContent = ""; ctl.length = 0;
   if (PAGES[S.page].lib) { buildLib(); return; }
-  if (PAGES[S.page].order) { buildOrder(); return; }
   for (const g of PAGES[S.page].groups) {
     const grp = document.createElement("section"); grp.className = "grp";
     const h = document.createElement("h2"); h.textContent = g.t; grp.append(h);
@@ -482,7 +489,7 @@ function refreshAll() {
 function tabs() {
   const nav = document.getElementById("tabs"); nav.textContent = "";
   PAGES.forEach((p, i) => {
-    const b = document.createElement("button"); b.role = "tab"; b.textContent = p.lib ? T("lib") : p.order ? T("order") : p.id; b.setAttribute("aria-selected", i === S.page);
+    const b = document.createElement("button"); b.role = "tab"; b.textContent = p.lib ? T("lib") : p.id; b.setAttribute("aria-selected", i === S.page);
     b.addEventListener("click", () => { S.page = i; tabs(); build(); }); nav.append(b);
   });
 }
@@ -572,34 +579,6 @@ async function connect() {
     setStatus(false, T("disc")); $("connect").textContent = T("connect"); $("connect").disabled = false;
   }
 }
-/* USB diagnostics (command 89, firmware 1.14.3): the playback counters in a pop-up */
-function usbDiagShow(r) {
-  if (!r || r.length < 3 + 55 || r[0] !== 1) { msg(T("oldfw"), true); return; }
-  const cnt = (k) => { let v = 0; for (let j = 4; j >= 0; j--) v = v * 128 + (r[3 + 5 * k + j] & 127); return v; };
-  const names = ["usbSetIf", "usbIrq", "usbPkts", "usbFrames", "usbDrops", "usbDry", "usbSkip", "usbRep", "usbFill", "usbOvr", "usbCrc"];
-  const box = document.createElement("div");
-  box.id = "usbpop";
-  box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px";
-  const card = document.createElement("div");
-  card.style.cssText = "background:var(--panel,#fff);color:var(--ink,#111);border:1px solid var(--line,#999);border-radius:8px;max-width:520px;padding:20px;font:14px/1.5 system-ui,sans-serif";
-  const h = document.createElement("h3"); h.textContent = T("usbTitle"); h.style.margin = "0 0 8px";
-  const pre = document.createElement("pre"); pre.style.cssText = "margin:0;white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace";
-  const lines = [[T("usbAlt"), String(r[1])], [T("usbPlay"), r[2] ? T("usbYes") : T("usbNo")]];
-  names.forEach((n, k) => lines.push([T(n), String(cnt(k))]));
-  pre.textContent = lines.map(([a, b]) => a + ": " + b).join("\n");
-  const row = document.createElement("div"); row.style.cssText = "display:flex;justify-content:flex-end;margin-top:14px";
-  const x = document.createElement("button"); x.className = "btn"; x.textContent = T("fwclose");
-  x.onclick = () => box.remove();
-  row.append(x); card.append(h, pre, row); box.append(card); box.onclick = (e) => { if (e.target === box) box.remove(); };
-  document.body.append(box);
-}
-$("usbdiag").addEventListener("click", async () => {
-  if (!dev.open) { msg(T("none")); return; }
-  let r;
-  try { r = await req(CMD.USBDIAG, [], 1500); } catch (e) { msg(T("timeout"), true); return; }
-  usbDiagShow(r);
-});
-
 /* the device runs an older firmware than this page: a pop-up with the link to the installer */
 function fwCheck() {
   const v = S.fwver;
@@ -822,6 +801,9 @@ async function buildLib() {
   const panel = $("panel"); panel.textContent = "";
   const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
   const btn = (text, fn, cls) => { const b = mk("button", cls || "btn", text); b.addEventListener("click", fn); return b; };
+  const g0 = mk("section", "grp"), r0 = mk("div", "libname");    /* MANAGE PRESETS: the order pop-up */
+  r0.append(btn(T("ordbtn"), orderOpen));
+  g0.append(mk("h2", "", T("mng")), r0);
   const g1 = mk("section", "grp"), row = mk("div", "libname");
   g1.append(mk("h2", "", T("libtitle")), row);
   row.append(btn(T("bakexp"), backupAll), btn(T("bakimp"), () => $("file").click()));
@@ -833,7 +815,7 @@ async function buildLib() {
   r1.append(btn(T("resetall"), resetAllFactory));
   r2.append(sel, btn(T("resetone"), () => resetOne(+sel.value)));
   g2.append(r1, mk("p", "", T("indiv")), r2);
-  panel.append(g1, g2);
+  panel.append(g0, g1, g2);
 }
 const FACTORY_N = 200;                                 /* the factory presets: 000..199 */
 const FACTORY_NAMES = ["MINI LEAD", "MOOG BASS", "PLUCK ARP", "PAD SWELL", "SINE SOLO", "SPACE DRONE", "CS-80 BRASS", "LUSH STRINGS", "AURA ATMOS", "UFO", "EMERSON", "NUMAN", "HAMMER", "FIFTHS", "RAVE ARP", "ACID LEAD", "PULSE HERO", "TITAN", "FUZZ LEAD", "GROWL", "MOOG FLUTE", "G-FUNK", "MEGA LEAD", "BANKS", "OBOE", "SOLO VIOLIN", "DREAMER", "WHISTLE", "MELLOW PULSE", "SAX LEAD", "MINI BASS", "CHAMELEON", "SUB BASS", "WOBBLE BASS", "OCTAVE PUMP", "SEQ BASS", "REESE", "RUBBER", "FUZZ BASS", "WONDER BASS", "SOLINA", "WARM PAD", "JUNO PWM", "CHOIR", "SWEEP PAD", "ANGELS", "ECLIPSE", "PULSE PAD", "CELLOS", "AIR PAD", "MOOG BRASS", "JUMP BRASS", "TRUMPET", "FRENCH HORN", "BRASS STAB", "BRASS SWELL", "HORN RIFF", "TROMBONE", "FLUGEL", "FANFARE", "PLUCK SAW", "MARIMBA", "KALIMBA", "FUNK ARP", "NYLON", "STEELDRUM", "8-BIT ARP", "PIZZICATO", "POP PLUCK", "HARP", "CLAVINET", "PIPE ORGAN", "SYNTH PIANO", "HARPSICHORD", "VIBES", "WURLY", "TUBULAR", "MUSIC BOX", "ACCORDION", "FARFISA", "DARK DRONE", "STAR DUST", "ALIEN CHOIR", "GLASS HARP", "NORTHERN SKY", "PULSAR", "IRON DRONE", "GHOST SEQ", "HORROR", "SINGING BOWL", "JET SWEEP", "THUNDER", "WIND", "SIREN", "TELEPHONE", "POWER UP", "LASER ZAP", "HELICOPTER", "ROBOT", "CALM SEA", "SUNRISE", "NIGHT SWIM", "GLASS ARP", "I FEEL ARP", "VELVET EP", "TIN WHISTLE", "BRASS RISE", "STACCATO", "MONO SYNC", "SOUL KEYS", "OVERDRIVE", "MACHINE", "SAW WALL", "STRIKE", "BIG HOOK", "ANGRY BUZZ", "CRUNCH", "CONTROL", "SIREN LEAD", "MOSQUITO", "MELLOW MAN", "FLUTE SOFT", "HONEY LEAD", "MOONLIGHT", "SOFT CLAR", "VOICE OOH", "WARM SQR", "SILK PAD LD", "BELL LEAD", "DREAM FLUTE", "SUB SINE", "ROUND 808", "RUBBER SUB", "OCTAVE PLK", "WOBBLE", "STEP BASS", "REED BASS", "TUBE BASS", "DOUBLE SAW", "PLUCK BASS", "VELVET PAD", "AURORA", "MIST STR", "SWELL PAD", "OBOE PAD", "CHOIR SOFT", "HEAVEN", "GLOW PAD", "MIDNIGHT ST", "BREATHE", "BIG BRASS", "MUTE TRP", "SAX BRASS", "STAB 2", "HORN SECT", "SYNTH HORN", "POWER BRS", "MUTED HRN", "OCT BRASS", "BRASS DRONE", "HARP 2", "KOTO", "MARIMBA 2", "CLAV FUNK", "STEEL PLUCK", "ACOUSTIC", "TICK PLK", "BANJO", "PLUCK ARP 2", "CHIME BOX", "CLAV SOFT", "WURLI 2", "HARPSI 2", "DRAWBAR", "E.PIANO", "ELEC PIANO", "MELLOTRON", "MALLET KEY", "CHORUS EP", "HAMMOND", "DEEP SWELL 2", "GHOST CHOIR", "PULSE DRONE", "OCEAN", "STARFIELD", "MOTHER", "FOG BELLS", "MACHINE HUM", "VOID", "TIDAL", "RISER", "IMPACT", "RAYGUN", "STATIC", "CARPET", "SPACESHIP", "BEEP BOOP", "GLITCH FX", "TAPE STOP", "SUB DROP"];   /* the 200 factory names, in slot order (tools/fmini_bank.py; regenerate when the bank changes) */
@@ -843,7 +825,7 @@ async function fmReset(k) {
 }
 async function refreshPresets() {
   await readNames(); fillPreset(); await pull(true);
-  if (PAGES[S.page].lib || PAGES[S.page].order) build();
+  if (PAGES[S.page].lib) build();
 }
 /* the device asks on its panel (YES: it does the reset itself); args: [0, slot lo, hi] one preset, [3] every factory preset */
 async function askDevice(args, text) {
@@ -883,56 +865,114 @@ async function resetAllFactory() {
   } catch (e) { msg(T(e.code || "lost"), true); }
 }
 
-/* the ORDER tab: the 200 presets in the order the device will keep them. Drag a row, or use its arrows (touch too), then
- * SAVE TO THE DEVICE: the 200 records are read, put in that order and written through the restore's own question on the
- * panel. Only the sounds move: a preset's category (the device's filter, a table in the firmware by slot) stays with its slot */
-let ord = null;                                        /* ord[row] = the slot shown in that row (0..199) */
-let dragSrc = null;
-const rowOf = (li) => [...li.parentNode.children].indexOf(li);
-function renumber(list) { [...list.children].forEach((li, i) => { li.querySelector(".onum").textContent = String(i).padStart(3, "0"); }); }
-function moveRow(list, from, to) {
-  if (from < 0 || to < 0 || from === to || to >= list.children.length) return;
-  const rows = [...list.children]; const [r] = rows.splice(from, 1); rows.splice(to, 0, r);
-  const [x] = ord.splice(from, 1); ord.splice(to, 0, x);
-  list.append(...rows); renumber(list);
-}
-function orderRow(list, name) {
-  const li = document.createElement("li"); li.className = "orow"; li.draggable = true;
-  const no = document.createElement("span"); no.className = "onum";
-  const nm = document.createElement("span"); nm.className = "oname"; nm.textContent = name || "—";
-  const up = document.createElement("button"); up.className = "btn"; up.textContent = "▲"; up.title = T("ordup"); up.setAttribute("aria-label", T("ordup"));
-  const dn = document.createElement("button"); dn.className = "btn"; dn.textContent = "▼"; dn.title = T("orddown"); dn.setAttribute("aria-label", T("orddown"));
-  up.addEventListener("click", () => moveRow(list, rowOf(li), rowOf(li) - 1));
-  dn.addEventListener("click", () => moveRow(list, rowOf(li), rowOf(li) + 1));
-  li.addEventListener("dragstart", (e) => { dragSrc = li; li.classList.add("drag"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ""); });
-  li.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
-  li.addEventListener("drop", (e) => { e.preventDefault(); if (dragSrc) moveRow(list, rowOf(dragSrc), rowOf(li)); });
-  li.addEventListener("dragend", () => { if (dragSrc) dragSrc.classList.remove("drag"); dragSrc = null; });
-  li.append(no, nm, up, dn);
-  return li;
-}
-function buildOrder() {
-  const panel = $("panel"); panel.textContent = "";
-  if (!ord || ord.length !== S.names.length) ord = S.names.map((_, i) => i);
-  const g = document.createElement("section"); g.className = "grp";
-  const h = document.createElement("h2"); h.textContent = T("order");
-  const hint = document.createElement("p"); hint.textContent = T("ordhint");
-  const bar = document.createElement("div"); bar.className = "libname";
-  const b1 = document.createElement("button"); b1.className = "btn"; b1.textContent = T("ordsave"); b1.addEventListener("click", saveOrder);
-  const b2 = document.createElement("button"); b2.className = "btn"; b2.textContent = T("ordundo");
-  b2.addEventListener("click", () => { ord = null; buildOrder(); });
-  bar.append(b1, b2);
-  const list = document.createElement("ol"); list.className = "orderlist"; list.setAttribute("aria-label", T("order"));
-  ord.forEach((k) => list.append(orderRow(list, S.names[k])));
-  renumber(list);
-  g.append(h, hint, bar, list);
-  panel.append(g);
-}
-async function saveOrder() {
+/* MANAGE PRESETS, CHANGE ORDER: a pop-up with the 200 presets in four columns (000 at the top of the first). Drag a preset to
+ * its new place: the grid moves while dragging. Click one and Shift+click another: the run between them moves as one.
+ * SAVE TO THE DEVICE reads the 200 records, puts them in that order and writes them through the restore's own question on
+ * the panel. Only the sounds move: a preset's category (the device's filter, a table in the firmware by slot) stays with its slot */
+let ord = null;                                        /* ord[k] = the slot (0..199) shown at place k; kept until saved or discarded */
+const osel = new Set();                                /* the selected slots: always a run of places in ord */
+let oanchor = -1;                                      /* the slot a Shift+click counts from */
+const ordChanged = () => !!ord && ord.some((k, i) => k !== i);
+function orderOpen() {
   if (!S.canPatch) return;
   if (S.names.length !== 200) { msg(T("ordnone"), true); return; }
-  if (ord.every((k, i) => k === i)) { msg(T("ordnochange")); return; }
+  if (!ord || ord.length !== S.names.length) ord = S.names.map((_, i) => i);
+  osel.clear(); oanchor = -1;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const mkb = (text, fn, cls) => { const b = el("button", cls || "btn", text); b.addEventListener("click", fn); return b; };
+  const box = el("div", "opop"); box.id = "ordpop";
+  const card = el("div", "ocard"); card.tabIndex = -1;
+  card.setAttribute("role", "dialog"); card.setAttribute("aria-modal", "true"); card.setAttribute("aria-label", T("order"));
+  const grid = el("div", "ogrid"); grid.style.gridTemplateRows = "repeat(" + Math.ceil(ord.length / 4) + ", auto)";
+  for (let k = 0; k < ord.length; k++) {
+    const c = el("div", "ocell"); c.dataset.slot = k;
+    c.append(el("span", "onum"), el("span", "oname", S.names[k] || "—"));
+    grid.append(c);
+  }
+  const undo = () => { ord = S.names.map((_, i) => i); osel.clear(); oanchor = -1; orderPaint(grid); };
+  const head = el("div", "ohead"), bar = el("div", "obar"), body = el("div", "obody");
+  bar.append(mkb(T("ordsave"), saveOrder, "btn pri"), mkb(T("ordundo"), undo), mkb(T("ordclose"), orderClose));
+  head.append(el("h2", "", T("order")), bar);
+  body.append(grid);
+  card.append(head, el("p", "ohint", T("ordhint")), body);
+  box.append(card);
+  box.addEventListener("keydown", (e) => { if (e.key === "Escape") orderClose(); });
+  document.body.append(box);
+  orderPaint(grid); orderDrag(grid, body);
+  card.focus();
+}
+function orderClose() {
+  if (ordChanged() && !confirm(T("orddiscard"))) return;
+  ord = null;
+  const b = $("ordpop"); if (b) b.remove();
+}
+/* the cells in the order of ord, numbered by place; "moved" marks a preset away from its slot on the device */
+function orderPaint(grid) {
+  const cell = {};
+  for (const c of grid.children) cell[c.dataset.slot] = c;
+  ord.forEach((k, i) => {
+    const c = cell[k];
+    c.firstChild.textContent = String(i).padStart(3, "0");
+    c.classList.toggle("osel", osel.has(k)); c.classList.toggle("omoved", k !== i);
+  });
+  grid.append(...ord.map((k) => cell[k]));
+}
+/* pointer drag (mouse, pen, touch): the selected run follows the pointer, place by place, while the button is down */
+function orderDrag(grid, body) {
+  let down = null, dragging = false, px = 0, py = 0, raf = 0;
+  const cellAt = (x, y) => { const e = document.elementFromPoint(x, y); const c = e && e.closest && e.closest(".ocell"); return c && grid.contains(c) ? c : null; };
+  const moveTo = (c) => {
+    if (!c || osel.has(+c.dataset.slot)) return;
+    const at = ord.map((k, i) => (osel.has(k) ? i : -1)).filter((i) => i >= 0);
+    const a = at[0], b = at[at.length - 1], t = ord.indexOf(+c.dataset.slot);
+    const run = ord.slice(a, b + 1), rest = ord.slice(0, a).concat(ord.slice(b + 1));
+    const ti = rest.indexOf(+c.dataset.slot);
+    const p = t > b ? ti + 1 : ti;                       /* moving down: after the preset under the pointer; up: before it */
+    ord = rest.slice(0, p).concat(run, rest.slice(p));
+    orderPaint(grid);
+  };
+  const tick = () => {                                   /* near the top or the bottom: the list scrolls, and the run follows */
+    raf = 0;
+    if (!dragging) return;
+    const r = body.getBoundingClientRect(), edge = 40;
+    const dy = py < r.top + edge ? -12 : py > r.bottom - edge ? 12 : 0;
+    if (dy) { const before = body.scrollTop; body.scrollTop += dy; if (body.scrollTop !== before) moveTo(cellAt(px, py)); }
+    raf = requestAnimationFrame(tick);
+  };
+  grid.addEventListener("pointerdown", (e) => {
+    const c = e.target.closest(".ocell");
+    if (!c || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const k = +c.dataset.slot;
+    if (e.shiftKey && oanchor >= 0 && ord.includes(oanchor)) {
+      const p0 = ord.indexOf(oanchor), p1 = ord.indexOf(k);
+      osel.clear();
+      for (let i = Math.min(p0, p1); i <= Math.max(p0, p1); i++) osel.add(ord[i]);
+    } else if (!osel.has(k)) { osel.clear(); osel.add(k); oanchor = k; }
+    down = { k, x: e.clientX, y: e.clientY, shift: e.shiftKey }; dragging = false;
+    try { grid.setPointerCapture(e.pointerId); } catch (_) { /* (an old browser) */ }
+    orderPaint(grid); e.preventDefault();
+  });
+  grid.addEventListener("pointermove", (e) => {
+    if (!down) return;
+    px = e.clientX; py = e.clientY;
+    if (!dragging && Math.hypot(px - down.x, py - down.y) < 5) return;
+    if (!dragging) { dragging = true; grid.classList.add("dragging"); }
+    moveTo(cellAt(px, py));
+    if (!raf) raf = requestAnimationFrame(tick);
+  });
+  const end = () => {
+    if (down && !dragging && !down.shift) { osel.clear(); osel.add(down.k); oanchor = down.k; orderPaint(grid); }   /* a click: that one alone */
+    down = null; dragging = false; grid.classList.remove("dragging");
+    if (raf) cancelAnimationFrame(raf); raf = 0;
+  };
+  grid.addEventListener("pointerup", end); grid.addEventListener("pointercancel", end);
+}
+async function saveOrder() {
+  if (!S.canPatch || !ord) return;
+  if (S.names.length !== 200) { msg(T("ordnone"), true); return; }
+  if (!ordChanged()) { msg(T("ordnochange")); return; }
   if (!confirm(T("askorder"))) return;
+  const b = $("ordpop"); if (b) b.remove();             /* the order stays in ord: if the writing fails, the pop-up shows it again */
   try {
     const recs = await withBusy(T("busybak"), async () => {
       const out = [];
@@ -978,7 +1018,7 @@ async function restoreAll(o) {
   if (!ok) throw bad("badbkp");
   await writeAll(o.slots.map((x) => bytesOf(x.rec)), T("busyrest"));
   await readNames(); fillPreset(); await pull(true);
-  if (PAGES[S.page].lib || PAGES[S.page].order) build();
+  if (PAGES[S.page].lib) build();
   msg(T("restdone"));
 }
 /* the device's question (YES), then the 200 records (recs[k] goes to slot k), then the end: RESTORE and SAVE TO THE DEVICE */
