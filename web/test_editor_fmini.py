@@ -341,6 +341,16 @@ with sync_playwright() as pw:
     pg2.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
     check("  .. the second one connects through its own output", "FMini-1" in pg2.inner_text("#stxt") and pg2.evaluate("__fmini.S.names.length") == 200 and not errs2)
     if errs2: print(errs2)
+    pg2.close()
+
+    # the SMK-37 on 2.5.13 and later: the port is "SMK-37"; the editor finds it and says so in the status line
+    pg3 = br.new_page(viewport={"width": 1100, "height": 820})
+    pg3.expose_function("__tx", on_tx)
+    pg3.add_init_script(MOCK.replace("'FM-1 Midi'", "'SMK-37'"))
+    pg3.goto((ROOT / "web" / "editor_fmini.html").as_uri())
+    pg3.click("#connect")
+    pg3.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
+    check("a port named SMK-37 connects, and the status line says SMK-37", "SMK-37" in pg3.inner_text("#stxt"))
     br.close()
 
 proc.stdin.close(); proc.wait(timeout=5)

@@ -233,7 +233,7 @@ const rv = (a, i) => (a[i] | (a[i + 1] << 7)) - 8192;
 const cstr = (a, i) => { let s = ""; while (i < a.length && a[i]) s += String.fromCharCode(a[i++]); return [s, i + 1]; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* the newest firmware this page knows: keep it equal to FMINI_VER_MAJ/MIN/PATCH in firmware/src/core.h (the device reports its own, tag 0x49) */
-const FW_LATEST = [2, 5, 12], FW_LATEST_TXT = "2.5.12";
+const FW_LATEST = [2, 5, 13], FW_LATEST_TXT = "2.5.13";
 
 const dev = { access: null, inp: null, out: null, waiter: null, chain: Promise.resolve(), open: false };
 
@@ -488,8 +488,8 @@ function fail(e) {
 function closePorts() {
   if (dev.inp) dev.inp.onmidimessage = null; dev.inp = dev.out = null; dev.open = false; dev.waiter = null; dev.chain = Promise.resolve();
 }
-const MATCH = /fm-1|fmini|felucca/i;   /* the SMK-37 on FMini-1 shows the same port name ("FM-1 Midi") */
-/* the input and output of one device: two devices can share a name (an FM-1 and an SMK-37 are both "FM-1 Midi"), so the
+const MATCH = /fm-1|fmini|felucca|smk-37/i;   /* the FM-1 ("FM-1 Midi"); the SMK-37 ("SMK-37" since 2.5.13, "FM-1 Midi" before) */
+/* the input and output of one device: two devices can share a name (an FM-1 and an SMK-37 before 2.5.13 are both "FM-1 Midi"), so the
  * n-th input of a name goes with the n-th output of that name, and the list shows "NAME (2)" for the second */
 function ports() {
   const outs = [...dev.access.outputs.values()].filter((o) => o.state !== "disconnected");
@@ -527,7 +527,7 @@ async function connect() {
     dev.inp = pick.i; dev.out = pick.o; dev.inp.onmidimessage = onMsg; dev.open = true;
     console.info("editor: connecting to input", dev.inp.name, "output", dev.out.name);
     await handshake();
-    setStatus(true, T("conn")); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
+    setStatus(true, T("conn") + (/smk-37/i.test(dev.inp.name) ? " (SMK-37)" : "")); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
     startPoll();
     fwCheck();
   } catch (e) {

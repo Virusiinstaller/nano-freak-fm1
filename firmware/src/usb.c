@@ -445,10 +445,18 @@ static const uint8_t STR1[] = {36, 3, 'G', 0, 'u', 0, 'i', 0, 'l', 0, 'h', 0, 'e
 #ifdef FELUCCA_LOADER
 static const uint8_t STR2[] = {30, 3, 'F', 0, 'M', 0, 'i', 0, 'n', 0, 'i', 0, '-', 0, '1', 0, ' ', 0, 'U', 0, 'p', 0, 'd', 0, 'a', 0, 't', 0, 'e', 0};
 #else
+#if BOARD_SMK37
+static const uint8_t STR2[] = {14, 3, 'S', 0, 'M', 0, 'K', 0, '-', 0, '3', 0, '7', 0};   /* SMK-37 (the MIDI / audio device's name on the SMK-37) */
+#else
 static const uint8_t STR2[] = {20, 3, 'F', 0, 'M', 0, '-', 0, '1', 0, ' ', 0, 'M', 0, 'i', 0, 'd', 0, 'i', 0};   /* FM-1 Midi (the MIDI / audio device's name) */
 #endif
+#endif
 
+#if BOARD_SMK37
+static const uint8_t STR3[] = {26, 3, 'S', 0, 'M', 0, 'K', 0, '-', 0, '3', 0, '7', 0, ' ', 0, 'A', 0, 'u', 0, 'd', 0, 'i', 0, 'o', 0};   /* the audio output's name on the SMK-37 */
+#else
 static const uint8_t STR3[] = {22, 3, 'F', 0, 'M', 0, '-', 0, '1', 0, ' ', 0, 'A', 0, 'u', 0, 'd', 0, 'i', 0, 'o', 0};   /* the audio output's name (the speaker terminal) */
+#endif
 
 static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
 {
