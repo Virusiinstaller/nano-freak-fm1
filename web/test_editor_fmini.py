@@ -58,6 +58,18 @@ MOCK = """
 })();
 """
 
+# two devices with one port name (an FM-1 and an SMK-37 on FMini-1 are both "FM-1 Midi"): the first never answers, the
+# second is the bridge. Each input must go with its own output.
+MOCK2 = """
+(() => {
+  const mk = (kind, id) => ({ id, name: 'FM-1 Midi', state: 'connected', type: kind, open: async () => {}, onmidimessage: null });
+  const i1 = mk('input', 'i1'), o1 = mk('output', 'o1'), i2 = mk('input', 'i2'), o2 = mk('output', 'o2');
+  o1.send = () => {};
+  o2.send = (d) => { window.__tx(Array.from(d)).then((r) => { if (r && i2.onmidimessage) i2.onmidimessage({ data: new Uint8Array(r) }); }); };
+  navigator.requestMIDIAccess = async () => ({ inputs: new Map([['i1', i1], ['i2', i2]]), outputs: new Map([['o1', o1], ['o2', o2]]), onstatechange: null });
+})();
+"""
+
 with sync_playwright() as pw:
     br = pw.chromium.launch()
     pg = br.new_page(viewport={"width": 1100, "height": 820})
@@ -312,6 +324,23 @@ with sync_playwright() as pw:
         pg.screenshot(path=str(SHOTS / "ed_mobile.png"))
     check("no errors in the page's console", not errs)
     if errs: print(errs)
+    pg.close()
+
+    pg2 = br.new_page(viewport={"width": 1100, "height": 820})
+    errs2 = []
+    pg2.on("pageerror", lambda e: errs2.append(str(e)))
+    pg2.expose_function("__tx", on_tx)
+    pg2.add_init_script(MOCK2)
+    pg2.goto((ROOT / "web" / "editor_fmini.html").as_uri())
+    pg2.click("#connect")
+    pg2.wait_for_function("document.getElementById('connect').disabled === false && document.body.classList.contains('off')", timeout=15000)
+    labels = pg2.evaluate("[...document.querySelectorAll('#port option')].map((o) => o.textContent)")
+    check("two devices named FM-1 Midi: the list shows FM-1 Midi and FM-1 Midi (2)", labels == ["FM-1 Midi", "FM-1 Midi (2)"] and pg2.is_visible("#port"))
+    pg2.select_option("#port", "FM-1 Midi (2)")
+    pg2.click("#connect")
+    pg2.wait_for_function("!document.body.classList.contains('off')", timeout=15000)
+    check("  .. the second one connects through its own output", "FMini-1" in pg2.inner_text("#stxt") and pg2.evaluate("__fmini.S.names.length") == 200 and not errs2)
+    if errs2: print(errs2)
     br.close()
 
 proc.stdin.close(); proc.wait(timeout=5)

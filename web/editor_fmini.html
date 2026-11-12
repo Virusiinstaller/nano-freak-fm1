@@ -160,7 +160,7 @@
 /* ------------------------------------------------------------------ texts --- */
 const TX = {
   pt: { editor: "Editor", connect: "Conectar", disconnect: "Desconectar", connecting: "Conectando…", disc: "Desconectado",
-    conn: "Conectado — FMini-1 (%d)", save: "Salvar som", open: "Abrir som", home: "Site do FMini-1", donate: "Apoie o projeto (Ko-fi)",
+    conn: "Conectado — FMini-1", save: "Salvar som", open: "Abrir som", home: "Site do FMini-1", donate: "Apoie o projeto (Ko-fi)",
     foot1: "Funciona no Chrome, Edge e Android (Web MIDI com SysEx). Os ajustes valem para o som que está tocando; para guardar, use o SAVE do próprio aparelho.",
     nomidi: "Este navegador não tem Web MIDI com SysEx. Use o Chrome ou o Edge (computador) ou o Chrome no Android.",
     denied: "O navegador negou o acesso MIDI. Libere “MIDI” nas permissões do site e tente de novo.",
@@ -188,7 +188,7 @@ const TX = {
     restdone: "Presets restaurados.", refused: "Restauração recusada no aparelho (ou sem resposta).", restfail: "Falhou ao gravar no aparelho. Os presets gravados até aqui ficaram; refaça a restauração.",
     badbkp: "Arquivo de backup inválido.", recfail: "O aparelho não devolveu um preset.", busyread: "Lendo…", loaded: "Som carregado no aparelho.", saved: "Som salvo em arquivo." },
   en: { editor: "Editor", connect: "Connect", disconnect: "Disconnect", connecting: "Connecting…", disc: "Disconnected",
-    conn: "Connected — FMini-1 (%d)", save: "Save sound", open: "Open sound", home: "FMini-1 site", donate: "Support the project (Ko-fi)",
+    conn: "Connected — FMini-1", save: "Save sound", open: "Open sound", home: "FMini-1 site", donate: "Support the project (Ko-fi)",
     foot1: "Works in Chrome, Edge and Android (Web MIDI with SysEx). Edits change the sound that is playing; to keep it, use the device's own SAVE.",
     nomidi: "This browser has no Web MIDI with SysEx. Use Chrome or Edge (desktop) or Chrome on Android.",
     denied: "The browser denied MIDI access. Allow “MIDI” in the site permissions and try again.",
@@ -260,7 +260,6 @@ function req(cmd, args = [], ms = 900) {
 
 /* ------------------------------------------------------------------ state --- */
 const S = {
-  device: "FM-1",                                  /* "FM-1" or "SMK-37": from the port the page connected to */
   pe0: 103, patch: new Array(FG.SIZE).fill(0), p: [], g: [], slot: 0, engine: 0, fmini: -1, desc: {},
   names: [], canPatch: false, extras: false, oct: 0, page: 0,
 };
@@ -489,19 +488,25 @@ function fail(e) {
 function closePorts() {
   if (dev.inp) dev.inp.onmidimessage = null; dev.inp = dev.out = null; dev.open = false; dev.waiter = null; dev.chain = Promise.resolve();
 }
-const MATCH = /fm-1|fmini|felucca|smk|mke|p37|elite/i;   /* the FM-1, the SMK-37 (Pro, Elite, MKE-P37) */
-/* the device the port belongs to, for the status line */
-const deviceName = (port) => (/smk|mke|p37|elite/i.test(port || "") ? "SMK-37" : "FM-1");
+const MATCH = /fm-1|fmini|felucca/i;   /* the SMK-37 on FMini-1 shows the same port name ("FM-1 Midi") */
+/* the input and output of one device: two devices can share a name (an FM-1 and an SMK-37 are both "FM-1 Midi"), so the
+ * n-th input of a name goes with the n-th output of that name, and the list shows "NAME (2)" for the second */
 function ports() {
-  const outs = [...dev.access.outputs.values()];
-  return [...dev.access.inputs.values()].filter((i) => i.state !== "disconnected").map((i) => ({ i, o: outs.find((o) => o.name === i.name && o.state !== "disconnected") })).filter((x) => x.o);
+  const outs = [...dev.access.outputs.values()].filter((o) => o.state !== "disconnected");
+  const used = new Set(), seen = {};
+  return [...dev.access.inputs.values()].filter((i) => i.state !== "disconnected").map((i) => {
+    const o = outs.find((x) => x.name === i.name && !used.has(x));
+    if (o) used.add(o);
+    seen[i.name] = (seen[i.name] || 0) + 1;
+    return { i, o, label: seen[i.name] > 1 ? i.name + " (" + seen[i.name] + ")" : i.name };
+  }).filter((x) => x.o);
 }
 function fillPorts(keep) {
   const sel = $("port"), all = ports(); sel.textContent = "";
-  for (const x of all) { const o = document.createElement("option"); o.value = x.i.name; o.textContent = x.i.name; sel.append(o); }
+  for (const x of all) { const o = document.createElement("option"); o.value = x.label; o.textContent = x.label; sel.append(o); }
   const m = all.filter((x) => MATCH.test(x.i.name));
   sel.hidden = all.length < 2 && m.length === 1;
-  if (keep && all.some((x) => x.i.name === keep)) sel.value = keep; else if (m[0]) sel.value = m[0].i.name;
+  if (keep && all.some((x) => x.label === keep)) sel.value = keep; else if (m[0]) sel.value = m[0].label;
   return all;
 }
 async function connect() {
@@ -512,18 +517,17 @@ async function connect() {
       try { dev.access = await navigator.requestMIDIAccess({ sysex: true }); } catch (e) { msg(T(e && e.name === "SecurityError" ? "denied" : "nomidi"), true); throw 0; }
       dev.access.onstatechange = () => { if (dev.open && (!dev.inp || dev.inp.state === "disconnected" || dev.out.state === "disconnected")) fail(new Error("lost")); else if (!dev.open) fillPorts($("port").value); };
     }
-    const all = fillPorts();
+    const all = fillPorts($("port").value);                /* keeps the port picked in the list */
     if (!all.length) { msg(T("none"), true); throw 0; }
     const m = all.filter((x) => MATCH.test(x.i.name));
-    let pick = all.find((x) => x.i.name === $("port").value);
+    let pick = all.find((x) => x.label === $("port").value);
     if (!pick || (!MATCH.test(pick.i.name) && m.length && !$("port").dataset.user)) pick = m[0] || pick;
     if (!m.length && all.length > 1 && !$("port").dataset.user) { $("port").hidden = false; msg(T("pick")); throw 0; }
     await pick.i.open(); await pick.o.open();
     dev.inp = pick.i; dev.out = pick.o; dev.inp.onmidimessage = onMsg; dev.open = true;
     console.info("editor: connecting to input", dev.inp.name, "output", dev.out.name);
     await handshake();
-    S.device = deviceName(dev.inp.name);
-    setStatus(true, T("conn", { d: S.device })); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
+    setStatus(true, T("conn")); $("connect").textContent = T("disconnect"); $("connect").disabled = false;
     startPoll();
     fwCheck();
   } catch (e) {
