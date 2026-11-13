@@ -41,14 +41,13 @@ def main(pkg, out, version="1.4.2", smk_version=None):
     html = (HERE / "site_fmini.html").read_text(encoding="utf-8")
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8")) for f in ("fm1pkg.js", "fm1ota.js", "fm1backup.js"))
     meta = json.dumps({"version": version, "smkVersion": smk_version, "pkgs": pkgs})
-    hero = "data:image/jpeg;base64," + base64.b64encode((HERE.parent / "assets" / "fmini-installer-hero.jpg").read_bytes()).decode()
     imgs = {p.stem: ("data:image/" + ("webp" if p.suffix == ".webp" else "png") + ";base64,") + base64.b64encode(p.read_bytes()).decode() for p in sorted((HERE.parent / "assets" / "site").glob("*.*"))}
     names = re.findall(r'"([A-Z0-9 .\'/+&-]{2,12})"', (HERE.parent / "firmware" / "src" / "eng_fmini_presets.h").read_text())[:10]
     html = html.replace("/*IMGS*/{}", json.dumps(imgs)).replace("/*PRESETS*/[]", json.dumps(names))
-    for mark in ("/*LIB*/", "/*META*/", "/*HERO*/"):
+    for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"site_fmini.html must contain {mark} once")
-    html = html.replace("/*LIB*/", lib).replace("/*META*/", meta).replace("/*HERO*/", hero)
+    html = html.replace("/*LIB*/", lib).replace("/*META*/", meta)
     html = html.replace('<span class="ver" id="ver">v1.1.0</span>', f'<span class="ver" id="ver">v{version}</span>', 1)
     Path(out).write_text(html, encoding="utf-8")
     print(f"{out}: {len(html)} B, " + ", ".join(f"{p['product']} v{p['version']}" for p in pkgs))
