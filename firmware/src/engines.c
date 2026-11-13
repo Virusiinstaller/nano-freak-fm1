@@ -33,6 +33,7 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #include "eng_fm6.c"            /* FM6: 6-operator FM, msfa ported (fm6_core.c, Apache-2.0) */
 #include "fm4_convert.c"        /* DIGITAL's tables, and its sounds -> FM6 */
 #include "eng_fmini.c"           /* FMINI (FMini-1): a three-oscillator ladder-filter monosynth */
+#include "eng_nano.c"            /* NANO (Nano Freak): the MicroFreak-style engine, BASIC WAVES first */
 #if FELUCCA_FM4
 #include "eng_digital.c"        /* DIGITAL: four-operator FM (retired; FELUCCA_FM4=1 builds it) */
 #endif
@@ -76,6 +77,7 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_FM6,                    /* 12 (ENGI_FM6) */
     &ENG_RETIRED,                /* 13: SLICE (retired 1.13) */
     &ENG_FMINI,                  /* 14 (ENGI_FMINI) */
+    &ENG_NANO,                   /* 15 (ENGI_NANO) */
 };
 
 /* a track's engine number as an index (the audio paths: a compare, cheaper than % NENGINES; a bad number: 0) */
@@ -107,6 +109,7 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     0,                           /* ANALOG */
     12,                          /* FM6 */
     ENGI_FMINI,                   /* FMINI */
+    ENGI_NANO,                    /* NANO */
 #if FELUCCA_FM4
     1,                           /* DIGITAL */
 #endif

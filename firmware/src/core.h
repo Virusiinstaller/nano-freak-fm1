@@ -20,8 +20,8 @@
  * One number for the FM-1 and the SMK-37 builds: one release carries the four packages. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 13u
-#define FMINI_VERSION "v2.5.13"
+#define FMINI_VER_PATCH 14u
+#define FMINI_VERSION "v2.5.14"
 extern volatile uint8_t fm_vel_sens;   /* seq.c: the preset's VELOCITY SENS. (2.5.5): 0 OFF, the sound at 127 whatever the
                                          * velocity (MIDI OUT keeps it); 1 ON, the velocity is the loudness (FMini-1) */
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
@@ -48,9 +48,10 @@ extern uint8_t glo_note_prio;
                                             * second core (mod.c, voice.c SPREAD, eng_formant.c): one each with two cores,
                                             * one for all with one, as up to 1.6 */
 #define C1_PI(t) ((uint32_t)((t) - trk) % C1_NP)   /* a part's copy */
-#define NENGINES 15              /* 0..14; FMINI (14) comes last. SAMPLE (4), GRAIN (8) and SLICE (13) are retired (1.13): their numbers stay, silent */
+#define NENGINES 16              /* 0..15; NANO (15, Nano Freak) comes last, after FMINI (14). SAMPLE (4), GRAIN (8) and SLICE (13) are retired (1.13): their numbers stay, silent */
+#define ENGI_NANO 15u            /* Nano Freak (eng_nano.c) */
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
-#define NENG_SHOWN (11 + FELUCCA_FM4)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
+#define NENG_SHOWN (12 + FELUCCA_FM4)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
                                                 * in the display order of engines.c ENGINE_ORDER */
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 

@@ -247,6 +247,7 @@ static const uint8_t MIDI_CC_ENG[NENGINES] = {
     0x00, 0x30, 0x30, 0x34, 0x30,                     /* GRAIN (retired), PHYS BRIT, DRUM TONE, NOISE FREQ RES, FM6 MLVL */
     0x00,                                             /* SLICE (retired) */
     0x12,                                             /* FMINI CUT EMPH */
+    0x67,                                             /* NANO CUT RES */
 };
 /* a CC sets parameter id of track t as a knob would: 0..127 over its range */
 static void midi_cc_set(track_t *t, uint32_t id, uint32_t value)

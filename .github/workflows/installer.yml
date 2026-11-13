@@ -47,6 +47,16 @@ jobs:
           BOARD=smk37 MODEL=mke ./build.sh
           ./build.sh
 
+      - name: Build the FM-1 engine preview (Felucca's full UI, so the NANO engine can be selected)
+        continue-on-error: true
+        run: |
+          VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
+          mkdir -p build/preview
+          cp "build/fmini-1-fm1-$VERSION.fwsc" "build/preview/product.fwsc"
+          FELUCCA_FMINI_ONLY=0 ./build.sh
+          cp "build/fmini-1-fm1-$VERSION.fwsc" "build/nano-engine-preview-fm1-$VERSION.fwsc"
+          cp "build/preview/product.fwsc" "build/fmini-1-fm1-$VERSION.fwsc"
+
       - name: Make the installer page
         run: |
           VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
