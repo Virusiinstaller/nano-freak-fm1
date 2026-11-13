@@ -10,6 +10,9 @@
  *          step is corrected with a polyBLEP, as the test bed does)
  * TYPE 1 is TWO OP FM (nano-freak dsp/nf_fm.c, Plaits): RATIO (the quantizer), INDEX, FEEDBACK on the same knobs; no oversampling.
  *
+ * TYPE 2 is WAVESHAPER (nf_ws.c, Plaits): WAVE (a transfer curve morph), FOLD, SLOPE; tables in eng_nano_tables.h
+ *   (tools/gen_nano_tables.py).
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -18,7 +21,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -116,14 +119,108 @@ static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->s[3] = dcb;
 }
 
+#include "eng_nano_tables.h"
+
+/* WAVESHAPER's taming (Plaits' tame()): how much of the effect is left when the harmonics it makes would pass the Nyquist
+ * frequency. f0 Q16 (cycles per sample), h the multiple of it, Q8, order the filter order; result Q15 (cubed). One 32-bit
+ * divide per call, once a block. */
+static int32_t nano_tame(int32_t f0, int32_t hq8, int32_t order)
+{
+    int32_t f = (int32_t)(((int64_t)f0 * hq8) >> 8), mx = 32768 / order, den = 32768 - mx, num = f - mx, a;
+    if (num <= 0)
+        a = 32768;
+    else if (num >= den)
+        a = 0;
+    else
+        a = 32768 - (num << 15) / den;
+    return (((a * a) >> 15) * a) >> 15;
+}
+
+/* WAVESHAPER (Plaits' waveshaper, simplified: the slope oscillator without its band-limiting, the folder interpolated
+ * linearly): E1 WAVE (the transfer curve, a morph through five), E2 FOLD (how far into the folder), E3 SLOPE (the slope
+ * oscillator's width, a triangle to a saw). ph[0] the slope oscillator, ph[1] and ph[2] the shape and the fold gain the
+ * last block ended on (Q15, ramped through the block), s[2] the DC blocker, s[3] -1 on a new note (no ramp from stale values). */
+static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    const int16_t *tabs[5] = {NANO_WS[0], NANO_WS[1], NANO_WS[2], NANO_WS[3], NANO_WS[4]};
+    tsvf_t flt;
+    uint32_t i, ph = v->ph[0], inc = m->inc;
+    int32_t hq = p[P_E1] * 258, mo = p[P_E3] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), f0 = (int32_t)(inc >> 16);
+    int32_t pq, rup, rdn, slope, sa, att, shape_t, wf_t, shape_m, wf_m, dshape, dwf, ic1 = v->s[0], ic2 = v->s[1], dcb = v->s[2];
+    uint32_t pw32;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    tq += tq >> 7;                                                      /* 0..127 << 8 -> 0..32767 */
+    pq = 16384 + ((mo * 14746) >> 15);                                  /* the width, 0.5 .. 0.95 */
+    pw32 = (uint32_t)pq << 17;
+    rup = (1 << 29) / pq;                                               /* 1 / width, Q14 */
+    rdn = (1 << 25) / (32768 - pq);                                     /* 1 / (1 - width), Q10 */
+    slope = 768 + ((((mo > 16384) ? mo - 16384 : 16384 - mo) * 5 * 256) >> 15);          /* 3 + |morph - 0.5| * 5, Q8 */
+    sa = ((hq > 16384) ? hq - 16384 : 16384 - hq) * 2;                  /* how far the curve is from the middle, Q15 */
+    att = nano_tame(f0, slope, 16);
+    shape_t = 16384 + (((hq - 16384) * att) >> 15);
+    wf_t = nano_tame(f0, (slope * (768 + ((((sa * att) >> 15) * 5 * 256) >> 15))) >> 8, 12);
+    wf_t = 983 + ((((tq * wf_t) >> 15) * 15073) >> 15);                 /* 0.03 + 0.46 * FOLD * taming */
+    shape_m = v->s[3] == -1 ? shape_t : (int32_t)v->ph[1];
+    wf_m = v->s[3] == -1 ? wf_t : (int32_t)v->ph[2];
+    dshape = ((shape_t - shape_m) << 8) / (int32_t)n;                   /* Q8 per sample */
+    dwf = ((wf_t - wf_m) << 8) / (int32_t)n;
+    shape_m <<= 8;
+    wf_m <<= 8;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i++) {
+        int32_t o, pos, wi, fr, x, y, mix, idx, fi, fold, shq, si, sf;
+        const int16_t *s1, *s2;
+        uint32_t sh;
+        shape_m += dshape;
+        wf_m += dwf;
+        if (ph < pw32) {
+            o = (int32_t)(((ph >> 17) * (uint32_t)rup) >> 14);          /* the rising part */
+        } else {
+            o = 32768 - (int32_t)((((ph - pw32) >> 17) * (uint32_t)rdn) >> 10);
+        }
+        o = o * 2 - 32768;
+        pos = ((o * 127) >> 7) + 32768;
+        pos = pos < 0 ? 0 : pos > 65280 ? 65280 : pos;
+        wi = pos >> 8;
+        fr = pos & 255;
+        sh = (uint32_t)(shape_m >> 8) * 131068u;                        /* shape * 3.9999, Q15 */
+        si = (int32_t)(sh >> 15);
+        si = si > 3 ? 3 : si;
+        sf = (int32_t)(sh & 32767u);
+        s1 = tabs[si];
+        s2 = tabs[si + 1];
+        x = s1[wi] + (((s1[wi + 1] - s1[wi]) * fr) >> 8);
+        y = s2[wi] + (((s2[wi + 1] - s2[wi]) * fr) >> 8);
+        mix = x + (((y - x) * sf) >> 15);
+        idx = ((mix * (wf_m >> 8)) >> 15) + 16384;
+        idx = idx < 0 ? 0 : idx > 32702 ? 32702 : idx;
+        fi = idx >> 6;
+        fold = NANO_FOLD[fi] + (((NANO_FOLD[fi + 1] - NANO_FOLD[fi]) * (idx & 63)) >> 6);
+        dcb += (fold - dcb) >> 11;
+        fold -= dcb;
+        fold = soft_knee(analog_tap(&flt, 0, fold >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(fold, m, i) << 1;
+        ph += inc;
+    }
+    v->ph[0] = ph;
+    v->ph[1] = (uint32_t)(shape_m >> 8);
+    v->ph[2] = (uint32_t)(wf_m >> 8);
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+    v->s[2] = dcb;
+    v->s[3] = 0;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
-    (void)t;
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
     v->ph[2] = v->ph[0] >> 1;                         /* the sub: an octave down, in step with it */
     v->s[0] = v->s[1] = 0;                            /* filter */
     v->s[2] = 0;                                      /* no restart pending */
-    v->s[3] = 0;                                      /* FM: no DC yet */
+    v->s[3] = t->p[P_E0] == 2 ? -1 : 0;              /* FM: no DC yet; WAVESHAPER: -1, start from this block's own values */
+    if (t->p[P_E0] == 2)
+        v->ph[0] = 0;
 }
 
 static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -132,6 +229,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     nano_w w;
     if (p[P_E0] == 1) {
         nano_render_fm(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 2) {
+        nano_render_ws(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -208,13 +309,17 @@ static const preset_t NANO_PRESETS[] = {
     {"FM KEYS", {1, 30, 45, 64, 0, 127, 0, 64}, {2, 70, 60, 50}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"FM BELL", {1, 70, 70, 64, 0, 127, 0, 64}, {0, 100, 0, 80}, 0, 0, FX(0, 40, 30, 40), PAT(0)},
     {"FM BASS", {1, 30, 55, 90, 0, 110, 10, 64}, {0, 50, 90, 20}, 0, 1, FX(0, 0, 0, 10), PAT(8)},
+    /* WAVESHAPER: TYPE WAVE FOLD SLOPE 0 | CUT RES KTR */
+    {"WS FOLD", {2, 40, 70, 40, 0, 127, 0, 64}, {2, 70, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"WS BUZZ", {2, 100, 90, 64, 0, 110, 15, 64}, {0, 60, 100, 20}, 0, 1, FX(0, 10, 10, 20), PAT(8)},
+    {"WS LEAD", {2, 20, 50, 100, 0, 127, 10, 64}, {5, 80, 90, 40}, 25, 1, FX(0, 20, 30, 25), PAT(4)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 1, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 2, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

@@ -8,6 +8,7 @@
  * 5. no overflow, no DC, no click: every key, MORPH, SYM, SUB, SYNC and cutoff in a sweep stays bounded, the largest step
  *    between two samples is limited, and a note-off falls silent.
  * 4b. TWO OP FM: pitch, INDEX, RATIO, FEEDBACK sweeps.
+ * 4c. WAVESHAPER: period, FOLD, WAVE, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -48,6 +49,13 @@ static void setup_fm(uint32_t ratio, uint32_t index, uint32_t fb)
 {
     setup(ratio, index, fb, 0, 127);
     trk[0].p[P_E0] = 1;
+}
+
+/* WAVESHAPER: WAVE FOLD SLOPE on E1..E3, the filter open */
+static void setup_ws(uint32_t wave, uint32_t fold, uint32_t slope)
+{
+    setup(wave, fold, slope, 0, 127);
+    trk[0].p[P_E0] = 2;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -242,6 +250,74 @@ int main(void)
                 }
         printf("   FM sweep: peak %.0f, mean %.1f\n", peak, dc / (6144.0 * 24));
         check("FM sweep (INDEX, FEEDBACK both ways, ratio, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / (6144.0 * 24)) < 0.05 * peak);
+    }
+
+    /* 4c. WAVESHAPER (TYPE 2): the period, FOLD brightens, WAVE changes the spectrum, bounded sweeps with no DC */
+    {
+        double worstc = 0, lo = 0, hi = 0, f = hz(57), peak = 0, dc = 0, ha[9], moved = 0, tot = 0;
+        uint32_t k, w, fo, sl;
+        for (note = 36; note <= 84; note += 12) {
+            double per0 = (double)FS / hz(note), per = per0, e = 0, cc = 0, be = 1;
+            uint32_t lag, j, kk;
+            for (kk = 1; kk <= 64; kk++) {                                /* a number of periods that is a whole number of samples to 0.05 */
+                double d = fabs(kk * per0 - floor(kk * per0 + 0.5));
+                if (d < be) {
+                    be = d;
+                    per = kk * per0;
+                }
+                if (d < 0.05)
+                    break;
+            }
+            lag = (uint32_t)(per + 0.5);
+            setup_ws(64, 60, 64);
+            play(note, y, n);
+            for (j = a; j + lag < n; j++) {
+                e += y[j] * y[j];
+                cc += y[j] * y[j + lag];
+            }
+            if (e > 0 && 1.0 - cc / e > worstc)
+                worstc = 1.0 - cc / e;
+        }
+        printf("   WS: worst 1 - correlation at the period: %.4f\n", worstc);
+        check("WS repeats at the key's period (correlation over 0.97) over four octaves", worstc < 0.03);
+        setup_ws(64, 10, 64);
+        play(57, y, n);
+        for (k = 2; k <= 8; k++)
+            lo += tone_at(y, a, n, f * k);
+        setup_ws(64, 110, 64);
+        play(57, y, n);
+        for (k = 2; k <= 8; k++)
+            hi += tone_at(y, a, n, f * k);
+        printf("   WS harmonics 2..8: %.0f at FOLD 10, %.0f at 110\n", lo, hi);
+        check("WS FOLD changes the sound (harmonics 2..8 differ by over 30 %)", fabs(hi - lo) > 0.3 * (hi > lo ? hi : lo));
+        setup_ws(0, 80, 64);
+        play(57, y, n);
+        for (k = 2; k <= 8; k++) {
+            ha[k] = tone_at(y, a, n, f * k);
+            tot += ha[k];
+        }
+        setup_ws(127, 80, 64);
+        play(57, y, n);
+        for (k = 2; k <= 8; k++)
+            moved += fabs(tone_at(y, a, n, f * k) - ha[k]);
+        printf("   WS harmonics 2..8: %.0f in all at WAVE 0, they move by %.0f at WAVE 127\n", tot, moved);
+        check("WS WAVE changes the spectrum (the harmonics move by over 20 %)", moved > 0.2 * tot);
+        for (w = 0; w <= 127; w += 32)
+            for (fo = 0; fo <= 127; fo += 63)
+                for (sl = 0; sl <= 127; sl += 127)
+                    for (k = 0; k < 4; k++) {
+                        static const uint8_t keys[] = {57, 69, 84, 108};
+                        uint32_t j;
+                        setup_ws(w, fo, sl);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                    }
+        printf("   WS sweep: peak %.0f, mean %.1f\n", peak, dc / (6144.0 * 120));
+        check("WS sweep (WAVE, FOLD, SLOPE, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / (6144.0 * 120)) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
