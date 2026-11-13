@@ -13,6 +13,8 @@
  * TYPE 2 is WAVESHAPER (nf_ws.c, Plaits): WAVE (a transfer curve morph), FOLD, SLOPE; tables in eng_nano_tables.h
  *   (tools/gen_nano_tables.py).
  *
+ * TYPE 3 is FORMANT (nf_grain.c, Plaits): RATIO, FORMANT, SHAPE.
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -21,7 +23,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -212,6 +214,122 @@ static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->s[3] = 0;
 }
 
+/* FORMANT (Plaits' grain formant oscillator): two windowed sine grains per carrier cycle. E1 RATIO (the second formant's
+ * ratio to the first, -2 .. +2 octaves, and at the low end a part of the carrier's sine leaks in), E2 FORMANT (the first
+ * formant's pitch, note 24 .. 108), E3 SHAPE (the carrier's window). ph[0] the carrier, ph[1] and ph[2] the two formants' phases,
+ * s[2] the sample held back one (with its band-limiting correction), s[3] the DC blocker. The window's shape is held for a block. */
+typedef struct {
+    int32_t mode, g, b16, r1, r2, sc;                 /* the window: mode 0..2 and its constants */
+    int32_t bl, rb;                                   /* the leak (Q15) and 1 / (1 + leak) (Q15) */
+} nano_g;
+
+static inline int32_t nano_win(const nano_g *w, uint32_t cp)       /* the carrier window at phase cp, Q15, 0 .. 16384 */
+{
+    uint32_t x = cp >> 16, ph;
+    if (w->mode == 0) {
+        uint32_t y = (x * (uint32_t)w->g) >> 8;
+        ph = 0xC0000000u + ((y > 65536u ? 65536u : y) << 16);
+    } else if (w->mode == 1) {
+        uint32_t y = (int32_t)x < w->b16 ? (x * (uint32_t)w->r1) >> 8 : 32768u + (((x - (uint32_t)w->b16) * (uint32_t)w->r2) >> 16);
+        ph = 0xC0000000u + (y << 16);
+    } else {
+        uint32_t y = 16384u + ((x * (uint32_t)w->sc) >> 8);
+        ph = (y > 49152u ? 49152u : y) << 16;
+    }
+    return (sine_i(ph) + 32768) >> 2;
+}
+
+static inline int32_t nano_grain(const nano_g *w, int32_t win, uint32_t fp)
+{
+    return (win * (((sine_i(fp) + w->bl) * w->rb) >> 15)) >> 15;
+}
+
+static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_g w;
+    tsvf_t flt;
+    uint32_t i, pc = v->ph[0], pf1 = v->ph[1], pf2 = v->ph[2], inc = m->inc, f1, f2;
+    int32_t hq = p[P_E1] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq = p[P_E3] * 258;
+    int32_t k, sh, si, sf, t3, bleed, held = v->s[2], dcb = v->s[3], ic1 = v->s[0], ic2 = v->s[1], a;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    tq += tq >> 7;                                                       /* 0..32767 */
+    f1 = nano_fm_inc(3185015u, (uint32_t)((84 * 64 * tq) >> 15) + 768u);     /* note 24 + 84 * FORMANT: note 24's increment, up */
+    if (f1 > 0x40000000u)
+        f1 = 0x40000000u;
+    f2 = nano_fm_inc(f1 >> 1, (uint32_t)((hq * 3072) >> 15));            /* x 2^((-24 + 48 * RATIO) / 12) */
+    if (f2 > 0x40000000u)
+        f2 = 0x40000000u;
+    bleed = hq < 16384 ? 32768 - 2 * hq : 0;
+    bleed = (bleed * (65536 - bleed)) >> 16;                             /* b * (2 - b), Q15 */
+    w.bl = bleed;
+    w.rb = (int32_t)((1u << 30) / (uint32_t)(32768 + bleed));            /* 1 / (1 + b), Q15 */
+    k = 32768 - (int32_t)(inc >> 17) * 24;
+    k = k < 0 ? 0 : k;
+    sh = 10813 + (((mq - 10813) * k) >> 15);                             /* 0.33 + (SHAPE - 0.33) * k */
+    sh = sh * 3;
+    si = sh >> 15;
+    sf = sh & 32767;
+    if (si == 0) {
+        t3 = 32768 - sf;
+        t3 = (((t3 * t3) >> 15) * t3) >> 15;
+        w.mode = 0;
+        w.g = 256 + ((t3 * 3840) >> 15);                                 /* 1 + 15 t^3, Q8 */
+    } else if (si == 1) {
+        t3 = 32768 - sf;
+        t3 = (((t3 * t3) >> 15) * t3) >> 15;
+        w.mode = 1;
+        w.b16 = 66 + ((t3 * 32702) >> 15);
+        w.r1 = (1 << 23) / w.b16;                                        /* 0.5 / b, Q8 */
+        w.r2 = (int32_t)((1u << 31) / (uint32_t)(65536 - w.b16));        /* 0.5 / (1 - b), Q16 */
+    } else {
+        t3 = sf;
+        t3 = (((t3 * t3) >> 15) * t3) >> 15;
+        w.mode = 2;
+        w.sc = 128 + ((t3 * 3712) >> 15);                                /* 0.5 + 14.5 t^3, Q8 */
+    }
+    a = ((int32_t)(inc >> 16) * 1931) >> 10;                             /* the DC blocker's pole: 0.3 f0 */
+    a = a > 32768 ? 32768 : a;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i++) {
+        int32_t s = held, d;                                             /* the output lags one sample, as Plaits': the step's first part goes to the sample before the wrap */
+        uint32_t pn = pc + inc;
+        held = 0;
+        if (pn < pc) {                                                   /* the carrier wrapped inside this sample */
+            uint32_t f = pn / ((inc >> 16) | 1u), back;                  /* the part of a sample since, Q16 */
+            int32_t rt, om, b1, b2, a0;
+            f = f > 65535u ? 65535u : f;
+            back = 65536u - f;
+            rt = (int32_t)(f >> 1);                                      /* Q15 */
+            om = 32768 - rt;
+            b1 = nano_grain(&w, nano_win(&w, 0xFFFFFFFFu), pf1 + (uint32_t)(((uint64_t)f1 * back) >> 16));
+            b2 = nano_grain(&w, nano_win(&w, 0xFFFFFFFFu), pf2 + (uint32_t)(((uint64_t)f2 * back) >> 16));
+            a0 = nano_grain(&w, nano_win(&w, 0), 0);
+            d = (a0 - b1) + (a0 - b2);
+            s += ((d >> 1) * ((rt * rt) >> 15)) >> 15;                   /* polyBLEP of the restart: this sample ... */
+            held -= ((d >> 1) * ((om * om) >> 15)) >> 15;                /* ... and the next */
+            pf1 = (uint32_t)(((uint64_t)f1 * f) >> 16);                  /* the formants restart with the carrier */
+            pf2 = (uint32_t)(((uint64_t)f2 * f) >> 16);
+        } else {
+            pf1 += f1;
+            pf2 += f2;
+        }
+        held += nano_grain(&w, nano_win(&w, pn), pf1) + nano_grain(&w, nano_win(&w, pn), pf2);
+        pc = pn;
+        dcb += ((s - dcb) * a) >> 15;
+        s -= dcb;
+        s = soft_knee(analog_tap(&flt, 0, s >> 1, &ic1, &ic2, 0), 16000) << 1;     /* the grains are hot: as the other types, half into the filter */
+        out[i] += voice_amp(s, m, i) << 1;
+    }
+    v->ph[0] = pc;
+    v->ph[1] = pf1;
+    v->ph[2] = pf2;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+    v->s[2] = held;
+    v->s[3] = dcb;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -221,6 +339,8 @@ static void nano_note_on(track_t *t, voice_t *v)
     v->s[3] = t->p[P_E0] == 2 ? -1 : 0;              /* FM: no DC yet; WAVESHAPER: -1, start from this block's own values */
     if (t->p[P_E0] == 2)
         v->ph[0] = 0;
+    if (t->p[P_E0] == 3)
+        v->ph[0] = v->ph[1] = v->ph[2] = 0;               /* FORMANT: the carrier and both formants start at zero */
 }
 
 static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -233,6 +353,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 2) {
         nano_render_ws(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 3) {
+        nano_render_fo(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -313,13 +437,17 @@ static const preset_t NANO_PRESETS[] = {
     {"WS FOLD", {2, 40, 70, 40, 0, 127, 0, 64}, {2, 70, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"WS BUZZ", {2, 100, 90, 64, 0, 110, 15, 64}, {0, 60, 100, 20}, 0, 1, FX(0, 10, 10, 20), PAT(8)},
     {"WS LEAD", {2, 20, 50, 100, 0, 127, 10, 64}, {5, 80, 90, 40}, 25, 1, FX(0, 20, 30, 25), PAT(4)},
+    /* FORMANT: TYPE RATIO FORMANT SHAPE 0 | CUT RES KTR */
+    {"VOWEL", {3, 64, 50, 40, 0, 127, 0, 64}, {5, 80, 100, 40}, 0, 0, FX(0, 20, 20, 25), PAT(0)},
+    {"FORMANT LEAD", {3, 90, 80, 60, 0, 127, 10, 64}, {5, 80, 90, 40}, 25, 1, FX(0, 20, 30, 25), PAT(4)},
+    {"GRAIN BASS", {3, 30, 25, 20, 0, 110, 10, 64}, {0, 60, 100, 20}, 0, 1, FX(0, 0, 0, 10), PAT(8)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 2, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 3, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

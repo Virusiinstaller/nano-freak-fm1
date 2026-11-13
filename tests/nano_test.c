@@ -9,6 +9,7 @@
  *    between two samples is limited, and a note-off falls silent.
  * 4b. TWO OP FM: pitch, INDEX, RATIO, FEEDBACK sweeps.
  * 4c. WAVESHAPER: period, FOLD, WAVE, bounded sweep.
+ * 4d. FORMANT: period, the spectral peak follows FORMANT, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -56,6 +57,13 @@ static void setup_ws(uint32_t wave, uint32_t fold, uint32_t slope)
 {
     setup(wave, fold, slope, 0, 127);
     trk[0].p[P_E0] = 2;
+}
+
+/* FORMANT: RATIO FORMANT SHAPE on E1..E3, the filter open */
+static void setup_fo(uint32_t ratio, uint32_t formant, uint32_t shape)
+{
+    setup(ratio, formant, shape, 0, 127);
+    trk[0].p[P_E0] = 3;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -318,6 +326,68 @@ int main(void)
                     }
         printf("   WS sweep: peak %.0f, mean %.1f\n", peak, dc / (6144.0 * 120));
         check("WS sweep (WAVE, FOLD, SLOPE, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / (6144.0 * 120)) < 0.05 * peak);
+    }
+
+    /* 4d. FORMANT (TYPE 3): the period, FORMANT moves the spectral peak, bounded sweeps with no DC */
+    {
+        double worstc = 0, peak = 0, dc = 0, f = hz(45);
+        uint32_t k, fo, w, sh, pk[3], ti;
+        static const uint32_t ts[3] = {20, 60, 100};
+        for (note = 36; note <= 84; note += 12) {
+            double per0 = (double)FS / hz(note), per = per0, e = 0, cc = 0, be = 1;
+            uint32_t lag, j, kk;
+            for (kk = 1; kk <= 64; kk++) {
+                double d = fabs(kk * per0 - floor(kk * per0 + 0.5));
+                if (d < be) {
+                    be = d;
+                    per = kk * per0;
+                }
+                if (d < 0.05)
+                    break;
+            }
+            lag = (uint32_t)(per + 0.5);
+            setup_fo(64, 60, 64);
+            play(note, y, n);
+            for (j = a; j + lag < n; j++) {
+                e += y[j] * y[j];
+                cc += y[j] * y[j + lag];
+            }
+            if (e > 0 && 1.0 - cc / e > worstc)
+                worstc = 1.0 - cc / e;
+        }
+        printf("   FORMANT: worst 1 - correlation at the period: %.4f\n", worstc);
+        check("FORMANT repeats at the key's period (correlation over 0.97) over four octaves", worstc < 0.03);
+        for (ti = 0; ti < 3; ti++) {
+            double best = 0;
+            setup_fo(64, ts[ti], 64);
+            play(45, y, n);
+            pk[ti] = 1;
+            for (k = 1; k <= 60; k++) {
+                double h = tone_at(y, a, n, f * k);
+                if (h > best) {
+                    best = h;
+                    pk[ti] = k;
+                }
+            }
+        }
+        printf("   FORMANT peak harmonic of key 45: %u at FORMANT 20, %u at 60, %u at 100\n", pk[0], pk[1], pk[2]);
+        check("FORMANT moves the spectral peak up (FORMANT 20 < 60 < 100)", pk[0] < pk[1] && pk[1] < pk[2]);
+        for (fo = 0; fo <= 127; fo += 32)
+            for (w = 0; w <= 127; w += 63)
+                for (sh = 0; sh <= 127; sh += 32)
+                    for (k = 0; k < 4; k++) {
+                        static const uint8_t keys[] = {45, 60, 84, 108};
+                        uint32_t j;
+                        setup_fo(w, fo, sh);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                    }
+        printf("   FORMANT sweep: peak %.0f, mean %.1f\n", peak, dc / (6144.0 * 300));
+        check("FORMANT sweep (RATIO, FORMANT, SHAPE, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / (6144.0 * 300)) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
