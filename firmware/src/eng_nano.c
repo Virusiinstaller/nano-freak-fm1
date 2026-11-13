@@ -15,6 +15,8 @@
  *
  * TYPE 3 is FORMANT (nf_grain.c, Plaits): RATIO, FORMANT, SHAPE.
  *
+ * TYPE 4 is NOISE (nf_noise.c, Plaits): MODE, CLOCK, RES.
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -23,7 +25,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -66,13 +68,32 @@ static const uint32_t NANO_P2[25] = {
 };
 
 /* the modulator's increment: inc * 2^((r6 - 768) / 768) (r6: semitones + 12 in Q6 as above); 64-bit multiply once per block */
-static uint32_t nano_fm_inc(uint32_t inc, uint32_t r6)
+static uint32_t nano_inc_c(uint32_t inc, uint32_t r6, uint64_t cap)
 {
     uint32_t oct = r6 / 768u, rem = r6 % 768u, k = rem / 32u, f = rem % 32u;
     uint32_t a = NANO_P2[k], b = NANO_P2[k + 1], fac = a + (((b - a) * f) >> 5);      /* Q16, 1..2 */
     uint64_t x = ((uint64_t)inc * fac) << oct;                                         /* x 2^oct, still Q16; the table starts at -1 octave */
     x >>= 17;
-    return x > 0x50000000u ? 0x50000000u : (uint32_t)x;
+    return x > cap ? (uint32_t)cap : (uint32_t)x;
+}
+
+static uint32_t nano_fm_inc(uint32_t inc, uint32_t r6) { return nano_inc_c(inc, r6, 0x50000000u); }
+
+static uint32_t nano_isqrt(uint32_t x)
+{
+    uint32_t r = 0, b = 1u << 30;
+    while (b > x)
+        b >>= 2;
+    while (b) {
+        if (x >= r + b) {
+            x -= r + b;
+            r = (r >> 1) + b;
+        } else {
+            r >>= 1;
+        }
+        b >>= 2;
+    }
+    return r;
 }
 
 /* TWO OP FM (Plaits' two-operator FM, simplified: no oversampling): E1 RATIO (the quantizer's modulator ratio), E2 INDEX
@@ -330,6 +351,89 @@ static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->s[3] = dcb;
 }
 
+/* NOISE (Plaits' noise engine, its main output): clocked noise (a new random value at the CLOCK rate, band-limited; above a
+ * quarter of the sample rate the raw noise fades in) through a state variable filter that follows the key, from low-pass
+ * through band-pass to high-pass. E1 MODE, E2 CLOCK (note 0 .. 128 as a rate), E3 RES (Q 0.5 .. 512, the input is scaled to
+ * suit). The filter is the firmware's trapezoidal SVF (dsp.c) with its coefficients held for the block. ph[0] the clock,
+ * s[2] the held value, s[3] the sample owed to the next, s[4] s[5] the SVF, s[6] the generator. */
+static int32_t nano_cut(int32_t p16) { return clamp(((p16 - 360) * 4785) >> 8, 0, 127 << 8); }
+
+static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    tsvf_t nf, flt;
+    uint32_t i, pc = v->ph[0], cinc;
+    int32_t hq = p[P_E1] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq = p[P_E3] * 258;
+    int32_t kq, qq8, oct, frac, fac, gain, hg, bg, lg, amount, sample = v->s[2], nxt = v->s[3], s4 = v->s[4], s5 = v->s[5];
+    int32_t rng = v->s[6], ic1 = v->s[0], ic2 = v->s[1], sq;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    tq += tq >> 7;                                                       /* 0..32767 */
+    cinc = nano_inc_c(3185015u >> 2, (uint32_t)((128 * 64 * tq) >> 15) + 768u, 0xFFFFFFFFull);   /* note 0 up to note 128 * CLOCK */
+    amount = ((int32_t)(cinc >> 16) - 16384) * 2;                        /* 4 (f - 0.25), Q15 */
+    amount = amount < 0 ? 0 : amount > 32768 ? 32768 : amount;
+    oct = (mq * 10) >> 15;                                               /* RES: Q = 0.5 * 2^(10 RES) */
+    frac = (((mq * 10) & 32767) * 24) >> 15;                             /* in half semitones: 0..23 */
+    {
+        uint32_t f = (((uint32_t)((mq * 10) & 32767) * 24u) & 32767u) >> 10;      /* 0..31 between two table points */
+        uint32_t a = NANO_P2[frac], b = NANO_P2[frac + 1];
+        fac = (int32_t)(a + (((b - a) * f) >> 5));                       /* 2^frac, Q16 */
+    }
+    kq = (int32_t)(((uint32_t)(8192u >> oct) << 16) / (uint32_t)fac);    /* 1 / Q, Q12 */
+    kq = kq < 8 ? 8 : kq;
+    qq8 = (int32_t)((((uint32_t)128 << oct) * (uint32_t)fac) >> 16);     /* Q, Q8 */
+    sq = (int32_t)nano_isqrt((uint32_t)(((qq8 + 128) * 40 * (int32_t)(m->inc >> 16)) >> 8));     /* sqrt((0.5 + Q) 40 f0), Q8 */
+    gain = (int32_t)((1u << 23) / (uint32_t)(sq < 1 ? 1 : sq));          /* 1 / sqrt, Q15 */
+    gain = gain > 262144 ? 262144 : gain;
+    hg = hq > 16384 ? 32768 - 2 * hq : 0;                                /* -2 mode + 1, only past the middle: <= 0 */
+    lg = hq < 16384 ? 32768 - 2 * hq : 0;
+    bg = 32768 - 2 * (hq > 16384 ? hq - 16384 : 16384 - hq);
+    tsvf_coef_k(&nf, nano_cut(v->pitch16), kq);
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i++) {
+        int32_t raw, this_s, c, xin, v3, v1, v2, hp, o, s;
+        uint32_t pn = pc + cinc;
+        rng ^= rng << 13;
+        rng ^= (int32_t)((uint32_t)rng >> 17);
+        rng ^= rng << 5;
+        raw = (int32_t)((uint32_t)rng >> 16) - 32768;
+        this_s = nxt;
+        nxt = 0;
+        if (pn < pc) {                                                   /* the clock ticked: a new value, with its band-limiting step */
+            uint32_t f = pn / ((cinc >> 16) | 1u);
+            int32_t rt, om, d = raw - sample;
+            f = f > 65535u ? 65535u : f;
+            rt = (int32_t)(f >> 1);
+            om = 32768 - rt;
+            this_s += ((d >> 1) * ((rt * rt) >> 15)) >> 15;
+            nxt -= ((d >> 1) * ((om * om) >> 15)) >> 15;
+            sample = raw;
+        }
+        nxt += sample;
+        c = this_s + (((raw - this_s) * amount) >> 15);
+        pc = pn;
+        xin = (c * (gain >> 4)) >> 11;
+        xin = clamp(xin, -(1 << 18), 1 << 18);
+        v3 = xin - s5;
+        v1 = (nf.a1 * s4 + nf.a2 * v3) >> 13;
+        v2 = s5 + ((nf.a2 * s4 + nf.a3 * v3) >> 13);
+        s4 = clamp(2 * v1 - s4, -150000, 150000);
+        s5 = clamp(2 * v2 - s5, -150000, 150000);
+        hp = xin - ((kq * v1) >> 12) - v2;
+        o = ((hp >> 3) * hg + (v1 >> 3) * bg + (v2 >> 3) * lg) >> 12;
+        o = clamp(o, -49152, 49152);                                     /* a resonant peak: kept inside the voice's range */
+        s = soft_knee(analog_tap(&flt, 0, o >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(s, m, i) << 1;
+    }
+    v->ph[0] = pc;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+    v->s[2] = sample;
+    v->s[3] = nxt;
+    v->s[4] = s4;
+    v->s[5] = s5;
+    v->s[6] = rng;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -339,6 +443,11 @@ static void nano_note_on(track_t *t, voice_t *v)
     v->s[3] = t->p[P_E0] == 2 ? -1 : 0;              /* FM: no DC yet; WAVESHAPER: -1, start from this block's own values */
     if (t->p[P_E0] == 2)
         v->ph[0] = 0;
+    if (t->p[P_E0] == 4) {                                /* NOISE: the clock restarts at once; a new random run per note */
+        v->ph[0] = 0xFFFFFFFFu;
+        v->s[4] = v->s[5] = 0;
+        v->s[6] = (int32_t)(0x9E3779B9u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 8) | 1u);
+    }
     if (t->p[P_E0] == 3)
         v->ph[0] = v->ph[1] = v->ph[2] = 0;               /* FORMANT: the carrier and both formants start at zero */
 }
@@ -357,6 +466,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 3) {
         nano_render_fo(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 4) {
+        nano_render_no(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -441,13 +554,17 @@ static const preset_t NANO_PRESETS[] = {
     {"VOWEL", {3, 64, 50, 40, 0, 127, 0, 64}, {5, 80, 100, 40}, 0, 0, FX(0, 20, 20, 25), PAT(0)},
     {"FORMANT LEAD", {3, 90, 80, 60, 0, 127, 10, 64}, {5, 80, 90, 40}, 25, 1, FX(0, 20, 30, 25), PAT(4)},
     {"GRAIN BASS", {3, 30, 25, 20, 0, 110, 10, 64}, {0, 60, 100, 20}, 0, 1, FX(0, 0, 0, 10), PAT(8)},
+    /* NOISE: TYPE MODE CLOCK RES 0 | CUT RES KTR */
+    {"WIND", {4, 20, 110, 50, 0, 127, 0, 64}, {40, 100, 100, 80}, 0, 0, FX(0, 40, 30, 30), PAT(0)},
+    {"HISS PERC", {4, 100, 120, 20, 0, 127, 0, 64}, {0, 60, 0, 30}, 0, 0, FX(0, 10, 10, 20), PAT(0)},
+    {"PITCHED NOISE", {4, 64, 100, 100, 0, 127, 0, 64}, {2, 70, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 3, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 4, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

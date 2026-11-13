@@ -36,7 +36,7 @@ static const char *const PRESET_CAT[16] = {
     "KUBLPUKU",                  /* 12 FM6: TINE EP, BELL, FM BASS, BRASS, PAD, MARIMBA, ORGAN, PLUCK */
     "DD",                        /* 13 SLICE: CHOP, STUTTER */
     FMINI_CATS,                   /* 14 FMINI: the 200 monophonic patches (eng_fmini_presets.h) */
-    "LLPPLBKFBFBLPLB",           /* 15 NANO: INIT SAW, SQUARE, PWM, WIDE SAWS, SYNC LEAD, SUB BASS, FM KEYS, FM BELL, FM BASS, WS FOLD, WS BUZZ, WS LEAD, VOWEL, FORMANT LEAD, GRAIN BASS */
+    "LLPPLBKFBFBLPLBFDL",        /* 15 NANO: INIT SAW, SQUARE, PWM, WIDE SAWS, SYNC LEAD, SUB BASS, FM KEYS, FM BELL, FM BASS, WS FOLD, WS BUZZ, WS LEAD, VOWEL, FORMANT LEAD, GRAIN BASS, WIND, HISS PERC, PITCHED NOISE */
 };
 static uint32_t preset_cat(uint32_t e, uint32_t k)    /* factory preset k of engine e */
 {

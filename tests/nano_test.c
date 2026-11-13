@@ -10,6 +10,7 @@
  * 4b. TWO OP FM: pitch, INDEX, RATIO, FEEDBACK sweeps.
  * 4c. WAVESHAPER: period, FOLD, WAVE, bounded sweep.
  * 4d. FORMANT: period, the spectral peak follows FORMANT, bounded sweep.
+ * 4e. NOISE: MODE low-pass to high-pass, the filter follows the key, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -66,6 +67,13 @@ static void setup_fo(uint32_t ratio, uint32_t formant, uint32_t shape)
     trk[0].p[P_E0] = 3;
 }
 
+/* NOISE: MODE CLOCK RES on E1..E3, the filter open */
+static void setup_no(uint32_t mode, uint32_t clock, uint32_t res)
+{
+    setup(mode, clock, res, 0, 127);
+    trk[0].p[P_E0] = 4;
+}
+
 static void play(uint32_t note, double *y, uint32_t n)
 {
     static int32_t b[CTL];
@@ -91,6 +99,18 @@ static double tone_at(const double *y, uint32_t a, uint32_t b, double f)
         si += y[i] * sin(w * (double)i);
     }
     return 2 * sqrt(sr * sr + si * si) / (b - a);
+}
+
+/* the power in the band f1 .. f2 of y[a .. b): 40 tones across it */
+static double band_power(const double *y, uint32_t a, uint32_t b, double f1, double f2)
+{
+    double pw = 0;
+    int k;
+    for (k = 0; k < 40; k++) {
+        double x = tone_at(y, a, b, f1 + (f2 - f1) * k / 39.0);
+        pw += x * x;
+    }
+    return pw / 40.0 * (f2 - f1);
 }
 
 /* the pitch: rising zero crossings of the mean-free signal */
@@ -388,6 +408,46 @@ int main(void)
                     }
         printf("   FORMANT sweep: peak %.0f, mean %.1f\n", peak, dc / (6144.0 * 300));
         check("FORMANT sweep (RATIO, FORMANT, SHAPE, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / (6144.0 * 300)) < 0.05 * peak);
+    }
+
+    /* 4e. NOISE (TYPE 4): MODE moves it from low-pass to high-pass, the filter follows the key, bounded sweeps with no DC */
+    {
+        double lo_a, hi_a, lo_b, hi_b, p57, p69, peak = 0, dc = 0, cnt = 0;
+        uint32_t k, md, ck, rs, j;
+        setup_no(0, 120, 30);
+        play(57, y, n);
+        lo_a = band_power(y, a, n, 100, 800);
+        hi_a = band_power(y, a, n, 4000, 9000);
+        setup_no(127, 120, 30);
+        play(57, y, n);
+        lo_b = band_power(y, a, n, 100, 800);
+        hi_b = band_power(y, a, n, 4000, 9000);
+        printf("   NOISE band power low / high: %.3g / %.3g at MODE 0, %.3g / %.3g at MODE 127\n", lo_a, hi_a, lo_b, hi_b);
+        check("NOISE MODE 0 is a low-pass (the lows over 1000x the highs), MODE 127 a high-pass (the highs not rolled off: over 0.1x the lows)", lo_a > 1000 * hi_a && hi_b > 0.1 * lo_b);
+        setup_no(64, 120, 100);
+        play(57, y, n);
+        p57 = band_power(y, a, n, hz(57) * 0.94, hz(57) * 1.06) / band_power(y, a, n, hz(69) * 0.94, hz(69) * 1.06);
+        setup_no(64, 120, 100);
+        play(69, y, n);
+        p69 = band_power(y, a, n, hz(69) * 0.94, hz(69) * 1.06) / band_power(y, a, n, hz(57) * 0.94, hz(57) * 1.06);
+        printf("   NOISE resonance: key 57 band over key 69's band %.2f, key 69 over 57 %.2f\n", p57, p69);
+        check("NOISE filter follows the key (a resonant band-pass peaks at the key's pitch, over 3x its neighbour octave)", p57 > 3 && p69 > 3);
+        for (md = 0; md <= 127; md += 32)
+            for (ck = 0; ck <= 127; ck += 32)
+                for (rs = 0; rs <= 127; rs += 63)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {36, 69, 105};
+                        setup_no(md, ck, rs);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                        cnt += 6144;
+                    }
+        printf("   NOISE sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
+        check("NOISE sweep (MODE, CLOCK, RES, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
