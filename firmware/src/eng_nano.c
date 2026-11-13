@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 The Nano Freak authors (github.com/Virusiinstaller/nano-freak-fm1) */
-/* NANO (Nano Freak): the MicroFreak-style engine. Integer only, like the rest of the firmware.
+/* NANO (Nano Freak): the Freak Synthesizer engine. Integer only, like the rest of the firmware.
  *
  * TYPE 0 is BASIC WAVES, ported from the browser test bed (nano-freak dsp/nf_bw.c, floating point, MIT):
  *   MORPH  0..0.5  a pulse crossfades into a saw; 0.5..1  a second saw (offset by SYM) fades in beside it

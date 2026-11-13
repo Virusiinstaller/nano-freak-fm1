@@ -1,6 +1,6 @@
 # Nano Freak for the M-Vave FM-1
 
-**Nano Freak** is a work in progress: a MicroFreak-style synth for the M-Vave FM-1 (and SMK-37). The sound engine is being ported to the
+**Nano Freak** is a work in progress: a Freak Synthesizer for the M-Vave FM-1 (and SMK-37). The sound engine is being ported to the
 FM-1's integer-only firmware from the [Nano Freak browser test bed](https://github.com/Virusiinstaller/nano-freak), one oscillator type at a time.
 It is built on the FMini-1 firmware by Guilherme Ruppert, itself a fork of Felucca by Leo Kuroshita (all GPL-3.0-only). Their work is
 credited below and in [CREDITS.md](CREDITS.md).

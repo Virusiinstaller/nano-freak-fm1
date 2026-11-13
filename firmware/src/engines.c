@@ -33,7 +33,7 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #include "eng_fm6.c"            /* FM6: 6-operator FM, msfa ported (fm6_core.c, Apache-2.0) */
 #include "fm4_convert.c"        /* DIGITAL's tables, and its sounds -> FM6 */
 #include "eng_fmini.c"           /* FMINI (FMini-1): a three-oscillator ladder-filter monosynth */
-#include "eng_nano.c"            /* NANO (Nano Freak): the MicroFreak-style engine, BASIC WAVES first */
+#include "eng_nano.c"            /* NANO (Nano Freak): the Freak Synthesizer engine, BASIC WAVES first */
 #if FELUCCA_FM4
 #include "eng_digital.c"        /* DIGITAL: four-operator FM (retired; FELUCCA_FM4=1 builds it) */
 #endif
