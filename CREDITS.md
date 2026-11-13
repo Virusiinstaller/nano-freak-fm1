@@ -1,5 +1,7 @@
 # Credits
 
+Nano Freak (Virusiinstaller/nano-freak-fm1) is built on [FMini-1](https://github.com/ruppert/fmini-1) by Guilherme Ruppert (GPL-3.0-only), which is a fork of Felucca.
+
 Felucca is Leo Kuroshita's ([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)). It uses and
 thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICENSING.md](LICENSING.md) and [LICENSES/](LICENSES/)).
 

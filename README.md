@@ -1,3 +1,7 @@
+> **Nano Freak** is a work in progress: a MicroFreak-style synth for the M-Vave FM-1, built on the FMini-1 firmware by Guilherme Ruppert,
+> itself a fork of Felucca by Leo Kuroshita (all GPL-3.0-only). Their work is credited in [CREDITS.md](CREDITS.md). The text below is still
+> FMini-1's. Site: <https://virusiinstaller.github.io/nano-freak-fm1/>. Not tested on a real FM-1.
+
 <p align="center">
   <img src="assets/readme/banner.png" alt="FMini-1 by Ruppert" width="100%">
 </p>
@@ -11,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/fmini-ad.mp4">▶ Watch the video (30 s)</a> · <a href="https://ruppert.github.io/fmini-1/emu/">🎹 Try FMini-1 in your browser</a> · <a href="https://ruppert.github.io/fmini-1/editor/">🎛 Patch editor</a>
+  <a href="docs/fmini-ad.mp4">▶ Watch the video (30 s)</a> · <a href="https://virusiinstaller.github.io/nano-freak-fm1/emu/">🎹 Try FMini-1 in your browser</a> · <a href="https://virusiinstaller.github.io/nano-freak-fm1/editor/">🎛 Patch editor</a>
 </p>
 
 ## 1. Screenshots
@@ -32,7 +36,7 @@
 
 ## 2. Installation
 
-Official site: <https://ruppert.github.io/fmini-1/> (with Web Installer)
+Official site: <https://virusiinstaller.github.io/nano-freak-fm1/> (with Web Installer)
 
 Supports the new FM-1 versions (with the UC25HQ80 flash chip).
 

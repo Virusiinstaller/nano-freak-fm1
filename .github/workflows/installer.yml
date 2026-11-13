@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # FMini-1: builds the firmware (FM-1 and the SMK-37's three models) and publishes the web installer
-# (web/make_fmini_installer.py: one page with the four packages inside) on GitHub Pages, at https://ruppert.github.io/fmini-1/.
+# (web/make_fmini_installer.py: one page with the four packages inside) on GitHub Pages, at https://virusiinstaller.github.io/nano-freak-fm1/.
 # Once in the repository's Settings > Pages: Source = GitHub Actions.
 name: Installer
 
@@ -57,7 +57,13 @@ jobs:
           cp docs/fmini-ad.mp4 docs/fmini-ad-poster.jpg _site/
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
           cp -r docs/emu _site/emu                 # the browser emulators: FM-1 in docs/emu, SMK-37 in docs/emu/smk (web/emu/build_wasi.sh, SMK=1)
-          echo "FMini-1 v$VERSION (FM-1 and SMK-37)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Nano Freak (FMini-1 base) v$VERSION (FM-1 and SMK-37)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the .fwsc packages as a plain download
+        uses: actions/upload-artifact@v4
+        with:
+          name: fwsc-packages
+          path: build/*.fwsc
 
       - uses: actions/upload-pages-artifact@v3
         with:
