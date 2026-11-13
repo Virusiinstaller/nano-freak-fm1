@@ -7,6 +7,7 @@
  * 4. SYNC: the output repeats at the master's period (correlation over 0.97 one period on) and is brighter than without it.
  * 5. no overflow, no DC, no click: every key, MORPH, SYM, SUB, SYNC and cutoff in a sweep stays bounded, the largest step
  *    between two samples is limited, and a note-off falls silent.
+ * 4b. TWO OP FM: pitch, INDEX, RATIO, FEEDBACK sweeps.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -40,6 +41,13 @@ static void setup(uint32_t morph, uint32_t sym, uint32_t sub, uint32_t sync, uin
     trk[0].p[P_REL] = 0;
     trk[0].p[P_VOICE] = V_POLY;
     trk[0].p[P_CHOR] = trk[0].p[P_DLY] = trk[0].p[P_REV] = trk[0].p[P_DIST] = 0;
+}
+
+/* TWO OP FM: RATIO INDEX FEEDBACK on E1..E3, the filter open */
+static void setup_fm(uint32_t ratio, uint32_t index, uint32_t fb)
+{
+    setup(ratio, index, fb, 0, 127);
+    trk[0].p[P_E0] = 1;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -175,6 +183,65 @@ int main(void)
         hi1 = lo;
         printf("   harmonics 20..39: %.0f unsynced, %.0f synced\n", hi0, hi1);
         check("SYNC makes the sound brighter (the upper harmonics carry more)", hi1 > hi0 * 1.5);
+    }
+
+    /* 4b. TWO OP FM (TYPE 1): RATIO 30 is 1:1; INDEX 0 is a sine at the key's pitch; INDEX brightens; RATIO changes the spectrum;
+     *     FEEDBACK both ways stays bounded */
+    {
+        double w = 0, h2, e_lo = 0, e_hi = 0, r1 = 0, r2 = 0, f = hz(57), peak = 0, dc = 0;
+        uint32_t idx, k, fb;
+        for (note = 36; note <= 84; note += 12) {
+            setup_fm(30, 0, 64);
+            play(note, y, n);
+            double c = 1200 * log2(pitch(y, a, n) / hz(note));
+            if (fabs(c) > w)
+                w = fabs(c);
+        }
+        setup_fm(30, 0, 64);
+        play(57, y, n);
+        h2 = tone_at(y, a, n, 2 * f) / tone_at(y, a, n, f);
+        printf("   FM INDEX 0: pitch worst %.2f cents, 2nd / 1st %.4f\n", w, h2);
+        check("FM INDEX 0 is a sine at the key's pitch (6 cents, 2nd harmonic under 2 %)", w < 6.0 && h2 < 0.02);
+        setup_fm(30, 20, 64);
+        play(57, y, n);
+        for (k = 2; k <= 8; k++)
+            e_lo += tone_at(y, a, n, f * k);
+        setup_fm(30, 90, 64);
+        play(57, y, n);
+        for (k = 2; k <= 8; k++)
+            e_hi += tone_at(y, a, n, f * k);
+        printf("   FM harmonics 2..8: %.0f at INDEX 20, %.0f at 90\n", e_lo, e_hi);
+        check("FM INDEX brightens (harmonics 2..8 carry over 5x more at 90 than at 20)", e_hi > 5 * e_lo);
+        {
+            double ha[9];
+            setup_fm(30, 70, 64);
+            play(57, y, n);
+            for (k = 2; k <= 8; k++) {
+                ha[k] = tone_at(y, a, n, f * k);
+                r1 += ha[k];
+            }
+            setup_fm(60, 70, 64);
+            play(57, y, n);
+            for (k = 2; k <= 8; k++)
+                r2 += fabs(tone_at(y, a, n, f * k) - ha[k]);
+            printf("   FM harmonics 2..8: %.0f in all at 1:1, they move by %.0f at the octave up\n", r1, r2);
+            check("FM RATIO changes the spectrum (the harmonics move by over 20 %)", r2 > 0.2 * r1);
+        }
+        for (fb = 0; fb <= 127; fb += 127)
+            for (idx = 0; idx <= 127; idx += 63)
+                for (k = 0; k < 4; k++) {
+                    static const uint8_t keys[] = {57, 69, 84, 108};
+                    uint32_t j;
+                    setup_fm(30 + 30 * (k & 1u), idx, fb);
+                    play(keys[k], y, 8192);
+                    for (j = 2048; j < 8192; j++) {
+                        if (fabs(y[j]) > peak)
+                            peak = fabs(y[j]);
+                        dc += y[j];
+                    }
+                }
+        printf("   FM sweep: peak %.0f, mean %.1f\n", peak, dc / (6144.0 * 24));
+        check("FM sweep (INDEX, FEEDBACK both ways, ratio, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / (6144.0 * 24)) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

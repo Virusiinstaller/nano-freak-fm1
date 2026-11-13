@@ -20,8 +20,8 @@
  * One number for the FM-1 and the SMK-37 builds: one release carries the four packages. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 14u
-#define FMINI_VERSION "v2.5.14"
+#define FMINI_VER_PATCH 15u
+#define FMINI_VERSION "v2.5.15"
 extern volatile uint8_t fm_vel_sens;   /* seq.c: the preset's VELOCITY SENS. (2.5.5): 0 OFF, the sound at 127 whatever the
                                          * velocity (MIDI OUT keeps it); 1 ON, the velocity is the loudness (FMini-1) */
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
