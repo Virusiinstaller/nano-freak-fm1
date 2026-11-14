@@ -25,6 +25,7 @@
  *
  * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
  *
+ * TYPE 12 is WAVETABLE (16 tables of 16 waves): TABLE, POSITION, CHORUS, MORPH.
  * TYPE 11 is SAW (Braids' SAW_SYNC / SAW_COMB / CSAW): WAVE, E2, E3.
  * TYPE 10 is BASS (Braids' SQUARE_SUB / SAW_SUB): WAVE, WIDTH, SUB.
  * TYPE 9 is PLUCK (Braids' KarplusStr): BOW, POSITION, DECAY; four voices (the delay lines).
@@ -37,7 +38,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW", "WAVETABLE"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -473,6 +474,7 @@ typedef union {
     uint32_t pl[12];                                    /* PLUCK's nano_pl_t (below) */
     uint32_t bs[12];                                    /* BASS's nano_bs_t (below) */
     uint32_t sa[16];                                    /* SAW's nano_sa_t (below) */
+    uint32_t wt[4];                                     /* WAVETABLE's nano_wt_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
@@ -1379,6 +1381,104 @@ static __attribute__((noinline)) void nano_render_sa(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* WAVETABLE (the Nano Freak test bed's player, after Braids' RenderWavetables): 16 tables of 16 single-cycle waves of 129 int8,
+ * linear interpolation along the cycle and between neighbouring waves, two readings a sample at half the increment. E1 TABLE,
+ * E2 POSITION (smoothed over the block), E3 CHORUS (a second reader up to 10 cents sharp, crossfaded in), E4 MORPH (a
+ * crossfade toward the same position in the next table). State in the slot union (nano_wt_t). */
+typedef struct {
+    uint32_t phase, phase2;
+    int32_t pos, started;
+} nano_wt_t;
+
+/* one wave read at a phase, Q8 (an int8 of 127 is 32512) */
+static inline int32_t nano_wt_rd(const int8_t *w, uint32_t ph)
+{
+    uint32_t i = ph >> 25;
+    int32_t a = w[i], b = w[i + 1];
+    return (a << 8) + (((b - a) * (int32_t)((ph >> 9) & 0xffffu)) >> 8);
+}
+
+static __attribute__((noinline)) void nano_render_wt(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_wt_t *W;
+    const int8_t *base0, *base1;
+    int32_t ic1 = v->s[0], ic2 = v->s[1], tab = (p[P_E1] * 16) / 127, p1, target, pos, dpos, cq = p[P_E3] * 258, mq = p[P_E4] * 258;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    uint32_t i, inc = (m->inc > 1932735283u ? 1932735283u : m->inc) >> 1, inc2, ph, ph2, d;
+    tsvf_t flt;
+    if (!U)
+        return;
+    W = (nano_wt_t *)U;
+    if (tab > 15)
+        tab = 15;
+    p1 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    p1 = p1 + (p1 >> 7);                                                 /* 0..32767 */
+    target = p1 * 30;                                                    /* 0 .. 15 waves, Q16 */
+    if (!W->started) {
+        W->pos = target;
+        W->started = 1;
+    }
+    pos = W->pos;
+    dpos = (target - pos) / (int32_t)n;
+    d = (((inc >> 12) * (uint32_t)(cq >> 3)) >> 6) * 49u >> 7;           /* inc x 0.006 x CHORUS */
+    inc2 = inc + d;
+    ph = W->phase;
+    ph2 = W->phase2;
+    base0 = NANO_WT + tab * 16 * 129;
+    base1 = NANO_WT + ((tab + 1) & 15) * 16 * 129;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i++) {
+        int32_t ip, fr, acc = 0, k, x;
+        const int8_t *a0, *a1, *b0, *b1;
+        pos += dpos;
+        ip = pos >> 16;
+        if (ip > 14)
+            ip = 14;
+        if (ip < 0)
+            ip = 0;
+        fr = pos - (ip << 16);
+        if (fr > 65536)
+            fr = 65536;
+        a0 = base0 + ip * 129;
+        a1 = a0 + 129;
+        b0 = base1 + ip * 129;
+        b1 = b0 + 129;
+        for (k = 0; k < 2; k++) {
+            int32_t sa, c, w;
+            ph += inc;
+            sa = nano_wt_rd(a0, ph);
+            sa += (((nano_wt_rd(a1, ph) - sa) >> 1) * (fr >> 1)) >> 15;
+            if (mq > 0) {
+                w = nano_wt_rd(b0, ph);
+                w += (((nano_wt_rd(b1, ph) - w) >> 1) * (fr >> 1)) >> 15;
+                sa += (((w - sa) >> 1) * mq) >> 14;
+            }
+            if (cq > 0) {
+                ph2 += inc2;
+                c = nano_wt_rd(a0, ph2);
+                c += (((nano_wt_rd(a1, ph2) - c) >> 1) * (fr >> 1)) >> 15;
+                if (mq > 0) {
+                    w = nano_wt_rd(b0, ph2);
+                    w += (((nano_wt_rd(b1, ph2) - w) >> 1) * (fr >> 1)) >> 15;
+                    c += (((w - c) >> 1) * mq) >> 14;
+                }
+                sa += (((c - sa) >> 1) * cq) >> 15;
+            }
+            acc += sa;
+        }
+        x = acc >> 1;
+        x = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(x, m, i) << 1;
+    }
+    W->phase = ph;
+    W->phase2 = ph2;
+    W->pos = target;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -1401,6 +1501,14 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 12) {                               /* WAVETABLE: a clean slot, phases at zero, the position starts at the knob */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
         }
     }
     if (t->p[P_E0] == 11) {                               /* SAW: a clean slot, the comb empty, SYNC's balance at the knob */
@@ -1521,6 +1629,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         nano_render_sa(t, v, out, n, m);
         return;
     }
+    if (p[P_E0] == 12) {
+        nano_render_wt(t, v, out, n, m);
+        return;
+    }
     tsvf_t flt;
     uint32_t i, ph = v->ph[0], ps = v->ph[1], pb = v->ph[2], inc = m->inc, incs = inc, k = (uint32_t)p[P_E4];
     int32_t morph = clamp((p[P_E1] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq, sym = p[P_E2] * 258;
@@ -1634,13 +1746,17 @@ static const preset_t NANO_PRESETS[] = {
     {"HARD SYNC SAW", {11, 0, 50, 64, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
     {"COMB PLUCKER", {11, 64, 63, 120, 0, 127, 0, 64}, {0, 50, 60, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"CS80 BRASS", {11, 127, 60, 90, 0, 110, 0, 64}, {20, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    /* WAVETABLE: TYPE TABLE POSITION CHORUS MORPH | CUT RES KTR */
+    {"SINSAW SWEEP", {12, 0, 40, 30, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"PWM TABLE", {12, 16, 70, 60, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"VOWEL TABLE", {12, 40, 50, 40, 40, 127, 0, 64}, {10, 60, 100, 50}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 11, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 12, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

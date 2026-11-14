@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """Regenerate firmware/src/eng_nano_tables.h: the WAVESHAPER tables of the NANO engine, taken from the Nano Freak test bed's
-nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c [path/to/nano-freak/dsp/nf_braids_tables.c]"""
+nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c [path/to/nano-freak/dsp/nf_braids_tables.c [path/to/nano-freak/dsp/nf_wt_tables.c]]"""
 import re, sys
 src = open(sys.argv[1]).read()
 wsrc = open(sys.argv[2]).read() if len(sys.argv) > 2 else ""
@@ -63,4 +63,12 @@ if len(sys.argv) > 3:                                  # the SWARM (SuperWave) t
         assert len(v) == 257
         out.append("/* Braids: %s */" % text)
         out.append("static const int16_t %s[257] = {\n    %s\n};" % (var, rows(v, 12)))
+if len(sys.argv) > 4:                                  # WAVETABLE: the test bed's own wavetables, 16 tables x 16 waves x 129 int8 (additive / waveshaped, not Braids' data)
+    tsrc = open(sys.argv[4]).read()
+    m = re.search(r'nf_wt_waves\[[^\]]*\] = \{(.*?)\n\};', tsrc, re.S)
+    body = re.sub(r'/\*.*?\*/', '', m.group(1), flags=re.S)
+    v = [int(x) for x in re.findall(r'-?\d+', body)]
+    assert len(v) == 16 * 16 * 129, len(v)
+    out.append("/* WAVETABLE: 16 tables x 16 waves x 129 samples (the last repeats the first), int8 */")
+    out.append("static const int8_t NANO_WT[16 * 16 * 129] = {\n    " + ",\n    ".join(", ".join(str(x) for x in v[i:i + 129]) for i in range(0, len(v), 129)) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")

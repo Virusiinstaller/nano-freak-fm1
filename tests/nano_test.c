@@ -17,6 +17,7 @@
  * 4i. HARMONIC: period, PEAK, STRETCH, bounded sweep.
  * 4k. BASS: pitch of both waves, SUB puts a line one or two octaves down, WIDTH, bounded sweep.
  * 4l. SAW: sync repeats at the master period, comb feedback sign, CS80, bounded sweep.
+ * 4m. WAVETABLE: every table repeats at the key's period, POSITION, CHORUS, MORPH into the next table, bounded sweep.
  * 4j. PLUCK: the string's pitch, DECAY, POSITION, voices past the fourth silent, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
@@ -128,6 +129,13 @@ static void setup_sa(uint32_t wave, uint32_t e2, uint32_t e3)
 {
     setup(wave, e2, e3, 0, 127);
     trk[0].p[P_E0] = 11;
+}
+
+/* WAVETABLE: TABLE POSITION CHORUS MORPH on E1..E4, the filter open (TABLE n is knob 8 n + 1) */
+static void setup_wt(uint32_t table, uint32_t pos, uint32_t chorus, uint32_t morph)
+{
+    setup(table * 8 + 1, pos, chorus, morph, 127);
+    trk[0].p[P_E0] = 12;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -876,6 +884,85 @@ int main(void)
                     }
         printf("   SAW sweep: peak %.0f\n", peak);
         check("SAW sweep (WAVE, E2, E3, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
+    /* 4m. WAVETABLE (TYPE 12): every table repeats at the key's period, POSITION changes the wave, CHORUS adds a sharp second reader, MORPH reaches the next table, bounded sweeps */
+    {
+        double worst_c = 0, peak = 0, e, cc, d0 = 0, d1 = 0, n0 = 0, n1 = 0, sh0, sh1, lo;
+        static double y2[FS];
+        uint32_t tb, k, j, lag, pe, ch, mo;
+        lag = (uint32_t)((double)FS / hz(57) * 1 + 0.5);
+        {   /* the period of key 57 is 200.45 samples: use the multiple with a whole-sample lag */
+            double per0 = (double)FS / hz(57), per = per0, be = 1;
+            uint32_t kk;
+            for (kk = 1; kk <= 64; kk++) {
+                double d = fabs(kk * per0 - floor(kk * per0 + 0.5));
+                if (d < be) {
+                    be = d;
+                    per = kk * per0;
+                }
+                if (d < 0.05)
+                    break;
+            }
+            lag = (uint32_t)(per + 0.5);
+        }
+        for (tb = 0; tb < 16; tb++) {
+            setup_wt(tb, 50, 0, 0);
+            play(57, y, n);
+            e = cc = 0;
+            for (j = a; j + lag < n; j++) {
+                e += y[j] * y[j];
+                cc += y[j] * y[j + lag];
+            }
+            if (1.0 - cc / e > worst_c)
+                worst_c = 1.0 - cc / e;
+        }
+        printf("   WAVETABLE worst 1 - correlation at the key's period over 16 tables: %.4f\n", worst_c);
+        check("WAVETABLE every table repeats at the key's period (correlation over 0.95)", worst_c < 0.05);
+        setup_wt(0, 0, 0, 0);
+        play(57, y, n);
+        setup_wt(0, 127, 0, 0);
+        play(57, y2, n);
+        for (j = a; j < n; j++) {
+            d0 += (y[j] - y2[j]) * (y[j] - y2[j]);
+            n0 += y[j] * y[j];
+        }
+        printf("   WAVETABLE POSITION 0 vs 127: relative difference %.3f\n", sqrt(d0 / n0));
+        check("WAVETABLE POSITION changes the wave (the two renders differ by over 10 %)", sqrt(d0 / n0) > 0.1);
+        setup_wt(0, 40, 0, 0);
+        play(93, y, n);
+        sh0 = tone_at(y, a, n, hz(93) * 1.006);
+        lo = tone_at(y, a, n, hz(93) * 0.994);
+        setup_wt(0, 40, 127, 0);
+        play(93, y, n);
+        sh1 = tone_at(y, a, n, hz(93) * 1.006);
+        printf("   WAVETABLE sharp line: %.0f at CHORUS 0 (flat side %.0f), %.0f at CHORUS 127\n", sh0, lo, sh1);
+        check("WAVETABLE CHORUS brings a second reader 10 cents sharp (the line above the key more than doubles)", sh1 > 2 * sh0);
+        setup_wt(1, 60, 0, 127);
+        play(57, y, n);
+        setup_wt(2, 60, 0, 0);
+        play(57, y2, n);
+        d1 = n1 = 0;
+        for (j = a; j < n; j++) {
+            d1 += (y[j] - y2[j]) * (y[j] - y2[j]);
+            n1 += y2[j] * y2[j];
+        }
+        printf("   WAVETABLE table 1 with MORPH 127 vs table 2: relative difference %.4f\n", sqrt(d1 / n1));
+        check("WAVETABLE MORPH 127 is the next table at the same position (under 3 % apart)", sqrt(d1 / n1) < 0.03);
+        for (tb = 0; tb < 16; tb += 5)
+            for (pe = 0; pe <= 127; pe += 42)
+                for (ch = 0; ch <= 127; ch += 127)
+                    for (mo = 0; mo <= 127; mo += 127)
+                        for (k = 0; k < 3; k++) {
+                            static const uint8_t keys[] = {28, 60, 108};
+                            setup_wt(tb, pe, ch, mo);
+                            play(keys[k], y, 8192);
+                            for (j = 2048; j < 8192; j++)
+                                if (fabs(y[j]) > peak)
+                                    peak = fabs(y[j]);
+                        }
+        printf("   WAVETABLE sweep: peak %.0f\n", peak);
+        check("WAVETABLE sweep (TABLE, POSITION, CHORUS, MORPH, keys): bounded (peak under 65536)", peak < 65536);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
