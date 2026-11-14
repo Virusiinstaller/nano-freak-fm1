@@ -15,6 +15,7 @@
  * 4g. MODAL: rings at the key, DAMP narrows it, bounded sweep.
  * 4h. SWARM: the centre saw, DETUNE, bounded sweep.
  * 4i. HARMONIC: period, PEAK, STRETCH, bounded sweep.
+ * 4k. BASS: pitch of both waves, SUB puts a line one or two octaves down, WIDTH, bounded sweep.
  * 4j. PLUCK: the string's pitch, DECAY, POSITION, voices past the fourth silent, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
@@ -112,6 +113,13 @@ static void setup_pl(uint32_t bow, uint32_t position, uint32_t decay)
 {
     setup(bow, position, decay, 0, 127);
     trk[0].p[P_E0] = 9;
+}
+
+/* BASS: WAVE WIDTH SUB on E1..E3, the filter open */
+static void setup_bs(uint32_t wave, uint32_t width, uint32_t sub)
+{
+    setup(wave, width, sub, 0, 127);
+    trk[0].p[P_E0] = 10;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -733,6 +741,75 @@ int main(void)
                     }
         printf("   PLUCK sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
         check("PLUCK sweep (BOW, POSITION, DECAY, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
+    }
+
+    /* 4k. BASS (TYPE 10): pitch of both waves, SUB adds a line one or two octaves down, WIDTH moves the even harmonics, bounded sweeps */
+    {
+        double worstc = 0, peak = 0, f = hz(57), lo_a, hi_a, lo_b, hi_b, mid, sq1, sq2;
+        uint32_t w, k, j, wd, su;
+        for (w = 0; w < 2; w++)
+            for (k = 0; k < 4; k++) {
+                static const uint8_t bkeys[] = {36, 48, 60, 72};
+                double c;
+                setup_bs(w * 127, 0, 64);
+                play(bkeys[k], y, n);
+                if (!w) {
+                    c = 1200 * log2(pitch(y, a, n) / hz(bkeys[k]));
+                    if (!(fabs(c) < 1e9))
+                        c = 1e9;
+                } else {                                         /* the saw crosses zero twice a cycle at some widths: find the strongest line */
+                    double best = 0;
+                    c = 0;
+                    for (j = 0; j <= 40; j++) {
+                        double cc = -20 + j, h = tone_at(y, a, n, hz(bkeys[k]) * pow(2.0, cc / 1200.0));
+                        if (h > best) {
+                            best = h;
+                            c = cc;
+                        }
+                    }
+                    if (tone_at(y, a, n, hz(bkeys[k]) / 2) > 0.3 * best || tone_at(y, a, n, 2 * hz(bkeys[k])) > best)
+                        c = 1200;
+                }
+                if (fabs(c) > worstc)
+                    worstc = fabs(c);
+            }
+        printf("   BASS pitch, worst of 2 waves x 4 octaves: %.2f cents\n", worstc);
+        check("BASS at the key's pitch (6 cents for the square, 20 for the saw's spectral line), SUB in the middle", worstc < 20.0);
+        setup_bs(0, 64, 0);
+        play(57, y, n);
+        lo_a = tone_at(y, a, n, f / 4);
+        hi_a = tone_at(y, a, n, f / 2);
+        setup_bs(0, 64, 127);
+        play(57, y, n);
+        lo_b = tone_at(y, a, n, f / 4);
+        hi_b = tone_at(y, a, n, f / 2);
+        setup_bs(0, 64, 64);
+        play(57, y, n);
+        mid = tone_at(y, a, n, f / 4) + tone_at(y, a, n, f / 2);
+        printf("   BASS SUB 0: -2 oct %.0f, -1 oct %.0f; SUB 127: -2 oct %.0f, -1 oct %.0f; SUB 64: %.0f\n", lo_a, hi_a, lo_b, hi_b, mid);
+        check("BASS SUB below the middle puts the line two octaves down, above it one octave down", lo_a > 3 * hi_a && hi_b > 3 * lo_b);
+        check("BASS SUB in the middle is off (both sub lines under a fifth of the ends')", mid < 0.2 * (lo_a > hi_b ? lo_a : hi_b));
+        setup_bs(0, 0, 64);
+        play(57, y, n);
+        sq1 = tone_at(y, a, n, 2 * f);
+        setup_bs(0, 100, 64);
+        play(57, y, n);
+        sq2 = tone_at(y, a, n, 2 * f);
+        printf("   BASS 2nd harmonic: %.0f at WIDTH 0, %.0f at WIDTH 100\n", sq1, sq2);
+        check("BASS WIDTH away from the middle brings in the even harmonics (over 5x)", sq2 > 5 * sq1);
+        for (w = 0; w < 2; w++)
+            for (wd = 0; wd <= 127; wd += 32)
+                for (su = 0; su <= 127; su += 32)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {24, 60, 108};
+                        setup_bs(w * 127, wd, su);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++)
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                    }
+        printf("   BASS sweep: peak %.0f\n", peak);
+        check("BASS sweep (WAVE, WIDTH, SUB, keys): bounded (peak under 65536)", peak < 65536);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

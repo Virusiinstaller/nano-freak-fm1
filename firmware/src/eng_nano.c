@@ -25,6 +25,7 @@
  *
  * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
  *
+ * TYPE 10 is BASS (Braids' SQUARE_SUB / SAW_SUB): WAVE, WIDTH, SUB.
  * TYPE 9 is PLUCK (Braids' KarplusStr): BOW, POSITION, DECAY; four voices (the delay lines).
  *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
@@ -35,7 +36,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -469,6 +470,7 @@ typedef union {
     uint32_t sw[10];                                    /* SWARM's nano_sw_t (below) */
     uint32_t hm[40];                                    /* HARMONIC's nano_hm_t (below) */
     uint32_t pl[12];                                    /* PLUCK's nano_pl_t (below) */
+    uint32_t bs[12];                                    /* BASS's nano_bs_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
@@ -953,6 +955,220 @@ static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* Braids' AnalogOscillator (polyBLEP square, variable saw, saw, CSAW), shared by BASS and SAW: the increment is given
+ * directly (2^32 = one cycle a sample), blocks are at most NANO_AO_MAX samples. State per oscillator in nano_ao_t. */
+#define NANO_AO_MAX 32
+enum { NANO_A_SQUARE, NANO_A_VSAW, NANO_A_SAW, NANO_A_CSAW };
+typedef struct {
+    uint32_t phase, prev_inc;
+    int32_t next_sample, disc, high;
+} nano_ao_t;
+
+static inline int32_t nano_this_blep(uint32_t t) { if (t > 65535u) t = 65535u; return (int32_t)(t * t >> 18); }
+static inline int32_t nano_next_blep(uint32_t t) { if (t > 65535u) t = 65535u; t = 65535u - t; return -(int32_t)(t * t >> 18); }
+static inline uint32_t nano_d16(uint32_t i) { return (i >> 16) ? (i >> 16) : 1u; }
+
+static void nano_ao_render(nano_ao_t *o, int shape, uint32_t inc, int32_t parameter, int32_t aux, const uint8_t *sync_in,
+                           int16_t *buffer, uint8_t *sync_out, uint32_t size)
+{
+    uint32_t phase_increment, inc_inc, phase = o->phase, n;
+    int32_t next_sample = o->next_sample, disc = o->disc, high = o->high;
+    if (inc > 0x80000000u)
+        inc = 0x80000000u;
+    if (inc < 1u)
+        inc = 1u;
+    if (!o->prev_inc)
+        o->prev_inc = inc;
+    phase_increment = o->prev_inc;
+    inc_inc = o->prev_inc < inc ? (inc - o->prev_inc) / size : ~((o->prev_inc - inc) / size);
+    if (shape == NANO_A_SQUARE && parameter > 32000)
+        parameter = 32000;
+    if (shape == NANO_A_VSAW && parameter < 1024)
+        parameter = 1024;
+    for (n = 0; n < size; n++) {
+        int32_t sync_reset = 0, self_reset = 0, transition_during_reset = 0, this_sample;
+        uint32_t reset_time = 0, pw = 0;
+        phase_increment += inc_inc;
+        if (shape == NANO_A_SQUARE)
+            pw = (uint32_t)(32768 - parameter) << 16;
+        else if (shape == NANO_A_VSAW)
+            pw = (uint32_t)parameter << 16;
+        else if (shape == NANO_A_CSAW) {
+            pw = (uint32_t)parameter * 49152u;
+            if (pw < 8u * phase_increment)
+                pw = 8u * phase_increment;
+        }
+        this_sample = next_sample;
+        next_sample = 0;
+        if (sync_in && sync_in[n]) {
+            uint32_t phase_at_reset;
+            reset_time = (uint32_t)(sync_in[n] - 1) << 9;
+            phase_at_reset = phase + (65535u - reset_time) * (phase_increment >> 16);
+            sync_reset = 1;
+            if (shape == NANO_A_SQUARE || shape == NANO_A_VSAW) {
+                if (phase_at_reset < phase || (!high && phase_at_reset >= pw))
+                    transition_during_reset = 1;
+            } else if (shape == NANO_A_SAW) {
+                if (phase_at_reset < phase)
+                    transition_during_reset = 1;
+            } else {
+                if (phase_at_reset < phase || (!high && phase_at_reset >= pw))
+                    transition_during_reset = 1;
+            }
+            if (shape == NANO_A_SQUARE) {
+                if (phase_at_reset >= pw) {
+                    this_sample -= nano_this_blep(reset_time);
+                    next_sample -= nano_next_blep(reset_time);
+                }
+            } else if (shape == NANO_A_SAW) {
+                int32_t d = (int32_t)(phase_at_reset >> 17);
+                this_sample -= d * nano_this_blep(reset_time) >> 15;
+                next_sample -= d * nano_next_blep(reset_time) >> 15;
+            } else if (shape == NANO_A_VSAW) {
+                int32_t before = (int32_t)(phase_at_reset >> 18) + (int32_t)((phase_at_reset - pw) >> 18);
+                int32_t after = (int32_t)((0u - pw) >> 18), d = after - before;
+                this_sample += d * nano_this_blep(reset_time) >> 15;
+                next_sample += d * nano_next_blep(reset_time) >> 15;
+            } else if (phase >= pw) {
+                int32_t before, d;
+                disc = -2048 + (aux >> 2);
+                before = (int32_t)(phase_at_reset >> 18);
+                d = (int32_t)(int16_t)disc - before;
+                this_sample += d * nano_this_blep(reset_time) >> 15;
+                next_sample += d * nano_next_blep(reset_time) >> 15;
+            }
+        }
+        phase += phase_increment;
+        if (phase < phase_increment)
+            self_reset = 1;
+        if (sync_out)
+            sync_out[n] = phase < phase_increment ? (uint8_t)(phase / (phase_increment >> 7) + 1) : 0;
+        if (shape == NANO_A_SAW) {
+            if ((transition_during_reset || !sync_reset) && self_reset) {
+                uint32_t t = phase / nano_d16(phase_increment);
+                this_sample -= nano_this_blep(t);
+                next_sample -= nano_next_blep(t);
+            }
+        } else {
+            while (transition_during_reset || !sync_reset) {
+                if (!high) {
+                    uint32_t t;
+                    if (phase < pw)
+                        break;
+                    t = (phase - pw) / nano_d16(phase_increment);
+                    if (shape == NANO_A_SQUARE) {
+                        this_sample += nano_this_blep(t);
+                        next_sample += nano_next_blep(t);
+                    } else if (shape == NANO_A_VSAW) {
+                        this_sample -= nano_this_blep(t) >> 1;
+                        next_sample -= nano_next_blep(t) >> 1;
+                    } else {
+                        int32_t d = (int32_t)(int16_t)(phase >> 18) - (int32_t)(int16_t)disc;
+                        this_sample += (int16_t)d * nano_this_blep(t) >> 15;
+                        next_sample += (int16_t)d * nano_next_blep(t) >> 15;
+                    }
+                    high = 1;
+                }
+                if (high) {
+                    uint32_t t;
+                    if (!self_reset)
+                        break;
+                    self_reset = 0;
+                    t = phase / nano_d16(phase_increment);
+                    if (shape == NANO_A_SQUARE) {
+                        this_sample -= nano_this_blep(t);
+                        next_sample -= nano_next_blep(t);
+                    } else if (shape == NANO_A_VSAW) {
+                        this_sample -= nano_this_blep(t) >> 1;
+                        next_sample -= nano_next_blep(t) >> 1;
+                    } else {
+                        int32_t d;
+                        disc = -2048 + (aux >> 2);
+                        d = (int32_t)(int16_t)disc - 16383;
+                        this_sample += (int16_t)d * nano_this_blep(t) >> 15;
+                        next_sample += (int16_t)d * nano_next_blep(t) >> 15;
+                    }
+                    high = 0;
+                }
+            }
+        }
+        if (sync_reset) {
+            phase = reset_time * (phase_increment >> 16);
+            high = 0;
+        }
+        switch (shape) {
+        case NANO_A_SQUARE:
+            next_sample += phase < pw ? 0 : 32767;
+            buffer[n] = (int16_t)((this_sample - 16384) << 1);
+            break;
+        case NANO_A_VSAW:
+            next_sample += (int32_t)(phase >> 18);
+            next_sample += (int32_t)((phase - pw) >> 18);
+            buffer[n] = (int16_t)((this_sample - 16384) << 1);
+            break;
+        case NANO_A_SAW:
+            next_sample += (int32_t)(phase >> 17);
+            buffer[n] = (int16_t)((this_sample - 16384) << 1);
+            break;
+        default:
+            next_sample += phase < pw ? disc : (int32_t)(phase >> 18);
+            buffer[n] = (int16_t)((this_sample - 8192) << 1);
+            break;
+        }
+    }
+    o->prev_inc = phase_increment;
+    o->phase = phase;
+    o->next_sample = next_sample;
+    o->high = high;
+    o->disc = disc;
+}
+
+/* BASS (Braids' SQUARE_SUB / SAW_SUB, in the Nano Freak test bed): a square or variable saw with a square one or two
+ * octaves down. E1 WAVE (square, saw), E2 WIDTH (pulse width / saw shape), E3 SUB (below the middle two octaves down, above
+ * one octave down; the mix is zero in the middle and full at both ends). State: two nano_ao_t and the last SUB. */
+typedef struct {
+    nano_ao_t a, b;
+    int32_t prev_p1;
+} nano_bs_t;
+
+static __attribute__((noinline)) void nano_render_bs(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_bs_t *B;
+    int16_t x[NANO_AO_MAX], y[NANO_AO_MAX];
+    int32_t ic1 = v->s[0], ic2 = v->s[1], p0, p1;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    uint32_t i, j, size, inc = m->inc;
+    tsvf_t flt;
+    if (!U)
+        return;
+    B = (nano_bs_t *)U;
+    p0 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    p0 = p0 + (p0 >> 7);                                                 /* 0..32767 */
+    p1 = p[P_E3] * 258;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i += size) {
+        int32_t start = B->prev_p1, delta = p1 - B->prev_p1, incr, xx = 0;
+        size = n - i < NANO_AO_MAX ? n - i : NANO_AO_MAX;
+        nano_ao_render(&B->a, p[P_E1] >= 64 ? NANO_A_VSAW : NANO_A_SQUARE, inc, p0, 0, 0, x, 0, size);
+        nano_ao_render(&B->b, NANO_A_SQUARE, p1 < 16384 ? inc >> 2 : inc >> 1, 0, 0, 0, y, 0, size);
+        incr = 32767 / (int32_t)size;
+        for (j = 0; j < size; j++) {
+            int32_t q, gain, sample, s;
+            xx += incr;
+            q = start + (delta * xx >> 15);
+            gain = (q < 16384 ? (16383 - q) : (q - 16384)) << 1;
+            sample = (x[j] * (65535 - gain) + y[j] * gain) >> 16;
+            s = soft_knee(analog_tap(&flt, 0, (sample * 3) >> 3, &ic1, &ic2, 0), 16000) << 1;
+            out[i + j] += voice_amp(s, m, i + j) << 1;
+        }
+        B->prev_p1 = p1;
+    }
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 /* PLUCK (Braids' KarplusStr, in the Nano Freak test bed): a string made of a delay line that is averaged at random, struck by
  * noise. E1 BOW (noise fed in while the note is held), E2 POSITION (where it is struck), E3 DECAY. One string per voice (Braids'
  * three are for a mono voice's overlapping notes), rendered at half rate. The delay lines (about 2 KB each) follow the slots in
@@ -1087,6 +1303,16 @@ static void nano_note_on(track_t *t, voice_t *v)
             U->ch.timbre = t->p[P_E2] * 258;
         }
     }
+    if (t->p[P_E0] == 10) {                               /* BASS: a clean slot, the sub level starts at the knob */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            nano_bs_t *B = (nano_bs_t *)U;
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
+            B->prev_p1 = t->p[P_E3] * 258;
+        }
+    }
     if (t->p[P_E0] == 9) {                                /* PLUCK: the string is struck at the first block */
         nano_su_t *U = nano_slot(t, v);
         if (U) {
@@ -1095,7 +1321,7 @@ static void nano_note_on(track_t *t, voice_t *v)
             for (k = 0; k < sizeof *U / 4; k++)
                 ((uint32_t *)U)[k] = 0;
             P->strike = 1;
-            P->rng = 0x21u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 16) | 1u;
+            P->rng = (0x21u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 16)) | 1u;
         }
     }
     if (t->p[P_E0] == 8) {                                /* HARMONIC: a clean slot, phases at zero */
@@ -1171,6 +1397,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 9) {
         nano_render_pl(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 10) {
+        nano_render_bs(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -1278,13 +1508,17 @@ static const preset_t NANO_PRESETS[] = {
     {"HARP", {9, 0, 40, 90, 0, 127, 0, 64}, {0, 50, 100, 50}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     {"MUTED PLUCK", {9, 0, 70, 30, 0, 127, 0, 64}, {0, 30, 100, 30}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"BOWED STRING", {9, 70, 50, 110, 0, 127, 0, 64}, {20, 80, 100, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    /* BASS: TYPE WAVE WIDTH SUB 0 | CUT RES KTR */
+    {"SUB SQUARE", {10, 0, 0, 20, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
+    {"SAW SUB LOW", {10, 90, 70, 10, 0, 100, 20, 64}, {0, 70, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
+    {"OCTAVE BASS", {10, 0, 40, 110, 0, 110, 10, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 9, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 10, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},
