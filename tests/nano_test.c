@@ -14,6 +14,7 @@
  * 4f. CHORDS: the chord notes, CHORD changes the third, bounded sweep.
  * 4g. MODAL: rings at the key, DAMP narrows it, bounded sweep.
  * 4h. SWARM: the centre saw, DETUNE, bounded sweep.
+ * 4i. HARMONIC: period, PEAK, STRETCH, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -96,6 +97,13 @@ static void setup_sw(uint32_t wave, uint32_t detune, uint32_t mix)
 {
     setup(wave, detune, mix, 0, 127);
     trk[0].p[P_E0] = 7;
+}
+
+/* HARMONIC: PEAK WIDTH CHORUS on E1..E3 and STRETCH on E4, the filter open */
+static void setup_hm(uint32_t peak, uint32_t width, uint32_t chorus, uint32_t stretch)
+{
+    setup(peak, width, chorus, stretch, 127);
+    trk[0].p[P_E0] = 8;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -580,6 +588,70 @@ int main(void)
                     }
         printf("   SWARM sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
         check("SWARM sweep (WAVE, DETUNE, MIX, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
+    }
+
+    /* 4i. HARMONIC (TYPE 8): the period, PEAK moves the strongest harmonic up, STRETCH moves the partials off the harmonics, bounded sweeps */
+    {
+        double peak = 0, dc = 0, cnt = 0, f = hz(45), per0 = (double)FS / hz(57), per = per0, e = 0, cc = 0, be = 1, on, off;
+        uint32_t pe, wd, ch, k, j, kk, lag, pk[3], ti;
+        static const uint32_t ps[3] = {10, 50, 100};
+        for (kk = 1; kk <= 64; kk++) {
+            double d = fabs(kk * per0 - floor(kk * per0 + 0.5));
+            if (d < be) {
+                be = d;
+                per = kk * per0;
+            }
+            if (d < 0.05)
+                break;
+        }
+        lag = (uint32_t)(per + 0.5);
+        setup_hm(60, 60, 0, 0);
+        play(57, y, n);
+        for (j = a; j + lag < n; j++) {
+            e += y[j] * y[j];
+            cc += y[j] * y[j + lag];
+        }
+        printf("   HARMONIC: 1 - correlation at the period %.4f\n", 1.0 - cc / e);
+        check("HARMONIC repeats at the key's period (correlation over 0.97)", 1.0 - cc / e < 0.03);
+        for (ti = 0; ti < 3; ti++) {
+            double best = 0;
+            setup_hm(ps[ti], 40, 0, 0);
+            play(45, y, n);
+            pk[ti] = 1;
+            for (k = 1; k <= 12; k++) {
+                double h = tone_at(y, a, n, f * k);
+                if (h > best) {
+                    best = h;
+                    pk[ti] = k;
+                }
+            }
+        }
+        printf("   HARMONIC strongest harmonic: %u at PEAK 10, %u at 50, %u at 100\n", pk[0], pk[1], pk[2]);
+        check("HARMONIC PEAK moves the strongest harmonic up (PEAK 10 < 50 < 100)", pk[0] < pk[1] && pk[1] < pk[2]);
+        setup_hm(50, 40, 0, 0);
+        play(45, y, n);
+        on = tone_at(y, a, n, 4 * f);
+        setup_hm(50, 40, 0, 100);
+        play(45, y, n);
+        off = tone_at(y, a, n, 4 * f);
+        printf("   HARMONIC 4th harmonic: %.0f harmonic, %.0f at STRETCH 100\n", on, off);
+        check("HARMONIC STRETCH moves the 4th partial off the 4th harmonic (the line falls by over 3x)", off < on / 3);
+        for (pe = 0; pe <= 127; pe += 32)
+            for (wd = 0; wd <= 127; wd += 63)
+                for (ch = 0; ch <= 127; ch += 127)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {36, 60, 96};
+                        setup_hm(pe, wd, ch, (k & 1u) * 90);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                        cnt += 6144;
+                    }
+        printf("   HARMONIC sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
+        check("HARMONIC sweep (PEAK, WIDTH, CHORUS, STRETCH, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

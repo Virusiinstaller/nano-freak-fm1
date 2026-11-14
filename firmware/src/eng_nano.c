@@ -23,6 +23,8 @@
  *
  * TYPE 7 is SWARM (Braids' SuperWave): WAVE, DETUNE, MIX.
  *
+ * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -31,7 +33,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -463,6 +465,7 @@ typedef union {
     nano_ch_t ch;
     nano_mo_t mo;
     uint32_t sw[10];                                    /* SWARM's nano_sw_t (below) */
+    uint32_t hm[40];                                    /* HARMONIC's nano_hm_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS);
@@ -830,6 +833,121 @@ static __attribute__((noinline)) void nano_render_sw(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* HARMONIC (Braids' Harmo, in the Nano Freak test bed): twelve sine harmonics whose levels follow a moving spectral peak,
+ * rendered at half rate and interpolated. E1 PEAK (where the peak sits), E2 WIDTH (its width and a second peak), E3 CHORUS
+ * (a second, slightly sharp copy crossfaded in), E4 STRETCH (partial n at n (1 + 0.01 STRETCH (n^2 - 1)), 0 is harmonic).
+ * State in the slot union (nano_hm_t). */
+#define NANO_HARM 12
+typedef struct {
+    uint32_t phase, phase2;
+    int32_t amp[NANO_HARM], prev, stretched;
+    uint32_t sph[NANO_HARM], sph2[NANO_HARM];
+} nano_hm_t;
+
+static inline int32_t nano_sin824(uint32_t ph)
+{
+    int32_t a = NANO_BSIN[ph >> 24], b = NANO_BSIN[(ph >> 24) + 1];
+    return a + (((b - a) * (int32_t)((ph >> 8) & 0xffff)) >> 16);
+}
+
+static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_hm_t *H;
+    int32_t target[NANO_HARM], amp[NANO_HARM], p0 = p[P_E1] * 258, p1, chorus = p[P_E3] * 516, stretch = p[P_E4] * 258, prev, c;
+    int32_t peak, second_peak, second_amount, sqrt2, sqrt_w, width, total = 0, atten, ic1 = v->s[0], ic2 = v->s[1];
+    uint32_t pinc[NANO_HARM], pinc2[NANO_HARM], phase, phase2, inc, inc2, i, j, nn = n & ~1u;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    int st = stretch > 0;
+    tsvf_t flt;
+    if (!U)
+        return;
+    H = (nano_hm_t *)U;
+    p1 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    p1 = (p1 + (p1 >> 7)) >> 0;                                          /* 0..32767 */
+    if (chorus > 65535)
+        chorus = 65535;
+    phase = H->phase;
+    phase2 = H->phase2;
+    prev = H->prev;
+    inc = m->inc << 1;
+    inc2 = inc + (uint32_t)(((uint64_t)inc * (uint32_t)((int64_t)chorus * 97300 / 65536)) >> 24);   /* up to about 10 cents sharp */
+    peak = (NANO_HARM * p0) >> 7;
+    second_peak = (peak >> 1) + NANO_HARM * 128;
+    second_amount = (p1 * p1) >> 15;
+    sqrt2 = p1 < 16384 ? p1 >> 6 : 511 - (p1 >> 6);
+    sqrt_w = (sqrt2 * sqrt2) >> 10;
+    width = sqrt_w * sqrt_w + 4;
+    for (i = 0; i < NANO_HARM; i++) {
+        int32_t x = (int32_t)i << 8, d, g;
+        d = x - peak;
+        g = 32768 * 128 / (128 + d * d / width);
+        d = x - second_peak;
+        g += second_amount * 128 / (128 + d * d / width);
+        total += g;
+        target[i] = g;
+    }
+    atten = 2147483647 / total;
+    if (st && !H->stretched)
+        for (i = 0; i < NANO_HARM; i++) {
+            H->sph[i] = phase * (i + 1);
+            H->sph2[i] = phase2 * (i + 1);
+        }
+    H->stretched = st;
+    for (i = 0; i < NANO_HARM; i++) {
+        uint64_t pi = (uint64_t)inc * (i + 1), pi2 = (uint64_t)inc2 * (i + 1);
+        if (st) {                                                        /* partial n at n (1 + 0.01 STRETCH (n^2 - 1)) */
+            uint32_t rr = 65536u + (uint32_t)((((stretch > 32768 ? 32768 : stretch) * 655) >> 15) * ((i + 1) * (i + 1) - 1));
+            pi = (uint64_t)inc * (i + 1) * rr >> 16;
+            pi2 = (uint64_t)inc2 * (i + 1) * rr >> 16;
+        }
+        pinc[i] = (uint32_t)pi;
+        pinc2[i] = (uint32_t)pi2;
+        if (st ? (int64_t)(pi >> 16) > 0x4000 : (int32_t)(inc >> 16) * (int32_t)(i + 1) > 0x4000)
+            target[i] = 0;
+        else
+            target[i] = (target[i] * atten) >> 16;
+        amp[i] = H->amp[i];
+    }
+    c = chorus;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (j = 0; j < nn; j += 2) {
+        int32_t a = 0, b = 0, r, k;
+        phase += inc;
+        phase2 += inc2;
+        for (i = 0; i < NANO_HARM; i++) {
+            if (st) {
+                H->sph[i] += pinc[i];
+                H->sph2[i] += pinc2[i];
+                a += (nano_sin824(H->sph[i]) * amp[i]) >> 15;
+                if (c)
+                    b += (nano_sin824(H->sph2[i]) * amp[i]) >> 15;
+            } else {
+                a += (nano_sin824(phase * (i + 1)) * amp[i]) >> 15;
+                if (c)
+                    b += (nano_sin824(phase2 * (i + 1)) * amp[i]) >> 15;
+            }
+            amp[i] += (target[i] - amp[i]) >> 8;
+        }
+        a = clamp(a, -32767, 32767);
+        b = clamp(b, -32767, 32767);
+        r = c ? (int32_t)(((int64_t)a * (131072 - c) + (int64_t)b * c) >> 17) : a;
+        for (k = 0; k < 2; k++) {
+            int32_t x = k ? r : (r + prev) >> 1, s = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+            out[j + k] += voice_amp(s, m, j + k) << 1;
+        }
+        prev = r;
+    }
+    H->phase = phase;
+    H->phase2 = phase2;
+    H->prev = prev;
+    for (i = 0; i < NANO_HARM; i++)
+        H->amp[i] = amp[i];
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -852,6 +970,14 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 8) {                                /* HARMONIC: a clean slot, phases at zero */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
         }
     }
     if (t->p[P_E0] == 7) {                                /* SWARM: the six start at random phases */
@@ -911,6 +1037,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 7) {
         nano_render_sw(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 8) {
+        nano_render_hm(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -1010,13 +1140,17 @@ static const preset_t NANO_PRESETS[] = {
     {"SUPER SAW", {7, 0, 60, 127, 0, 127, 0, 64}, {5, 80, 100, 40}, 0, 0, FX(0, 20, 20, 25), PAT(0)},
     {"SWARM PAD", {7, 96, 40, 100, 0, 110, 0, 64}, {40, 90, 100, 90}, 0, 0, FX(0, 40, 30, 40), PAT(0)},
     {"DETUNED SQUARES", {7, 32, 90, 90, 0, 127, 10, 64}, {5, 80, 90, 40}, 25, 1, FX(0, 20, 30, 25), PAT(4)},
+    /* HARMONIC: TYPE PEAK WIDTH CHORUS STRETCH | CUT RES KTR */
+    {"ORGAN DRAWBARS", {8, 30, 70, 20, 0, 127, 0, 64}, {2, 70, 100, 30}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"SPECTRAL SWEEP", {8, 70, 40, 60, 0, 127, 0, 64}, {20, 80, 100, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"STRETCHED BELL", {8, 20, 30, 30, 70, 127, 0, 64}, {0, 80, 0, 70}, 0, 0, FX(0, 40, 30, 40), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 7, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 8, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},
