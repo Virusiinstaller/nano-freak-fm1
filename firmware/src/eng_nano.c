@@ -25,6 +25,8 @@
  *
  * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
  *
+ * TYPE 9 is PLUCK (Braids' KarplusStr): BOW, POSITION, DECAY; four voices (the delay lines).
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -33,7 +35,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -466,9 +468,12 @@ typedef union {
     nano_mo_t mo;
     uint32_t sw[10];                                    /* SWARM's nano_sw_t (below) */
     uint32_t hm[40];                                    /* HARMONIC's nano_hm_t (below) */
+    uint32_t pl[12];                                    /* PLUCK's nano_pl_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
-ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS);
+#define NANO_PL_V 4
+#define NANO_PL_DL 1026
+ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS + NANO_PL_V * NANO_PL_DL * 2);
 
 static nano_su_t *nano_slot(track_t *t, voice_t *v)
 {
@@ -948,6 +953,116 @@ static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* PLUCK (Braids' KarplusStr, in the Nano Freak test bed): a string made of a delay line that is averaged at random, struck by
+ * noise. E1 BOW (noise fed in while the note is held), E2 POSITION (where it is struck), E3 DECAY. One string per voice (Braids'
+ * three are for a mono voice's overlapping notes), rendered at half rate. The delay lines (about 2 KB each) follow the slots in
+ * the part's engine memory and only the first NANO_PL_V voices have one: the rest are silent. */
+typedef struct {
+    uint32_t size, write_ptr, shift, mask, init_ptr, phase, inc, max_inc, rng, strike;
+    int32_t prev;
+} nano_pl_t;
+
+static int16_t *nano_dl(track_t *t, voice_t *v)
+{
+    uint32_t i = (uint32_t)(v - t->v);
+    if (t < &trk[0] || t >= &trk[NPART] || i >= NANO_PL_V)
+        return 0;
+    return (int16_t *)((uint8_t *)ENG_MEM(t - trk) + sizeof(nano_su_t) * NANO_SLOTS) + i * NANO_PL_DL;
+}
+
+static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    int16_t *dl = nano_dl(t, v);
+    nano_pl_t *P;
+    uint32_t inc_full = (m->inc > 0x7FFFFFFFu ? 0x7FFFFFFFu : m->inc) << 1, i, nn = n & ~1u, update_prob, rng;
+    int32_t p0 = p[P_E3] * 258, p1, bow = p[P_E1] * 258, loss, prev, ic1 = v->s[0], ic2 = v->s[1];
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    tsvf_t flt;
+    if (!U || !dl)
+        return;
+    P = (nano_pl_t *)U;
+    p1 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    p1 = p1 + (p1 >> 7);                                                 /* 0..32767 */
+    if (P->strike) {
+        int32_t increment = (int32_t)inc_full, width = (3 * p1) >> 1;
+        P->shift = 0;
+        while (increment > (2 << 22)) {
+            increment >>= 1;
+            P->shift++;
+        }
+        P->size = 1024u >> P->shift;
+        P->mask = P->size - 1;
+        P->write_ptr = 0;
+        P->max_inc = inc_full << 1;
+        P->inc = inc_full;
+        P->init_ptr = (uint32_t)((int64_t)P->size * (8192 + width) >> 16);
+        P->strike = 0;
+        for (i = 0; i < NANO_PL_DL; i++)
+            dl[i] = 0;
+    }
+    P->inc = inc_full < P->max_inc ? inc_full : P->max_inc;
+    update_prob = p0 < 16384 ? 65535u : (uint32_t)(131072 - (p0 >> 3) * 31);
+    loss = 4096 - (int32_t)(inc_full >> 14);
+    loss = loss < 256 ? 256 : loss;
+    loss = p0 < 16384 ? (loss * (16384 - p0)) >> 14 : 0;
+    prev = P->prev;
+    rng = P->rng;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < nn; i += 2) {
+        int32_t sample = 0, k;
+        if (P->init_ptr) {
+            int32_t ex;
+            P->init_ptr--;
+            rng = rng * 1664525u + 1013904223u;
+            ex = (dl[P->init_ptr] + 3 * (int16_t)(rng >> 16)) >> 2;
+            dl[P->init_ptr] = (int16_t)ex;
+            sample = ex;
+        } else {
+            uint32_t read_ptr, wp = P->write_ptr;
+            P->phase += P->inc;
+            read_ptr = ((P->phase >> (22 + P->shift)) + 2) & P->mask;
+            while (wp != read_ptr) {
+                uint32_t next = (wp + 1) & P->mask;
+                int32_t a = dl[wp], b = dl[next];
+                rng = rng * 1664525u + 1013904223u;
+                if ((rng & 0xffff) <= update_prob) {
+                    int32_t sum = a + b;
+                    sum = sum < 0 ? -(-sum >> 1) : (sum >> 1);
+                    if (loss)
+                        sum = (sum * (32768 - loss)) >> 15;
+                    if (bow) {                                           /* the Nano Freak addition: noise into the string while it is held */
+                        rng = rng * 1664525u + 1013904223u;
+                        sum += ((int16_t)(rng >> 16) * bow) >> 22;
+                        sum = clamp(sum, -32767, 32767);
+                    }
+                    dl[wp] = (int16_t)sum;
+                }
+                if (wp == 0)
+                    dl[P->size] = dl[0];
+                wp = next;
+            }
+            P->write_ptr = wp;
+            {
+                uint32_t ph = P->phase >> P->shift;
+                int32_t a = dl[ph >> 22], b = dl[(ph >> 22) + 1];
+                sample = a + (((b - a) * (int32_t)((ph >> 6) & 0xffff)) >> 16);
+            }
+        }
+        sample = clamp(sample, -32767, 32767);
+        for (k = 0; k < 2; k++) {
+            int32_t x = k ? sample : (prev + sample) >> 1, s = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+            out[i + k] += voice_amp(s, m, i + k) << 1;
+        }
+        prev = sample;
+    }
+    P->prev = prev;
+    P->rng = rng;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -970,6 +1085,17 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 9) {                                /* PLUCK: the string is struck at the first block */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            nano_pl_t *P = (nano_pl_t *)U;
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
+            P->strike = 1;
+            P->rng = 0x21u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 16) | 1u;
         }
     }
     if (t->p[P_E0] == 8) {                                /* HARMONIC: a clean slot, phases at zero */
@@ -1041,6 +1167,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 8) {
         nano_render_hm(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 9) {
+        nano_render_pl(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -1144,13 +1274,17 @@ static const preset_t NANO_PRESETS[] = {
     {"ORGAN DRAWBARS", {8, 30, 70, 20, 0, 127, 0, 64}, {2, 70, 100, 30}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"SPECTRAL SWEEP", {8, 70, 40, 60, 0, 127, 0, 64}, {20, 80, 100, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     {"STRETCHED BELL", {8, 20, 30, 30, 70, 127, 0, 64}, {0, 80, 0, 70}, 0, 0, FX(0, 40, 30, 40), PAT(0)},
+    /* PLUCK: TYPE BOW POSITION DECAY 0 | CUT RES KTR */
+    {"HARP", {9, 0, 40, 90, 0, 127, 0, 64}, {0, 50, 100, 50}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"MUTED PLUCK", {9, 0, 70, 30, 0, 127, 0, 64}, {0, 30, 100, 30}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"BOWED STRING", {9, 70, 50, 110, 0, 127, 0, 64}, {20, 80, 100, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 8, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 9, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},
@@ -1164,6 +1298,6 @@ static const engine_t ENG_NANO = {
     .note_on = nano_note_on,
     .render = nano_render,
     .knob = {P_E1, P_E2, P_E3, P_E4},
-    .mem = sizeof(nano_su_t) * NANO_SLOTS,
+    .mem = sizeof(nano_su_t) * NANO_SLOTS + NANO_PL_V * NANO_PL_DL * 2,
     .keep = 0x03,                /* the filter */
 };

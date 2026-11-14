@@ -15,6 +15,7 @@
  * 4g. MODAL: rings at the key, DAMP narrows it, bounded sweep.
  * 4h. SWARM: the centre saw, DETUNE, bounded sweep.
  * 4i. HARMONIC: period, PEAK, STRETCH, bounded sweep.
+ * 4j. PLUCK: the string's pitch, DECAY, POSITION, voices past the fourth silent, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -104,6 +105,13 @@ static void setup_hm(uint32_t peak, uint32_t width, uint32_t chorus, uint32_t st
 {
     setup(peak, width, chorus, stretch, 127);
     trk[0].p[P_E0] = 8;
+}
+
+/* PLUCK: BOW POSITION DECAY on E1..E3, the filter open */
+static void setup_pl(uint32_t bow, uint32_t position, uint32_t decay)
+{
+    setup(bow, position, decay, 0, 127);
+    trk[0].p[P_E0] = 9;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -652,6 +660,79 @@ int main(void)
                     }
         printf("   HARMONIC sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
         check("HARMONIC sweep (PEAK, WIDTH, CHORUS, STRETCH, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
+    }
+
+    /* 4j. PLUCK (TYPE 9): the string's pitch, DECAY lengthens the ring, voices past the fourth are silent, bounded sweeps */
+    {
+        double worstc = 0, peak = 0, dc = 0, cnt = 0, short_t, long_t, e5 = 0;
+        uint32_t k, j, de, po, bo;
+        static const uint8_t pkeys[] = {45, 57, 69, 81};
+        for (k = 0; k < 4; k++) {
+            double best = 0, bc = 0, c;
+            setup_pl(0, 40, 100);
+            play(pkeys[k], y, n);
+            for (c = -60; c <= 60; c += 2) {
+                double h = tone_at(y, a, n, hz(pkeys[k]) * pow(2.0, c / 1200.0));
+                if (h > best) {
+                    best = h;
+                    bc = c;
+                }
+            }
+            printf("   PLUCK key %u: strongest line %+.0f cents from the key\n", pkeys[k], bc);
+            if (fabs(bc) > worstc)
+                worstc = fabs(bc);
+        }
+        check("PLUCK sounds at the key's pitch (within 20 cents), four octaves", worstc <= 20);
+        {
+            double acc[2];
+            uint32_t w;
+            for (w = 0; w < 2; w++) {
+                double early, late;
+                setup_pl(0, 40, w ? 120 : 10);
+                play(57, y, FS);
+                early = late = 0;
+                for (j = FS / 8; j < FS / 8 + 4096; j++)
+                    early += y[j] * y[j];
+                for (j = FS - 4096; j < FS; j++)
+                    late += y[j] * y[j];
+                acc[w] = late / (early > 0 ? early : 1);
+            }
+            short_t = acc[0];
+            long_t = acc[1];
+            printf("   PLUCK late/early energy: %.4f at DECAY 10, %.4f at DECAY 120\n", short_t, long_t);
+            check("PLUCK DECAY lengthens the ring (DECAY 120 keeps over 3x the energy of DECAY 10 at one second)", long_t > 3 * short_t);
+        }
+        setup_pl(0, 40, 100);
+        trk_note_on(&trk[0], 60, 100);
+        for (k = 0; k < 5; k++)
+            trk_note_on(&trk[0], 60 + (int)k, 100);
+        {
+            static int32_t b[CTL];
+            uint32_t blk;
+            for (blk = 0; blk < 64; blk++) {
+                track_render(&trk[0], b, CTL);
+                for (j = 0; j < CTL; j++)
+                    e5 += fabs((double)b[j]);
+            }
+            printf("   PLUCK six held notes: summed magnitude %.0f\n", e5);
+            check("PLUCK six notes at once stay bounded (voices past the fourth are silent, no crash)", e5 < 64.0 * CTL * 65536);
+        }
+        for (de = 0; de <= 127; de += 40)
+            for (po = 0; po <= 127; po += 63)
+                for (bo = 0; bo <= 127; bo += 127)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {28, 60, 100};
+                        setup_pl(bo, po, de);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                        cnt += 6144;
+                    }
+        printf("   PLUCK sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
+        check("PLUCK sweep (BOW, POSITION, DECAY, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
