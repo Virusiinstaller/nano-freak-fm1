@@ -21,6 +21,8 @@
  *
  * TYPE 6 is MODAL (nf_modal.c, Plaits): STRUCTURE, BRIGHT, DAMP; twelve resonators, four voices.
  *
+ * TYPE 7 is SWARM (Braids' SuperWave): WAVE, DETUNE, MIX.
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -29,7 +31,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -460,6 +462,7 @@ typedef struct {
 typedef union {
     nano_ch_t ch;
     nano_mo_t mo;
+    uint32_t sw[10];                                    /* SWARM's nano_sw_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS);
@@ -743,6 +746,90 @@ static __attribute__((noinline)) void nano_render_mo(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* SWARM (Braids' SuperWave, in the Nano Freak test bed): seven oscillators, the centre in tune and six spread by DETUNE,
+ * through an overdrive and a high-pass that follows the key. E1 WAVE (saw, square, triangle, sine), E2 DETUNE, E3 MIX (the six
+ * against the centre). The six start at random phases on each note. State in the slot union (nano_sw_t). */
+typedef struct {
+    uint32_t ph[7];
+    int32_t bp, lp, rng;
+} nano_sw_t;
+
+static inline int32_t nano_swv(uint32_t ph, int32_t wave)         /* -4096 .. 4095 */
+{
+    switch (wave) {
+    case 1:
+        return (ph >> 31) ? 4095 : -4096;
+    case 2: {
+        int32_t q = (int32_t)(ph >> 18);
+        return (q < 8192 ? q : 16383 - q) - 4096;
+    }
+    case 3: {
+        int32_t a = NANO_BSIN[ph >> 24], b = NANO_BSIN[(ph >> 24) + 1];
+        return (a + (((b - a) * (int32_t)((ph >> 8) & 0xffff)) >> 16)) >> 3;
+    }
+    default:
+        return (int32_t)(ph >> 19) - 4096;
+    }
+}
+
+static __attribute__((noinline)) void nano_render_sw(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_sw_t *W;
+    uint32_t inc[7], i, k, inc0 = m->inc;
+    int32_t wave = p[P_E1] >= 96 ? 3 : p[P_E1] >> 5, detune, vol, den, f, bp, lp, ic1 = v->s[0], ic2 = v->s[1];
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    tsvf_t flt;
+    if (!U)
+        return;
+    W = (nano_sw_t *)U;
+    detune = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    detune = ((detune + (detune >> 7)) >> 0);                            /* 0..32767 */
+    detune += 1024;
+    detune = (detune * detune) >> 9;
+    vol = (p[P_E3] * 256) / 127;
+    for (k = 0; k < 7; k++) {                                            /* inc x 2^(detune (k - 3) / 65536 / 128 / 12), a straight line at these sizes */
+        int32_t d = (int32_t)((((int64_t)(inc0 >> 8) * detune * ((int32_t)k - 3)) * 1893) >> 30);
+        inc[k] = (uint32_t)((int32_t)inc0 + d);
+    }
+    f = 2 * sine_i((inc0 > 0x20000000u ? 0x20000000u : inc0) >> 1);      /* the high-pass: 2 sin(pi f0), as Braids', capped at sr / 8 */
+    den = 256 + 6 * vol;
+    k = (uint32_t)((7 * 65536) / den);
+    bp = W->bp;
+    lp = W->lp;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i++) {
+        int32_t c, sm, notch, hp, o, sx, s;
+        uint32_t j;
+        for (j = 0; j < 7; j++)
+            W->ph[j] += inc[j];
+        c = nano_swv(W->ph[3], wave);
+        sx = 0;
+        for (j = 0; j < 7; j++)
+            if (j != 3)
+                sx += nano_swv(W->ph[j], wave);
+        sm = ((((c * 256 + sx * vol) >> 3) * (int32_t)k) >> 13);
+        {
+            uint32_t ix = (uint32_t)(sm + 32768);
+            int32_t a = NANO_BOD[ix >> 8], b = NANO_BOD[(ix >> 8) + 1];
+            sm = a + (((b - a) * (int32_t)(ix & 0xff)) >> 8);
+        }
+        notch = sm - ((bp * 65534) >> 15);
+        lp += (f * bp) >> 15;
+        lp = clamp(lp, -32767, 32767);
+        hp = notch - lp;
+        bp += (f * hp) >> 15;
+        o = clamp(hp, -32767, 32767);
+        s = soft_knee(analog_tap(&flt, 0, o >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(s, m, i) << 1;
+    }
+    W->bp = bp;
+    W->lp = lp;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -765,6 +852,19 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 7) {                                /* SWARM: the six start at random phases */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            nano_sw_t *W = (nano_sw_t *)U;
+            uint32_t k, x = 0x21u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 16);
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
+            for (k = 1; k < 7; k++) {
+                x = x * 1664525u + 1013904223u;
+                W->ph[k] = x;
+            }
         }
     }
     if (t->p[P_E0] == 6) {                                /* MODAL: a clean bank, the seed from the voice */
@@ -807,6 +907,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 6) {
         nano_render_mo(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 7) {
+        nano_render_sw(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -902,13 +1006,17 @@ static const preset_t NANO_PRESETS[] = {
     {"MARIMBA", {6, 20, 70, 40, 0, 127, 0, 64}, {0, 40, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"METAL BAR", {6, 90, 90, 70, 0, 127, 0, 64}, {0, 60, 100, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     {"GLASS RAIN", {6, 60, 110, 90, 0, 127, 0, 64}, {10, 80, 100, 70}, 0, 0, FX(0, 40, 30, 40), PAT(0)},
+    /* SWARM: TYPE WAVE DETUNE MIX 0 | CUT RES KTR */
+    {"SUPER SAW", {7, 0, 60, 127, 0, 127, 0, 64}, {5, 80, 100, 40}, 0, 0, FX(0, 20, 20, 25), PAT(0)},
+    {"SWARM PAD", {7, 96, 40, 100, 0, 110, 0, 64}, {40, 90, 100, 90}, 0, 0, FX(0, 40, 30, 40), PAT(0)},
+    {"DETUNED SQUARES", {7, 32, 90, 90, 0, 127, 10, 64}, {5, 80, 90, 40}, 25, 1, FX(0, 20, 30, 25), PAT(4)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 6, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 7, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

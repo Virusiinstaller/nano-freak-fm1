@@ -13,6 +13,7 @@
  * 4e. NOISE: MODE low-pass to high-pass, the filter follows the key, bounded sweep.
  * 4f. CHORDS: the chord notes, CHORD changes the third, bounded sweep.
  * 4g. MODAL: rings at the key, DAMP narrows it, bounded sweep.
+ * 4h. SWARM: the centre saw, DETUNE, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -88,6 +89,13 @@ static void setup_mo(uint32_t structure, uint32_t bright, uint32_t damp)
 {
     setup(structure, bright, damp, 0, 127);
     trk[0].p[P_E0] = 6;
+}
+
+/* SWARM: WAVE DETUNE MIX on E1..E3, the filter open */
+static void setup_sw(uint32_t wave, uint32_t detune, uint32_t mix)
+{
+    setup(wave, detune, mix, 0, 127);
+    trk[0].p[P_E0] = 7;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -537,6 +545,41 @@ int main(void)
                     }
         printf("   MODAL sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
         check("MODAL sweep (STRUCTURE, BRIGHT, DAMP, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
+    }
+
+    /* 4h. SWARM (TYPE 7): MIX 0 is the centre oscillator alone (a saw at the key's pitch), DETUNE spreads the swarm, bounded sweeps */
+    {
+        double peak = 0, dc = 0, cnt = 0, f = hz(57), c0, c1, ratio;
+        uint32_t wv, de, mx, k, j;
+        setup_sw(0, 0, 0);
+        play(57, y, n);
+        c0 = tone_at(y, a, n, f);
+        ratio = tone_at(y, a, n, 2 * f) / c0;
+        printf("   SWARM centre alone: 2nd / 1st %.2f (a saw: 0.5)\n", ratio);
+        check("SWARM MIX 0 is a single saw at the key's pitch (2nd harmonic near half the first)", ratio > 0.4 && ratio < 0.6);
+        setup_sw(0, 0, 127);
+        play(57, y, n);
+        c1 = tone_at(y, a, n, f);
+        setup_sw(0, 100, 127);
+        play(57, y, n);
+        printf("   SWARM fundamental: %.0f undetuned, %.0f at DETUNE 100\n", c1, tone_at(y, a, n, f));
+        check("SWARM DETUNE spreads the swarm (the fundamental's line weakens by over 30 %)", tone_at(y, a, n, f) < 0.7 * c1);
+        for (wv = 0; wv <= 127; wv += 32)
+            for (de = 0; de <= 127; de += 63)
+                for (mx = 0; mx <= 127; mx += 63)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {36, 60, 96};
+                        setup_sw(wv, de, mx);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                        cnt += 6144;
+                    }
+        printf("   SWARM sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
+        check("SWARM sweep (WAVE, DETUNE, MIX, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

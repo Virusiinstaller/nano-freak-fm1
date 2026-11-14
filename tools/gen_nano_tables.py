@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """Regenerate firmware/src/eng_nano_tables.h: the WAVESHAPER tables of the NANO engine, taken from the Nano Freak test bed's
-nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c"""
+nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c [path/to/nano-freak/dsp/nf_braids_tables.c]"""
 import re, sys
 src = open(sys.argv[1]).read()
 wsrc = open(sys.argv[2]).read() if len(sys.argv) > 2 else ""
@@ -54,4 +54,13 @@ if wsrc:                                              # the CHORDS wavetable: 15
            [0, .5, 0, 0, 0, .5], [0, .1, .1, 0, .2, .6]]
     out.append("/* the string machine's eight registrations, Q15 */")
     out.append("static const int32_t NANO_REG[8][6] = {\n    " + ",\n    ".join("{" + ", ".join(str(round(32768 * x)) for x in r) + "}" for r in reg) + "\n};")
+
+if len(sys.argv) > 3:                                  # the SWARM (SuperWave) tables, Braids (Emilie Gillet, MIT): a sine and an overdrive curve
+    bsrc = open(sys.argv[3]).read()
+    for name, var, text in (("nfb_wav_sine", "NANO_BSIN", "a sine, 257 points"), ("nfb_ws_overdrive", "NANO_BOD", "a moderate overdrive curve, 257 points")):
+        m = re.search(name + r'\[257\] = \{(.*?)\};', bsrc, re.S)
+        v = [int(x) for x in re.findall(r'-?\d+', m.group(1))]
+        assert len(v) == 257
+        out.append("/* Braids: %s */" % text)
+        out.append("static const int16_t %s[257] = {\n    %s\n};" % (var, rows(v, 12)))
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")
