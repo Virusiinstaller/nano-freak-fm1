@@ -25,6 +25,7 @@
  *
  * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
  *
+ * TYPE 13 is V.ANALOG (Plaits' virtual analog): DETUNE, SYNC, SHAPE.
  * TYPE 12 is WAVETABLE (16 tables of 16 waves): TABLE, POSITION, CHORUS, MORPH.
  * TYPE 11 is SAW (Braids' SAW_SYNC / SAW_COMB / CSAW): WAVE, E2, E3.
  * TYPE 10 is BASS (Braids' SQUARE_SUB / SAW_SUB): WAVE, WIDTH, SUB.
@@ -38,7 +39,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW", "WAVETABLE"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW", "WAVETABLE", "V.ANALOG"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -475,6 +476,7 @@ typedef union {
     uint32_t bs[12];                                    /* BASS's nano_bs_t (below) */
     uint32_t sa[16];                                    /* SAW's nano_sa_t (below) */
     uint32_t wt[4];                                     /* WAVETABLE's nano_wt_t (below) */
+    uint32_t va[20];                                    /* V.ANALOG's nano_va_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
@@ -1479,6 +1481,233 @@ static __attribute__((noinline)) void nano_render_wt(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* V.ANALOG (Plaits' virtual analog, variant 2, in the Nano Freak test bed): a hard-synced square (the "double varishape" out
+ * of Plaits' two) mixed with a variable saw / triangle / notch saw. E1 DETUNE (the saw's interval from the key: unison in the
+ * middle, fifths and octaves toward the ends), E2 SYNC (the square's width, its sync ratio, its level), E3 SHAPE (the saw's
+ * width and notch, the balance). Plaits' own monster-sync output is not used by the test bed and is not ported. Values are
+ * Q16 (65536 is one), phases and increments u32 (2^32 is one cycle). State in the slot union (nano_va_t). */
+typedef struct {
+    uint32_t mph, sph, ppw, high, mf, sf, aph, appw, ahigh, af, started;
+    int32_t nxt, anxt, aws, sg, wg;
+} nano_va_t;
+
+static inline int32_t nano_vb_this(uint32_t t) { if (t > 65535u) t = 65535u; return (int32_t)((t * t) >> 17); }
+static inline int32_t nano_vb_next(uint32_t t) { if (t > 65535u) t = 65535u; t = 65536u - t; return -(int32_t)((t * t) >> 17); }
+static inline int32_t nano_vi_next(uint32_t t)
+{
+    int32_t t1, t2, t4;
+    if (t > 65536u)
+        t = 65536u;
+    t1 = (int32_t)(t >> 1);
+    t2 = (t1 * t1) >> 16;
+    t4 = (t2 * t2) >> 16;
+    return 12288 - t1 + ((3 * t2) >> 1) - t4;
+}
+static inline int32_t nano_vi_this(uint32_t t) { if (t > 65535u) t = 65535u; return nano_vi_next(65536u - t); }
+static inline int32_t nano_squash15(int32_t x) { int32_t x2 = (x * x) >> 15; return (x2 * ((3 << 15) - 2 * x)) >> 15; }
+static inline uint32_t nano_vd(int32_t d) { return d < 1 ? 1u : (d > 65535 ? 65535u : (uint32_t)d); }   /* a divisor in Q16 steps */
+
+static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    static const int32_t ivl[5] = {0, 449, 769, 1217, 1537};             /* 0, 7.01, 12.01, 19.01, 24.01 semitones, Q6 */
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_va_t *V;
+    int32_t hq = p[P_E1] * 258, tq, mq = p[P_E3] * 258, d, d4, ip, fp, sq, s64, r6s, sqg, swg, sgt, wgt, nstep = (int32_t)n;
+    int32_t ic1 = v->s[0], ic2 = v->s[1], ws_t, sw, wgv, sgv, mfi, sfi, afi, wsi, sgi, wgi, aws;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    uint32_t i, inc = m->inc > 0x40000000u ? 0x40000000u : m->inc, mf_t, sf_t, af_t, sqp, ap, ap16, su, sd, mf, sf, af, sgn;
+    tsvf_t flt;
+    if (!U)
+        return;
+    V = (nano_va_t *)U;
+    tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    tq = tq + (tq >> 7);                                                 /* 0..32767 */
+    d = ((hq >> 1) * 67174 >> 14) - 33587;                               /* 2.05 h - 1.025 */
+    d = clamp(d, -32768, 32768);
+    sgn = d < 0;
+    if (d < 0)
+        d = -d;
+    d4 = ((d >> 1) * 131068) >> 14;                                      /* x 3.9999, Q15 */
+    ip = d4 >> 15;
+    fp = d4 & 32767;
+    sq = nano_squash15(nano_squash15(fp));
+    s64 = ivl[ip] + (((ivl[ip + 1] - ivl[ip]) * sq) >> 15);
+    r6s = 2304 + (sgn ? -s64 : s64);                                     /* the detune in semitones x 64, from two octaves down */
+    af_t = nano_inc_c(inc >> 2, (uint32_t)r6s, 0x40000000u);
+    mf_t = inc;
+    if (tq > 16384) {
+        int32_t x = tq - 16384;
+        sf_t = nano_inc_c(inc, 768u + (uint32_t)((((x * x) >> 15) * 12288) >> 15), 0x40000000u);   /* (t - 0.5)^2 x 4 x 48 semitones */
+    } else {
+        sf_t = inc;
+    }
+    {   /* the square's width 1.3 t - 0.15, 0.005 .. 0.5 */
+        int32_t w16 = (((tq >> 1) * 85197) >> 14) - 9830;
+        w16 = clamp(w16, 328, 32768);
+        sqp = w16 >= 32768 ? 0x7FFFFFFFu : (uint32_t)w16 << 16;
+    }
+    if (sqp < 2u * sf_t)
+        sqp = 2u * sf_t;
+    if (sqp > 0u - 2u * sf_t)
+        sqp = 0u - 2u * sf_t;
+    {   /* the saw's width, its shape toward the notch, its gain */
+        int32_t w = mq < 16384 ? mq + 16384 : 65536 - 2 * mq;
+        w = clamp((w * 36045) >> 15, 164, 32768);
+        ap = w >= 32768 ? 0xFFFFFFFFu : (uint32_t)w << 17;
+        if (ap < 2u * af_t)
+            ap = 2u * af_t;
+        if (ap > 0u - 2u * af_t)
+            ap = 0u - 2u * af_t;
+        ws_t = clamp(655360 - 42 * mq, 0, 65536);
+        swg = clamp(8 * (65536 - 2 * mq), 1311, 65536);
+    }
+    sqg = tq * 16 > 65536 ? 65536 : tq * 16;
+    if (sqg >= swg) {
+        sgt = 19661;
+        wgt = (int32_t)(((uint32_t)swg << 15) / (uint32_t)sqg);
+    } else {
+        wgt = 32768;
+        sgt = (int32_t)((((uint32_t)sqg << 15) / (uint32_t)swg) * 39322u >> 16);
+    }
+    if (!V->started) {
+        V->started = 1;
+        V->mf = mf_t;
+        V->sf = sf_t;
+        V->af = af_t;
+        V->aws = ws_t;
+        V->sg = sgt;
+        V->wg = wgt;
+        V->ppw = sqp;
+        V->appw = ap;
+    }
+    mfi = (int32_t)(mf_t - V->mf) / nstep;
+    sfi = (int32_t)(sf_t - V->sf) / nstep;
+    afi = (int32_t)(af_t - V->af) / nstep;
+    wsi = (ws_t - V->aws) / nstep;
+    sgi = (sgt - V->sg) / nstep;
+    wgi = (wgt - V->wg) / nstep;
+    mf = V->mf;
+    sf = V->sf;
+    af = V->af;
+    aws = V->aws;
+    sgv = V->sg;
+    wgv = V->wg;
+    ap16 = ap >> 16 ? ap >> 16 : 1u;
+    su = 0xFFFFFFFFu / ap16;
+    sd = 0xFFFFFFFFu / (65536u - ap16);
+    sw = 0;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i++) {
+        int32_t this_s = V->nxt, this_a = V->anxt, sqo, sawo, o, nsaw, tri_v, notch_amt, s;
+        uint32_t rt = 0, wrapped, reset = 0, tdr = 0;
+        mf += (uint32_t)mfi;
+        sf += (uint32_t)sfi;
+        af += (uint32_t)afi;
+        aws += wsi;
+        sgv += sgi;
+        wgv += wgi;
+        V->nxt = 0;
+        V->anxt = 0;
+        /* the hard-synced square */
+        V->mph += mf;
+        if (V->mph < mf) {
+            uint32_t sar;
+            rt = V->mph / nano_vd((int32_t)(mf >> 16));
+            if (rt > 65535u)
+                rt = 65535u;
+            sar = V->sph + (65535u - rt) * (sf >> 16);
+            reset = 1;
+            if (sar < V->sph)
+                tdr = 1;
+            if (!V->high && sar >= sqp)
+                tdr = 1;
+            if (sar >= sqp) {
+                this_s -= nano_vb_this(rt);
+                V->nxt -= nano_vb_next(rt);
+            }
+        }
+        V->sph += sf;
+        wrapped = V->sph < sf;
+        while (tdr || !reset) {
+            if (!V->high) {
+                int32_t den;
+                uint32_t tt;
+                if (!wrapped && V->sph < sqp)
+                    break;
+                den = (int32_t)(V->ppw - sqp) + (int32_t)sf;
+                tt = (V->sph - sqp) / (den < 65536 ? 1u : (uint32_t)den >> 16);
+                this_s += nano_vb_this(tt);
+                V->nxt += nano_vb_next(tt);
+                V->high = 1;
+            }
+            if (V->high) {
+                uint32_t tt;
+                if (!wrapped)
+                    break;
+                wrapped = 0;
+                tt = V->sph / nano_vd((int32_t)(sf >> 16));
+                this_s -= nano_vb_this(tt);
+                V->nxt -= nano_vb_next(tt);
+                V->high = 0;
+            }
+        }
+        if (reset) {
+            V->sph = rt * (sf >> 16);
+            V->high = 0;
+        }
+        V->nxt += V->sph >= sqp ? 65536 : 0;
+        V->ppw = sqp;
+        sqo = 2 * this_s - 65536;
+        /* the saw / triangle / notch saw */
+        notch_amt = 65536 - aws;
+        V->aph += af;
+        wrapped = V->aph < af;
+        if (!V->ahigh && !wrapped && V->aph >= ap) {
+            int32_t tstep = (int32_t)(af / ap16) + (int32_t)(af / (65536u - ap16)), notch, den = (int32_t)(V->appw - ap) + (int32_t)af;
+            uint32_t tt = (V->aph - ap) / (den < 65536 ? 1u : (uint32_t)den >> 16);
+            tstep = ((tstep >> 1) * aws) >> 15;
+            notch = (((78643 - (int32_t)ap16) >> 2) * notch_amt) >> 14;
+            this_a += ((notch >> 1) * nano_vb_this(tt)) >> 15;
+            V->anxt += ((notch >> 1) * nano_vb_next(tt)) >> 15;
+            this_a -= (tstep * nano_vi_this(tt)) >> 16;
+            V->anxt -= (tstep * nano_vi_next(tt)) >> 16;
+            V->ahigh = 1;
+        } else if (wrapped) {
+            int32_t tstep = (int32_t)(af / ap16) + (int32_t)(af / (65536u - ap16)), notch = (((78643 >> 2) * notch_amt) >> 14);
+            uint32_t tt = V->aph / nano_vd((int32_t)(af >> 16));
+            tstep = ((tstep >> 1) * aws) >> 15;
+            this_a -= ((notch >> 1) * nano_vb_this(tt)) >> 15;
+            V->anxt -= ((notch >> 1) * nano_vb_next(tt)) >> 15;
+            this_a += (tstep * nano_vi_this(tt)) >> 16;
+            V->anxt += (tstep * nano_vi_next(tt)) >> 16;
+            V->ahigh = 0;
+        }
+        if (V->aph < ap) {
+            nsaw = (int32_t)(V->aph >> 16);
+            tri_v = (int32_t)((((V->aph >> 16) * su) >> 16));
+        } else {
+            nsaw = 78643;
+            tri_v = 65536 - (int32_t)(((((V->aph - ap) >> 16) * sd) >> 16));
+        }
+        V->anxt += (((nsaw >> 2) * notch_amt) >> 14) + (((tri_v >> 1) * aws) >> 15);
+        V->appw = ap;
+        sawo = (((2 * this_a - 65536) >> 2) * 54613) >> 14;              /* / 1.2 */
+        o = (((sawo >> 1) * wgv) >> 15) + (((sqo >> 1) * sgv) >> 15);
+        s = soft_knee(analog_tap(&flt, 0, o >> 2, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(s, m, i) << 1;
+    }
+    (void)sw;
+    V->mf = mf;
+    V->sf = sf;
+    V->af = af;
+    V->aws = aws;
+    V->sg = sgv;
+    V->wg = wgv;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -1501,6 +1730,14 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 13) {                               /* V.ANALOG: a clean slot, everything starts at the knobs */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
         }
     }
     if (t->p[P_E0] == 12) {                               /* WAVETABLE: a clean slot, phases at zero, the position starts at the knob */
@@ -1633,6 +1870,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         nano_render_wt(t, v, out, n, m);
         return;
     }
+    if (p[P_E0] == 13) {
+        nano_render_va(t, v, out, n, m);
+        return;
+    }
     tsvf_t flt;
     uint32_t i, ph = v->ph[0], ps = v->ph[1], pb = v->ph[2], inc = m->inc, incs = inc, k = (uint32_t)p[P_E4];
     int32_t morph = clamp((p[P_E1] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq, sym = p[P_E2] * 258;
@@ -1750,13 +1991,17 @@ static const preset_t NANO_PRESETS[] = {
     {"SINSAW SWEEP", {12, 0, 40, 30, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"PWM TABLE", {12, 16, 70, 60, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"VOWEL TABLE", {12, 40, 50, 40, 40, 127, 0, 64}, {10, 60, 100, 50}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    /* V.ANALOG: TYPE DETUNE SYNC SHAPE 0 | CUT RES KTR */
+    {"VA SYNC LEAD", {13, 64, 100, 20, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"VA FIFTH SAW", {13, 90, 20, 40, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"VA NOTCH PAD", {13, 70, 30, 100, 0, 110, 0, 64}, {40, 70, 100, 70}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 12, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 13, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

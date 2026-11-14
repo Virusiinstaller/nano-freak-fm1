@@ -18,6 +18,7 @@
  * 4k. BASS: pitch of both waves, SUB puts a line one or two octaves down, WIDTH, bounded sweep.
  * 4l. SAW: sync repeats at the master period, comb feedback sign, CS80, bounded sweep.
  * 4m. WAVETABLE: every table repeats at the key's period, POSITION, CHORUS, MORPH into the next table, bounded sweep.
+ * 4n. V.ANALOG: the saw repeats at the key's period, DETUNE puts it a fifth / two octaves away, SYNC changes the square, bounded sweep.
  * 4j. PLUCK: the string's pitch, DECAY, POSITION, voices past the fourth silent, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
@@ -136,6 +137,13 @@ static void setup_wt(uint32_t table, uint32_t pos, uint32_t chorus, uint32_t mor
 {
     setup(table * 8 + 1, pos, chorus, morph, 127);
     trk[0].p[P_E0] = 12;
+}
+
+/* V.ANALOG: DETUNE SYNC SHAPE on E1..E3, the filter open */
+static void setup_va(uint32_t detune, uint32_t sync, uint32_t shape)
+{
+    setup(detune, sync, shape, 0, 127);
+    trk[0].p[P_E0] = 13;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -963,6 +971,71 @@ int main(void)
                         }
         printf("   WAVETABLE sweep: peak %.0f\n", peak);
         check("WAVETABLE sweep (TABLE, POSITION, CHORUS, MORPH, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
+    /* 4n. V.ANALOG (TYPE 13): the saw repeats at the key's period, DETUNE puts it a fifth or two octaves away, SYNC changes the square, bounded sweeps */
+    {
+        double f = hz(57), e, cc, peak = 0, d0 = 0, n0 = 0, l0, l1, l2, fifth, root;
+        static double y2[FS];
+        uint32_t k, j, lag, kk, sy, sh, de;
+        double per0 = (double)FS / f, per = per0, be = 1;
+        for (kk = 1; kk <= 64; kk++) {
+            double d = fabs(kk * per0 - floor(kk * per0 + 0.5));
+            if (d < be) {
+                be = d;
+                per = kk * per0;
+            }
+            if (d < 0.05)
+                break;
+        }
+        lag = (uint32_t)(per + 0.5);
+        setup_va(64, 0, 64);
+        play(57, y, n);
+        e = cc = 0;
+        for (j = a; j + lag < n; j++) {
+            e += y[j] * y[j];
+            cc += y[j] * y[j + lag];
+        }
+        printf("   V.ANALOG saw alone: 1 - correlation at the key's period %.4f\n", 1.0 - cc / e);
+        check("V.ANALOG the saw alone repeats at the key's period (correlation over 0.97)", 1.0 - cc / e < 0.03);
+        setup_va(127, 0, 64);
+        play(57, y, n);
+        l0 = tone_at(y, a, n, 4 * f);
+        l1 = tone_at(y, a, n, f);
+        setup_va(0, 0, 64);
+        play(57, y, n);
+        l2 = tone_at(y, a, n, f / 4);
+        printf("   V.ANALOG DETUNE 127: 4 f line %.0f (f line %.0f); DETUNE 0: f/4 line %.0f\n", l0, l1, l2);
+        check("V.ANALOG DETUNE at the ends is two octaves up or down (the line there over 3x the key's)", l0 > 3 * l1 && l2 > 3 * tone_at(y, a, n, f));
+        setup_va(80, 0, 64);
+        play(57, y, n);
+        fifth = tone_at(y, a, n, f * 1.4983);
+        root = tone_at(y, a, n, f);
+        printf("   V.ANALOG DETUNE 80: fifth line %.0f, key line %.0f\n", fifth, root);
+        check("V.ANALOG DETUNE 80 puts the saw a fifth up (the fifth over 3x the key's line)", fifth > 3 * root);
+        setup_va(64, 20, 127);
+        play(57, y, n);
+        setup_va(64, 127, 127);
+        play(57, y2, n);
+        for (j = a; j < n; j++) {
+            d0 += (y[j] - y2[j]) * (y[j] - y2[j]);
+            n0 += y[j] * y[j];
+        }
+        printf("   V.ANALOG SYNC 20 vs 127 (square dominant): relative difference %.3f\n", sqrt(d0 / n0));
+        check("V.ANALOG SYNC changes the square (the renders differ by over 20 %)", sqrt(d0 / n0) > 0.2);
+        for (de = 0; de <= 127; de += 32)
+            for (sy = 0; sy <= 127; sy += 32)
+                for (sh = 0; sh <= 127; sh += 32)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {24, 60, 108};
+                        setup_va(de, sy, sh);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++)
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                    }
+        printf("   V.ANALOG sweep: peak %.0f\n", peak);
+        check("V.ANALOG sweep (DETUNE, SYNC, SHAPE, keys): bounded (peak under 65536)", peak < 65536);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
