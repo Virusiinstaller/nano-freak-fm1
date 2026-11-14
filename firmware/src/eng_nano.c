@@ -25,6 +25,7 @@
  *
  * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
  *
+ * TYPE 11 is SAW (Braids' SAW_SYNC / SAW_COMB / CSAW): WAVE, E2, E3.
  * TYPE 10 is BASS (Braids' SQUARE_SUB / SAW_SUB): WAVE, WIDTH, SUB.
  * TYPE 9 is PLUCK (Braids' KarplusStr): BOW, POSITION, DECAY; four voices (the delay lines).
  *
@@ -36,7 +37,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -471,6 +472,7 @@ typedef union {
     uint32_t hm[40];                                    /* HARMONIC's nano_hm_t (below) */
     uint32_t pl[12];                                    /* PLUCK's nano_pl_t (below) */
     uint32_t bs[12];                                    /* BASS's nano_bs_t (below) */
+    uint32_t sa[16];                                    /* SAW's nano_sa_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
@@ -1279,6 +1281,104 @@ static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* SAW (Braids' SAW_SYNC / SAW_COMB / CSAW, in the Nano Freak test bed): E1 WAVE (sync, comb, CS80), E2 and E3 as below.
+ * SYNC: two saws, the second hard-synced to the first and E2 tunes it up to five octaves, E3 crossfades them. COMB: a saw
+ * through a tuned comb, E2 detunes the comb from the key (63 is in tune), E3 is the feedback (the middle is none, up is
+ * positive, down is negative). CS80: a saw with a notch that E2 moves and E3 offsets. The comb's delay line is the PLUCK
+ * line (NANO_PL_V voices have one, NANO_COMB samples of it are used: the lowest comb pitch is about 43 Hz; the others sound
+ * dry). State in the slot union (nano_sa_t). */
+#define NANO_COMB 1024
+typedef struct {
+    nano_ao_t a, b;
+    int32_t prev_p1, finc, fstart;
+    uint32_t ptr;
+} nano_sa_t;
+
+static __attribute__((noinline)) void nano_render_sa(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_sa_t *S;
+    int16_t *dl = nano_dl(t, v), x[NANO_AO_MAX], y[NANO_AO_MAX];
+    uint8_t sync[NANO_AO_MAX];
+    int32_t ic1 = v->s[0], ic2 = v->s[1], p0, p1, model = (p[P_E1] * 3) / 127;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    uint32_t i, j, size, inc = m->inc;
+    tsvf_t flt;
+    if (!U)
+        return;
+    S = (nano_sa_t *)U;
+    p0 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    p0 = p0 + (p0 >> 7);                                                 /* 0..32767 */
+    p1 = p[P_E3] * 258;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < n; i += size) {
+        size = n - i < NANO_AO_MAX ? n - i : NANO_AO_MAX;
+        if (model == 0) {
+            int32_t start = S->prev_p1, delta = p1 - S->prev_p1, incr = 32767 / (int32_t)size, xx = 0;
+            nano_ao_render(&S->a, NANO_A_SAW, inc, 0, 0, 0, x, sync, size);
+            nano_ao_render(&S->b, NANO_A_SAW, nano_inc_c(inc, 768u + (uint32_t)(p0 >> 3), 0x80000000u), 0, 0, sync, y, 0, size);
+            for (j = 0; j < size; j++) {
+                int32_t q, bal;
+                xx += incr;
+                q = start + (delta * xx >> 15);
+                bal = q << 1;
+                x[j] = (int16_t)((((x[j] * (65535 - bal) + y[j] * bal) >> 16) >> 2) * 3);
+            }
+            S->prev_p1 = p1;
+        } else if (model == 1) {
+            uint32_t target, q, di, df, res_i;
+            int32_t res;
+            nano_ao_render(&S->a, NANO_A_SAW, inc, 0, 0, 0, x, 0, size);
+            target = nano_inc_c(inc >> 5, 768u + 3840u + (uint32_t)((p0 - 16384) >> 2), 0x48000000u);   /* the key's increment, p0 semitones off */
+            if (!S->fstart) {
+                S->finc = (int32_t)target;
+                S->fstart = 1;
+            }
+            S->finc = (int32_t)((15u * (uint32_t)S->finc + target) >> 4);
+            q = 0xFFFFFFFFu / ((uint32_t)S->finc >> 8 ? (uint32_t)S->finc >> 8 : 1u);   /* the delay, 2^32 / inc samples, in Q8 */
+            if (q > ((NANO_COMB - 2) << 8))
+                q = (NANO_COMB - 2) << 8;
+            di = q >> 8;
+            df = (q & 255u) << 8;
+            res_i = (uint32_t)(p1 << 1) > 65535u ? 65535u : (uint32_t)(p1 << 1);
+            {
+                int32_t a0 = NANO_BOD[res_i >> 8], b0 = NANO_BOD[(res_i >> 8) + 1];
+                res = a0 + (((b0 - a0) * (int32_t)(res_i & 0xff)) >> 8);
+            }
+            if (dl) {
+                uint32_t ptr = S->ptr & (NANO_COMB - 1);
+                for (j = 0; j < size; j++) {
+                    int32_t in = x[j], a0, b0, delayed, fb, o;
+                    uint32_t off = ptr + 2 * NANO_COMB - di;
+                    a0 = dl[off & (NANO_COMB - 1)];
+                    b0 = dl[(off - 1) & (NANO_COMB - 1)];
+                    delayed = a0 + (((b0 - a0) * (int32_t)(df >> 1)) >> 15);
+                    fb = ((delayed * res) >> 15) + (in >> 1);
+                    fb = clamp(fb, -32767, 32767);
+                    dl[ptr] = (int16_t)fb;
+                    o = clamp((in + (delayed << 1)) >> 1, -32767, 32767);
+                    x[j] = (int16_t)o;
+                    ptr = (ptr + 1) & (NANO_COMB - 1);
+                }
+                S->ptr = ptr;
+            }
+        } else {
+            int32_t shift;
+            nano_ao_render(&S->a, NANO_A_CSAW, inc, p0, p1, 0, x, 0, size);
+            shift = (32767 - p1) >> 4;
+            for (j = 0; j < size; j++)
+                x[j] = (int16_t)clamp(((x[j] + shift) * 13) >> 3, -32767, 32767);
+        }
+        for (j = 0; j < size; j++) {
+            int32_t s = soft_knee(analog_tap(&flt, 0, x[j] >> 1, &ic1, &ic2, 0), 16000) << 1;
+            out[i + j] += voice_amp(s, m, i + j) << 1;
+        }
+    }
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -1301,6 +1401,20 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 11) {                               /* SAW: a clean slot, the comb empty, SYNC's balance at the knob */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            nano_sa_t *S = (nano_sa_t *)U;
+            int16_t *dl = nano_dl(t, v);
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
+            S->prev_p1 = t->p[P_E3] * 258;
+            S->a.disc = S->b.disc = -16383;
+            for (k = 0; dl && k < NANO_PL_DL; k++)
+                dl[k] = 0;
         }
     }
     if (t->p[P_E0] == 10) {                               /* BASS: a clean slot, the sub level starts at the knob */
@@ -1401,6 +1515,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 10) {
         nano_render_bs(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 11) {
+        nano_render_sa(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -1512,13 +1630,17 @@ static const preset_t NANO_PRESETS[] = {
     {"SUB SQUARE", {10, 0, 0, 20, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
     {"SAW SUB LOW", {10, 90, 70, 10, 0, 100, 20, 64}, {0, 70, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
     {"OCTAVE BASS", {10, 0, 40, 110, 0, 110, 10, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
+    /* SAW: TYPE WAVE E2 E3 0 | CUT RES KTR (WAVE 0 sync, 64 comb, 127 CS80) */
+    {"HARD SYNC SAW", {11, 0, 50, 64, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
+    {"COMB PLUCKER", {11, 64, 63, 120, 0, 127, 0, 64}, {0, 50, 60, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"CS80 BRASS", {11, 127, 60, 90, 0, 110, 0, 64}, {20, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 10, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 11, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},

@@ -16,6 +16,7 @@
  * 4h. SWARM: the centre saw, DETUNE, bounded sweep.
  * 4i. HARMONIC: period, PEAK, STRETCH, bounded sweep.
  * 4k. BASS: pitch of both waves, SUB puts a line one or two octaves down, WIDTH, bounded sweep.
+ * 4l. SAW: sync repeats at the master period, comb feedback sign, CS80, bounded sweep.
  * 4j. PLUCK: the string's pitch, DECAY, POSITION, voices past the fourth silent, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
@@ -120,6 +121,13 @@ static void setup_bs(uint32_t wave, uint32_t width, uint32_t sub)
 {
     setup(wave, width, sub, 0, 127);
     trk[0].p[P_E0] = 10;
+}
+
+/* SAW: WAVE (0 sync, 64 comb, 127 CS80) E2 E3 on E1..E3, the filter open */
+static void setup_sa(uint32_t wave, uint32_t e2, uint32_t e3)
+{
+    setup(wave, e2, e3, 0, 127);
+    trk[0].p[P_E0] = 11;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -810,6 +818,64 @@ int main(void)
                     }
         printf("   BASS sweep: peak %.0f\n", peak);
         check("BASS sweep (WAVE, WIDTH, SUB, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
+    /* 4l. SAW (TYPE 11): the synced saws repeat at the master period, the comb's feedback sign moves the peaks half a period, CS80 pitch, bounded sweeps */
+    {
+        double peak = 0, f = hz(57), rp_a, rp_b, rn_a, rn_b, e, cc, worst_c = 0;
+        uint32_t w, k, j, lag, e2, e3, kk;
+        for (w = 0; w < 3; w++) {
+            static const uint8_t wv[3] = {0, 64, 127};
+            static const uint8_t skeys[] = {45, 57, 69};
+            for (k = 0; k < 3; k++) {
+                double per0 = (double)FS / hz(skeys[k]), per = per0, be = 1;
+                for (kk = 1; kk <= 64; kk++) {
+                    double d = fabs(kk * per0 - floor(kk * per0 + 0.5));
+                    if (d < be) {
+                        be = d;
+                        per = kk * per0;
+                    }
+                    if (d < 0.05)
+                        break;
+                }
+                lag = (uint32_t)(per + 0.5);
+                setup_sa(wv[w], w == 1 ? 63 : 70, 100);
+                play(skeys[k], y, n);
+                e = cc = 0;
+                for (j = a; j + lag < n; j++) {
+                    e += y[j] * y[j];
+                    cc += y[j] * y[j + lag];
+                }
+                if (1.0 - cc / e > worst_c)
+                    worst_c = 1.0 - cc / e;
+            }
+        }
+        printf("   SAW worst 1 - correlation at the key's period, three waves: %.4f\n", worst_c);
+        check("SAW (sync, comb, CS80) repeats at the key's period (correlation over 0.95)", worst_c < 0.05);
+        setup_sa(64, 63, 127);
+        play(57, y, n);
+        rp_a = tone_at(y, a, n, f);
+        rp_b = tone_at(y, a, n, 1.5 * f);
+        setup_sa(64, 63, 0);
+        play(57, y, n);
+        rn_a = tone_at(y, a, n, f);
+        rn_b = tone_at(y, a, n, 1.5 * f);
+        printf("   SAW comb: f %.0f (1.5 f %.0f) at feedback up, f %.0f (1.5 f %.0f) at feedback down\n", rp_a, rp_b, rn_a, rn_b);
+        check("SAW comb tuned to the key: feedback up reinforces the harmonics, feedback down notches them (f line over 1.8x)", rp_a > 1.8 * rn_a);
+        for (w = 0; w < 3; w++)
+            for (e2 = 0; e2 <= 127; e2 += 32)
+                for (e3 = 0; e3 <= 127; e3 += 32)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {28, 60, 108};
+                        static const uint8_t wv[3] = {0, 64, 127};
+                        setup_sa(wv[w], e2, e3);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++)
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                    }
+        printf("   SAW sweep: peak %.0f\n", peak);
+        check("SAW sweep (WAVE, E2, E3, keys): bounded (peak under 65536)", peak < 65536);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
