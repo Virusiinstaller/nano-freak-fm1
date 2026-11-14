@@ -11,6 +11,7 @@
  * 4c. WAVESHAPER: period, FOLD, WAVE, bounded sweep.
  * 4d. FORMANT: period, the spectral peak follows FORMANT, bounded sweep.
  * 4e. NOISE: MODE low-pass to high-pass, the filter follows the key, bounded sweep.
+ * 4f. CHORDS: the chord notes, CHORD changes the third, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -72,6 +73,13 @@ static void setup_no(uint32_t mode, uint32_t clock, uint32_t res)
 {
     setup(mode, clock, res, 0, 127);
     trk[0].p[P_E0] = 4;
+}
+
+/* CHORDS: CHORD INVERSION WAVE on E1..E3, the filter open */
+static void setup_ch(uint32_t chord, uint32_t inversion, uint32_t wave)
+{
+    setup(chord, inversion, wave, 0, 127);
+    trk[0].p[P_E0] = 5;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -448,6 +456,49 @@ int main(void)
                     }
         printf("   NOISE sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
         check("NOISE sweep (MODE, CLOCK, RES, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
+    }
+
+    /* 4f. CHORDS (TYPE 5): the chord's notes are there and the notes between them are not (string machine and wavetable), a
+     *     different CHORD changes them, bounded sweeps with no DC */
+    {
+        double peak = 0, dc = 0, cnt = 0;
+        uint32_t wv, k, ch, iv, wave, j;
+        for (wv = 0; wv < 2; wv++) {
+            double on, off;
+            setup_ch(127, 0, wv ? 127 : 0);                               /* the major chord, root position */
+            play(60, y, n);
+            on = tone_at(y, a, n, hz(36)) + tone_at(y, a, n, hz(40)) + tone_at(y, a, n, hz(43));
+            off = tone_at(y, a, n, hz(37)) + tone_at(y, a, n, hz(39)) + tone_at(y, a, n, hz(42));
+            printf("   CHORDS %s: chord notes %.0f, notes between %.0f\n", wv ? "wavetable" : "string machine", on, off);
+            check(wv ? "CHORDS wavetable: the chord's notes (root, major third, fifth) are over 4x the notes between" : "CHORDS string machine: the chord's notes (root, major third, fifth) are over 4x the notes between", on > 4 * off);
+        }
+        {
+            double minor, major;
+            setup_ch(127, 0, 0);
+            play(60, y, n);
+            major = tone_at(y, a, n, hz(40)) - tone_at(y, a, n, hz(39));
+            setup_ch(52, 0, 0);                                           /* a minor chord: the third is a semitone lower */
+            play(60, y, n);
+            minor = tone_at(y, a, n, hz(40)) - tone_at(y, a, n, hz(39));
+            printf("   CHORDS third minus the minor third: %.0f in the major chord, %.0f in the minor\n", major, minor);
+            check("CHORDS CHORD changes the third (major above, minor below)", major > 0 && minor < 0);
+        }
+        for (ch = 0; ch <= 127; ch += 25)
+            for (iv = 0; iv <= 127; iv += 21)
+                for (wave = 0; wave <= 127; wave += 21)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {36, 60, 96};
+                        setup_ch(ch, iv, wave);
+                        play(keys[k], y, 8192);
+                        for (j = 2048; j < 8192; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                        cnt += 6144;
+                    }
+        printf("   CHORDS sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
+        check("CHORDS sweep (CHORD, INVERSION, WAVE, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

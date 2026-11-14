@@ -17,6 +17,8 @@
  *
  * TYPE 4 is NOISE (nf_noise.c, Plaits): MODE, CLOCK, RES.
  *
+ * TYPE 5 is CHORDS (nf_chord.c, Plaits): CHORD, INVERSION, WAVE; per-voice state in the part's engine memory.
+ *
  * then a state variable low-pass (CUT RES KTR, ANALOG's own filter code) so the first builds are playable. The Nano Freak
  * filter, envelopes and modulation matrix replace this later; this filter is the stand-in.
  *
@@ -25,7 +27,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -434,6 +436,179 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->s[6] = rng;
 }
 
+/* CHORDS (Plaits' chord engine): five voices play a chord from one key. E1 CHORD (eleven chords), E2 INVERSION (rotates the
+ * chord through five voices and octaves), E3 WAVE (the string machine's registrations, then a 15-wave table). Each voice
+ * has two oscillators crossfaded by E3: the divide-down string machine (four saws an octave apart, polyBLEP, gains from
+ * the registration, shifted up the keyboard) and the wavetable one (128-point integrated waves, differentiated and
+ * low-passed). The state is a slot per voice in the part's engine memory (engines.c eng_mem, as PHYS's); the parameters
+ * are held for the block, their amplitudes ramped. */
+#define NANO_CH_V 5
+typedef struct {
+    uint32_t pdd[NANO_CH_V], pwt[NANO_CH_V];            /* the two oscillators' phases */
+    int32_t lp[NANO_CH_V], dlp[NANO_CH_V], dprev[NANO_CH_V];   /* the wavetable's differentiator and low-pass */
+    int32_t add[NANO_CH_V], awt[NANO_CH_V];             /* the amplitudes the last block ended on, Q15 */
+    int32_t morph, timbre, chord;                       /* smoothed WAVE and INVERSION (Q15), the chord now */
+} nano_ch_t;
+#define NANO_SLOTS NVOICE
+ENG_MEM_FITS("NANO", sizeof(nano_ch_t) * NANO_SLOTS);
+
+static nano_ch_t *nano_slot(track_t *t, voice_t *v)
+{
+    uint32_t i;
+    if (t < &trk[0] || t >= &trk[NPART])
+        return 0;
+    i = (uint32_t)(v - t->v);
+    return i < NANO_SLOTS ? (nano_ch_t *)ENG_MEM(t - trk) + i : 0;
+}
+
+static const uint16_t NANO_CH_FADE[NANO_CH_V] = {18022, 15401, 16056, 16712, 17367};      /* 0.55 0.47 0.49 0.51 0.53, Q15 */
+
+static __attribute__((noinline)) void nano_render_ch(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_ch_t *S = nano_slot(t, v);
+    int32_t acc[CTL];
+    int32_t hq = p[P_E1] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq = p[P_E3] * 258;
+    int32_t harm[8], ratio_ok[NANO_CH_V] = {0, 0, 0, 0, 0}, amps[NANO_CH_V] = {0, 0, 0, 0, 0}, vq, ii, ifr, rot, nrot, i, j, r, ri, rf, wq, wi, wf;
+    uint32_t ratios[NANO_CH_V] = {0, 0, 0, 0, 0}, inc0;
+    tsvf_t flt;
+    int32_t ic1 = v->s[0], ic2 = v->s[1];
+    int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
+    if (!S || n > CTL)
+        return;
+    tq += tq >> 7;
+    S->morph += ((mq - S->morph) * 3277) >> 15;                           /* 0.1 per block */
+    S->timbre += ((tq - S->timbre) * 3277) >> 15;
+    vq = hq * 11 + ((hq * 7209) >> 15) - 16384;                           /* the chord, with a little hysteresis: x 1.02 x 11 - 0.5 */
+    vq += (vq > S->chord * 32768) ? -2458 : 2458;
+    vq = (vq + 16384) >> 15;
+    S->chord = vq < 0 ? 0 : vq > 10 ? 10 : vq;
+    r = 32768 - ((S->morph * 70451) >> 15);                               /* the registration: 1 - 2.15 WAVE, over the first half */
+    r = r < 0 ? 0 : r;
+    r = r * 7 - (r >> 10);
+    ri = r >> 15;
+    rf = r & 32767;
+    for (i = 0; i < 6; i++)
+        harm[i] = NANO_REG[ri][i] + (((NANO_REG[ri + 1][i] - NANO_REG[ri][i]) * rf) >> 15);
+    harm[6] = harm[7] = 0;
+    wq = ((S->morph - 17531) * 70451) >> 15;                              /* the wave: (WAVE - 0.535) 2.15 of the table */
+    wq = wq < 0 ? 0 : wq > 32767 ? 32767 : wq;
+    wq *= 14;
+    wi = wq >> 15;
+    wf = wq & 32767;
+    if (wi > 13) {
+        wi = 13;
+        wf = 32767;
+    }
+    vq = S->timbre * 20;                                                  /* the inversion */
+    ii = vq >> 15;
+    ifr = vq & 32767;
+    nrot = ii / 4;
+    rot = ii % 4;
+    for (i = 0; i < 4; i++) {
+        int32_t e = (3 + ii - i) / 4, tg = (i - nrot + NANO_CH_V) % NANO_CH_V, pv = (tg + NANO_CH_V - 1) % NANO_CH_V;
+        uint32_t b = NANO_CHB[S->chord][i], rr = e >= 2 ? b << (e - 2) : b >> (2 - e);
+        if (i == rot) {
+            ratios[tg] = rr;
+            ratios[pv] = rr * 2;
+            amps[pv] = (8192 * ifr) >> 15;
+            amps[tg] = (8192 * (32768 - ifr)) >> 15;
+        } else if (i < rot) {
+            ratios[pv] = rr;
+            amps[pv] = 8192;
+        } else {
+            ratios[tg] = rr;
+            amps[tg] = 8192;
+        }
+    }
+    (void)ratio_ok;
+    inc0 = (uint32_t)(((uint64_t)m->inc * 65405u) >> 16);                 /* x 0.998 */
+    for (i = 0; i < (int32_t)n; i++)
+        acc[i] = 0;
+    for (j = 0; j < NANO_CH_V; j++) {
+        uint32_t ninc = (uint32_t)(((uint64_t)inc0 * ratios[j]) >> 16);
+        int32_t wt = ((S->morph - NANO_CH_FADE[j]) * 50), dd, ddg, tdd, twt, ad, aw, sd, sw;
+        wt = wt < 0 ? 0 : wt > 32768 ? 32768 : wt;
+        ninc = ninc > 0x7FFFFFFFu ? 0x7FFFFFFFu : ninc;
+        ddg = 131072 - (int32_t)(ninc >> 17) * 32;
+        ddg = ddg < 0 ? 0 : ddg > 32768 ? 32768 : ddg;
+        dd = (((32768 - wt) * ddg) >> 15);
+        tdd = (amps[j] * dd) >> 15;
+        twt = (amps[j] * wt) >> 15;
+        if (tdd == 0 && S->add[j] == 0 && twt == 0 && S->awt[j] == 0)
+            continue;
+        ad = S->add[j] << 8;
+        aw = S->awt[j] << 8;
+        sd = ((tdd - S->add[j]) << 8) / (int32_t)n;
+        sw = ((twt - S->awt[j]) << 8) / (int32_t)n;
+        {   /* the string machine */
+            int32_t sh = ninc > 0x40000000u ? 6 : ninc > 0x20000000u ? 4 : ninc > 0x10000000u ? 2 : 0, rg[7], g[4], k;
+            uint32_t incb = ninc >> (sh >> 1), ph = S->pdd[j];
+            if (ninc > 0x40000000u * 2u - 1u)
+                sh = 8;
+            for (k = 0; k < 7; k++)
+                rg[k] = k < sh ? 0 : harm[k - sh];
+            g[0] = rg[0] + 2 * rg[1];
+            g[1] = rg[2] - rg[1] + 2 * rg[3];
+            g[2] = rg[4] - rg[3] + 2 * rg[5];
+            g[3] = rg[6] - rg[5];
+            if (sh < 8 && (ad || sd)) {
+                for (i = 0; i < (int32_t)n; i++) {
+                    int32_t x = 0;
+                    ad += sd;
+                    for (k = 0; k < 4; k++)
+                        if (g[k])
+                            x += (osc_saw(ph << k, incb << k) * g[k]) >> 15;
+                    acc[i] += (x * (ad >> 8)) >> 15;
+                    ph += incb;
+                }
+            } else {
+                ph += incb * n;
+            }
+            S->pdd[j] = ph;
+        }
+        if (aw || sw) {   /* the wavetable oscillator */
+            uint32_t winc = ninc + (ninc >> 8), ph = S->pwt[j];
+            int32_t c, lp = S->lp[j], dl = S->dlp[j], dp = S->dprev[j], G, k2;
+            const int16_t *t0 = NANO_CHW[wi], *t1 = NANO_CHW[wi + 1];
+            winc = winc > 0x40000000u ? 0x40000000u : winc;
+            c = (int32_t)(winc >> 17) * 128;                              /* min(128 f, 1), Q15 */
+            c = c > 32768 ? 32768 : c;
+            G = (int32_t)(((uint64_t)1 << 38) / (winc | 1u));
+            G = G > (1 << 20) ? (1 << 20) : G;
+            k2 = 65536 - (int32_t)(winc >> 15);                           /* x (1 - 2 f) */
+            for (i = 0; i < (int32_t)n; i++) {
+                uint32_t pi = ph >> 25;
+                int32_t pf = (int32_t)((ph >> 10) & 32767u), a0 = t0[pi], b0 = t0[pi + 1], a1 = t1[pi], b1 = t1[pi + 1], x0, x1, in, y;
+                x0 = a0 + (((b0 - a0) * pf) >> 15);
+                x1 = a1 + (((b1 - a1) * pf) >> 15);
+                in = x0 + (((x1 - x0) * wf) >> 15);
+                dl += ((((in - dp) - dl) >> 1) * c) >> 14;
+                dp = in;
+                lp += (((dl - lp) >> 1) * c) >> 14;
+                aw += sw;
+                y = (lp * G) >> 8;
+                y = (y * (aw >> 8)) >> 15;
+                acc[i] += (y * (k2 >> 1)) >> 15;
+                ph += winc;
+            }
+            S->pwt[j] = ph;
+            S->lp[j] = lp;
+            S->dlp[j] = dl;
+            S->dprev[j] = dp;
+        }
+        S->add[j] = tdd;
+        S->awt[j] = twt;
+    }
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < (int32_t)n; i++) {
+        int32_t s = soft_knee(analog_tap(&flt, 0, acc[i] >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(s, m, (uint32_t)i) << 1;
+    }
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -447,6 +622,16 @@ static void nano_note_on(track_t *t, voice_t *v)
         v->ph[0] = 0xFFFFFFFFu;
         v->s[4] = v->s[5] = 0;
         v->s[6] = (int32_t)(0x9E3779B9u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 8) | 1u);
+    }
+    if (t->p[P_E0] == 5) {                                /* CHORDS: a clean slot, the smoothers start at the knobs */
+        nano_ch_t *S = nano_slot(t, v);
+        if (S) {
+            uint32_t k;
+            for (k = 0; k < sizeof *S / 4; k++)
+                ((uint32_t *)S)[k] = 0;
+            S->morph = t->p[P_E3] * 258;
+            S->timbre = t->p[P_E2] * 258;
+        }
     }
     if (t->p[P_E0] == 3)
         v->ph[0] = v->ph[1] = v->ph[2] = 0;               /* FORMANT: the carrier and both formants start at zero */
@@ -470,6 +655,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     }
     if (p[P_E0] == 4) {
         nano_render_no(t, v, out, n, m);
+        return;
+    }
+    if (p[P_E0] == 5) {
+        nano_render_ch(t, v, out, n, m);
         return;
     }
     tsvf_t flt;
@@ -558,13 +747,17 @@ static const preset_t NANO_PRESETS[] = {
     {"WIND", {4, 20, 110, 50, 0, 127, 0, 64}, {40, 100, 100, 80}, 0, 0, FX(0, 40, 30, 30), PAT(0)},
     {"HISS PERC", {4, 100, 120, 20, 0, 127, 0, 64}, {0, 60, 0, 30}, 0, 0, FX(0, 10, 10, 20), PAT(0)},
     {"PITCHED NOISE", {4, 64, 100, 100, 0, 127, 0, 64}, {2, 70, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    /* CHORDS: TYPE CHORD INVERSION WAVE 0 | CUT RES KTR */
+    {"STRING CHORD", {5, 127, 20, 10, 0, 127, 0, 64}, {20, 80, 100, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"M7 ORGAN", {5, 100, 40, 40, 0, 127, 0, 64}, {2, 60, 100, 30}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"M9 TABLE", {5, 50, 60, 100, 0, 120, 10, 64}, {10, 80, 100, 50}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 4, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 5, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},
@@ -578,5 +771,6 @@ static const engine_t ENG_NANO = {
     .note_on = nano_note_on,
     .render = nano_render,
     .knob = {P_E1, P_E2, P_E3, P_E4},
+    .mem = sizeof(nano_ch_t) * NANO_SLOTS,
     .keep = 0x03,                /* the filter */
 };
