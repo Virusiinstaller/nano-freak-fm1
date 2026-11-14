@@ -22,6 +22,19 @@ fold = arr("nf_lut_fold")[1:514]                      # 512 points and one more,
 q = [max(-32768, min(32767, round(x * 32768))) for x in fold]
 out.append("/* the wavefolder, 513 points, Q15 */")
 out.append("static const int16_t NANO_FOLD[513] = {\n    " + rows(q) + "\n};")
+
+stiff = arr("nf_lut_stiffness")
+out.append("/* MODAL: the structure's stiffness (inharmonicity), 65 points, Q12 (-0.0625 .. 2.0) */")
+out.append("static const int16_t NANO_STIF[65] = {\n    " + rows([round(x * 4096) for x in stiff], 13) + "\n};")
+f = 0.015 - 0.25; sign = 16.0                          # the modes' levels: Plaits' cosine oscillator at position 0.015, Q15
+if f < 0: f = -f
+elif f > 0.5: f -= 0.5
+else: sign = -16.0
+iir = sign * f * (1 - 2 * f); y1 = iir * 0.25; y0 = 0.5; amps = []
+for i in range(24):
+    tmp = y0; y0 = iir * y0 - y1; y1 = tmp; amps.append((tmp + 0.5) * 0.25)
+out.append("/* MODAL: the 24 modes' levels, Q15 */")
+out.append("static const int16_t NANO_MAMP[24] = {\n    " + rows([round(a * 32768) for a in amps], 12) + "\n};")
 if wsrc:                                              # the CHORDS wavetable: 15 cycles of 132 points (128 and the guard samples)
     m = re.search(r'nf_chord_waves\[15\]\[132\] = \{(.*)\};', wsrc, re.S)
     w = [int(x) for x in re.findall(r'-?\d+', m.group(1))]

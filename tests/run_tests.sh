@@ -302,7 +302,7 @@ if [ -f build/gen/felucca_tables.h ]; then
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/fmini_app_test" tests/fmini_app_test.c -lm
     run "FMini-1 app: the screen of every page, SAVE / PRESETS over 100 factory and the user patches, each patch its ARP, LFO, FX, LEVEL and octave, a new preset goes HOME" "$OUT/fmini_app_test" "$OUT/fa"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/nano_test" tests/nano_test.c -lm
-    run "NANO (Nano Freak) BASIC WAVES: pitch, SYM, SUB, SYNC repeats, TWO OP FM (pitch, INDEX, RATIO, FEEDBACK, DC), WAVESHAPER, FORMANT, NOISE, CHORDS at the master period and is brighter, bounded sweep with no DC or click, every preset sounds" "$OUT/nano_test"
+    run "NANO (Nano Freak) BASIC WAVES: pitch, SYM, SUB, SYNC repeats, TWO OP FM (pitch, INDEX, RATIO, FEEDBACK, DC), WAVESHAPER, FORMANT, NOISE, CHORDS, MODAL at the master period and is brighter, bounded sweep with no DC or click, every preset sounds" "$OUT/nano_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/fmini_filter_test" tests/fmini_filter_test.c -lm
     run "FMini-1 filter (Minimoog ladder): sings a sine from silence (pitch, THD, 1 V/oct over the keys, KBD 0), the CUTOFF dial's singing pitches, the EMPHASIS dial's passband loss and peak, no runaway" "$OUT/fmini_filter_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/fmini_fx_test" tests/fmini_fx_test.c -lm

@@ -12,6 +12,7 @@
  * 4d. FORMANT: period, the spectral peak follows FORMANT, bounded sweep.
  * 4e. NOISE: MODE low-pass to high-pass, the filter follows the key, bounded sweep.
  * 4f. CHORDS: the chord notes, CHORD changes the third, bounded sweep.
+ * 4g. MODAL: rings at the key, DAMP narrows it, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
 #include "hostsim.c"
@@ -80,6 +81,13 @@ static void setup_ch(uint32_t chord, uint32_t inversion, uint32_t wave)
 {
     setup(chord, inversion, wave, 0, 127);
     trk[0].p[P_E0] = 5;
+}
+
+/* MODAL: STRUCTURE BRIGHT DAMP on E1..E3, the filter open */
+static void setup_mo(uint32_t structure, uint32_t bright, uint32_t damp)
+{
+    setup(structure, bright, damp, 0, 127);
+    trk[0].p[P_E0] = 6;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -499,6 +507,36 @@ int main(void)
                     }
         printf("   CHORDS sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
         check("CHORDS sweep (CHORD, INVERSION, WAVE, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
+    }
+
+    /* 4g. MODAL (TYPE 6): the resonators ring at the key's harmonics, DAMP narrows them, only four voices sound, bounded sweeps */
+    {
+        double peak = 0, dc = 0, cnt = 0, rl, rh;
+        uint32_t k, st, br, dp, j;
+        setup_mo(32, 90, 20);                                             /* STRUCTURE 32 is harmonic (no stiffness) */
+        play(45, y, n);
+        rl = band_power(y, a, n, hz(45) * 1.94, hz(45) * 2.06) / band_power(y, a, n, hz(45) * 1.44, hz(45) * 1.56);
+        setup_mo(32, 90, 100);
+        play(45, y, n);
+        rh = band_power(y, a, n, hz(45) * 1.94, hz(45) * 2.06) / band_power(y, a, n, hz(45) * 1.44, hz(45) * 1.56);
+        printf("   MODAL: the 2nd mode over the gap below it: %.1f at DAMP 20, %.1f at DAMP 100\n", rl, rh);
+        check("MODAL rings at the key's harmonics (the 2nd mode over 10x the gap below it at DAMP 100) and DAMP narrows the peaks (5x more than at 20)", rh > 10 && rh > 5 * rl);
+        for (st = 0; st <= 127; st += 63)
+            for (br = 20; br <= 120; br += 50)
+                for (dp = 20; dp <= 120; dp += 50)
+                    for (k = 0; k < 3; k++) {
+                        static const uint8_t keys[] = {45, 60, 84};
+                        setup_mo(st, br, dp);
+                        play(keys[k], y, 16384);
+                        for (j = 4096; j < 16384; j++) {
+                            if (fabs(y[j]) > peak)
+                                peak = fabs(y[j]);
+                            dc += y[j];
+                        }
+                        cnt += 12288;
+                    }
+        printf("   MODAL sweep: peak %.0f, mean %.1f\n", peak, dc / cnt);
+        check("MODAL sweep (STRUCTURE, BRIGHT, DAMP, keys): bounded (peak under 65536) and no DC (under 5 % of the peak)", peak < 65536 && fabs(dc / cnt) < 0.05 * peak);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
