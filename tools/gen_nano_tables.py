@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """Regenerate firmware/src/eng_nano_tables.h: the WAVESHAPER tables of the NANO engine, taken from the Nano Freak test bed's
-nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c"""
+nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c"""
 import re, sys
 src = open(sys.argv[1]).read()
+wsrc = open(sys.argv[2]).read() if len(sys.argv) > 2 else ""
 def arr(name):
     m = re.search(name + r'\[\d+\] = \{(.*?)\};', src, re.S)
     return [float(x.replace('f', '')) for x in m.group(1).replace('\n', ' ').split(',') if x.strip()]
@@ -21,4 +22,23 @@ fold = arr("nf_lut_fold")[1:514]                      # 512 points and one more,
 q = [max(-32768, min(32767, round(x * 32768))) for x in fold]
 out.append("/* the wavefolder, 513 points, Q15 */")
 out.append("static const int16_t NANO_FOLD[513] = {\n    " + rows(q) + "\n};")
+if wsrc:                                              # the CHORDS wavetable: 15 cycles of 132 points (128 and the guard samples)
+    m = re.search(r'nf_chord_waves\[15\]\[132\] = \{(.*)\};', wsrc, re.S)
+    w = [int(x) for x in re.findall(r'-?\d+', m.group(1))]
+    assert len(w) == 15 * 132
+    out.append("/* the CHORDS wavetable (integrated waves), 15 cycles of 128 points and 4 guard points, int16 */")
+    out.append("static const int16_t NANO_CHW[15][132] = {")
+    for k in range(15):
+        out.append("  {\n    " + rows(w[k * 132:(k + 1) * 132], 12) + "\n  },")
+    out.append("};")
+    import math
+    base = [[0.00, 0.01, 11.99, 12.00], [0.00, 7.00, 7.01, 12.00], [0.00, 5.00, 7.00, 12.00], [0.00, 3.00, 7.00, 12.00], [0.00, 3.00, 7.00, 10.00],
+            [0.00, 3.00, 10.00, 14.00], [0.00, 3.00, 10.00, 17.00], [0.00, 2.00, 9.00, 16.00], [0.00, 4.00, 11.00, 14.00], [0.00, 4.00, 7.00, 11.00],
+            [0.00, 4.00, 7.00, 12.00]]
+    out.append("/* the 11 chords' four intervals as ratios, Q16 (2^(semitones / 12)) */")
+    out.append("static const uint32_t NANO_CHB[11][4] = {\n    " + ",\n    ".join("{" + ", ".join(str(round(65536 * 2 ** (x / 12))) for x in c) + "}" for c in base) + "\n};")
+    reg = [[0, 1, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0], [.5, 0, .5, 0, 0, 0], [.33, 0, .33, 0, .33, 0], [.33, 0, 0, .33, 0, .33], [.5, 0, 0, 0, 0, .5],
+           [0, .5, 0, 0, 0, .5], [0, .1, .1, 0, .2, .6]]
+    out.append("/* the string machine's eight registrations, Q15 */")
+    out.append("static const int32_t NANO_REG[8][6] = {\n    " + ",\n    ".join("{" + ", ".join(str(round(32768 * x)) for x in r) + "}" for r in reg) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")
