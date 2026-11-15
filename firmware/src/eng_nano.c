@@ -1916,6 +1916,23 @@ typedef struct {
 
 _Static_assert(sizeof(nano_rs_t) <= sizeof(((nano_ri_t *)0)->st), "nano_rs_t overlays the modal bank");
 
+/* 64 / 64 bit division by shift and subtract (the target has no 64-bit divide; used once per block) */
+static uint64_t nano_div64(uint64_t num, uint64_t den)
+{
+    uint64_t q = 0, r = 0;
+    int32_t i;
+    if (!den)
+        return ~0ull;
+    for (i = 63; i >= 0; i--) {
+        r = (r << 1) | ((num >> i) & 1u);
+        if (r >= den) {
+            r -= den;
+            q |= 1ull << i;
+        }
+    }
+    return q;
+}
+
 static inline uint32_t nano_mulq16(uint32_t a, uint32_t b16)
 {
     return (a >> 16) * b16 + (((a & 0xffffu) * b16) >> 16);
@@ -1949,7 +1966,7 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     bq = p[P_E3] * 258;
     dq = p[P_E4] * 258;
     pq = p[P_E7] * 258;
-    dtot = (uint32_t)((1ull << 48) / f0);                                /* 1 / frequency, Q16 samples */
+    dtot = (uint32_t)nano_div64(1ull << 48, f0);                                /* 1 / frequency, Q16 samples */
     d = dtot < (4u << 16) ? (4u << 16) : dtot;
     while (d > (500u << 16) && shift < 2) {
         d >>= 1;
@@ -1978,7 +1995,7 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     }
     {   /* the damping: the loss per pass for a decay of 0.07 2^(8 lf) s, the filter's brightness and cutoff, and the shift of its delay */
         int32_t lf = (dq * (65536 - dq)) >> 15, xi, b2 = (bq * bq) >> 14;
-        uint64_t val = nano_pow2_q16((uint32_t)(lf * 8)), x = (((uint64_t)10 * dtot) << 30) / (3087ull * val), y, term, r;
+        uint64_t val = nano_pow2_q16((uint32_t)(lf * 8)), x = nano_div64(((uint64_t)10 * dtot) << 30, 3087ull * val), y, term, r;
         uint32_t k;
         if (x > 11364000000ull)
             x = 11364000000ull;
