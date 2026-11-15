@@ -114,6 +114,20 @@ static uint32_t nano_isqrt(uint32_t x)
 /* TWO OP FM (Plaits' two-operator FM, simplified: no oversampling): E1 RATIO (the quantizer's modulator ratio), E2 INDEX
  * (0..2 cycles of phase modulation, squared, tamed as the modulator rises), E3 FEEDBACK (64 none; above: the modulator feeds
  * itself, below: the carrier feeds the modulator's pitch). ph[0] carrier, ph[1] modulator, s[2] the last carrier sample, s[3] the DC blocker. */
+/* Plaits' voice limiter for the types the test bed normalises (NOISE, MODAL): a peak follower (attack 0.05, release 0.00002 a sample, 1.0 = 32768,
+ * kept in Q8) and, past 1.0, a gain of 1 / peak (Q15) held for the block. Under 1.0 it does nothing. */
+static inline int32_t nano_lim_gain(int32_t pkq)
+{
+    int32_t pk = pkq >> 8;
+    return pk > 32768 ? (int32_t)(((uint32_t)1 << 30) / (uint32_t)pk) : 32768;
+}
+
+static inline void nano_lim_follow(int32_t *pkq, int32_t x)
+{
+    int32_t a = (x < 0 ? -x : x) << 8, d = a - *pkq;
+    *pkq += d > 0 ? (d * 13) >> 8 : (d * 21) >> 20;
+}
+
 /* FOLD (the Nano Freak test bed's K4 on the types that have no use of the fourth knob of their own, all but BASIC, HARMONIC, WAVETABLE and RINGS): a
  * triangle fold of the voice before the filter, the gain 1 to 7 with the knob and the effect faded in over its first tenth. x is the filter's
  * input, Q14 (1.0 = 16384); k the knob, 0 to 127. */
@@ -164,7 +178,7 @@ static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         prev += (co - prev) >> 4;
         dcb += (co - dcb) >> 11;                                  /* FM at equal frequencies has a DC term: a 3 Hz blocker */
         co -= dcb;
-        s = soft_knee(analog_tap(&flt, 0, nano_k4(co >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        s = soft_knee(analog_tap(&flt, 0, nano_k4((co * 3) >> 3, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
@@ -398,7 +412,7 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     uint32_t i, pc = v->ph[0], cinc;
     int32_t hq = p[P_E1] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq = p[P_E3] * 258;
     int32_t kq, qq8, oct, frac, fac, gain, hg, bg, lg, amount, sample = v->s[2], nxt = v->s[3], s4 = v->s[4], s5 = v->s[5];
-    int32_t rng = v->s[6], ic1 = v->s[0], ic2 = v->s[1], sq;
+    int32_t rng = v->s[6], ic1 = v->s[0], ic2 = v->s[1], sq, lg7 = nano_lim_gain(v->s[7]);
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     tq += tq >> 7;                                                       /* 0..32767 */
     cinc = nano_inc_c(3185015u >> 2, (uint32_t)((128 * 64 * tq) >> 15) + 768u, 0xFFFFFFFFull);   /* note 0 up to note 128 * CLOCK */
@@ -453,7 +467,10 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         s5 = clamp(2 * v2 - s5, -150000, 150000);
         hp = xin - ((kq * v1) >> 12) - v2;
         o = ((hp >> 3) * hg + (v1 >> 3) * bg + (v2 >> 3) * lg) >> 12;
-        o = clamp(o, -49152, 49152);                                     /* a resonant peak: kept inside the voice's range */
+        o = clamp(o, -(1 << 18), 1 << 18);
+        nano_lim_follow(&v->s[7], o);
+        o = (clamp(o, -65535, 65535) * lg7) >> 15;                       /* the limiter: a resonant peak is brought down, not cut */
+        o = clamp(o, -49152, 49152);
         s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, i) << 1;
     }
@@ -480,6 +497,9 @@ typedef struct {
     int32_t add[NANO_CH_V], awt[NANO_CH_V];             /* the amplitudes the last block ended on, Q15 */
     int32_t morph, timbre, chord;                       /* smoothed WAVE and INVERSION (Q15), the chord now */
 } nano_ch_t;
+#ifndef NANO_MO_HOT
+#define NANO_MO_HOT 5                                    /* the bank's level before the limiter */
+#endif
 #define NANO_MODES 12
 #define NANO_MODAL_POLY 4                                /* MODAL: the voices that sound (a bank of resonators each) */
 typedef struct {
@@ -687,7 +707,7 @@ static __attribute__((noinline)) void nano_render_mo(track_t *t, voice_t *v, int
     int32_t tmp[CTL], acc[CTL], gn[NANO_MODES];
     tsvf_t md[NANO_MODES], ex, flt;
     int32_t hq = p[P_E1] * 258, bq0 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), dq0 = p[P_E3] * 258;
-    int32_t bq, dq, bb, dens, dust16, amp, si, sf, stiff, st, str3, qs, qm, ql, e, k, i, mi, ic1 = v->s[0], ic2 = v->s[1];
+    int32_t bq, dq, bb, dens, dust16, amp, si, sf, stiff, st, str3, qs, qm, ql, e, k, i, mi, ic1 = v->s[0], ic2 = v->s[1], lg7;
     uint32_t f0 = m->inc, f0c, exinc, rng;
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     if (!S || n > CTL || (uint32_t)(v - t->v) >= NANO_MODAL_POLY)
@@ -774,8 +794,12 @@ static __attribute__((noinline)) void nano_render_mo(track_t *t, voice_t *v, int
         S->s2[mi] = s2;
     }
     tsvf_coef(&flt, cut, p[P_E6]);
+    lg7 = nano_lim_gain(v->s[7]);
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4(clamp(soft_knee(acc[i] << 1, 16000), -32768, 32767), p[P_E4]), &ic1, &ic2, 0), 11000) << 1;
+        int32_t a = clamp(acc[i] * NANO_MO_HOT, -(1 << 18), 1 << 18), s;
+        nano_lim_follow(&v->s[7], a);                                    /* Plaits' limiter: what rings hot is brought down to the same loudness */
+        a = (clamp(a, -65535, 65535) * lg7) >> 15;
+        s = soft_knee(analog_tap(&flt, 0, nano_k4(clamp(soft_knee(a << 1, 16000), -32768, 32767), p[P_E4]), &ic1, &ic2, 0), 11000) << 1;
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
@@ -1395,7 +1419,7 @@ static __attribute__((noinline)) void nano_render_sa(track_t *t, voice_t *v, int
                 x[j] = (int16_t)clamp(((x[j] + shift) * 13) >> 3, -32767, 32767);
         }
         for (j = 0; j < size; j++) {
-            int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4(x[j] >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+            int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4((x[j] * 3) >> 3, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
             out[i + j] += voice_amp(s, m, i + j) << 1;
         }
     }
@@ -2385,9 +2409,11 @@ static void nano_note_on(track_t *t, voice_t *v)
     v->s[3] = t->p[P_E0] == 2 ? -1 : 0;              /* FM: no DC yet; WAVESHAPER: -1, start from this block's own values */
     if (t->p[P_E0] == 2)
         v->ph[0] = 0;
+    if (t->p[P_E0] == 4 || t->p[P_E0] == 6)
+        v->s[7] = 0;                                      /* the limiter's peak */
     if (t->p[P_E0] == 4) {                                /* NOISE: the clock restarts at once; a new random run per note */
         v->ph[0] = 0xFFFFFFFFu;
-        v->s[4] = v->s[5] = 0;
+        v->s[4] = v->s[5] = v->s[7] = 0;
         v->s[6] = (int32_t)((0x9E3779B9u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 8)) | 1u);
     }
     if (t->p[P_E0] == 5) {                                /* CHORDS: a clean slot, the smoothers start at the knobs */
@@ -2603,7 +2629,7 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         }
         sn = sine_i(pb);
         s = (s + mulq15(sn, sub)) >> 1;                           /* (wave + sub) / 2 */
-        s = soft_knee(analog_tap(&flt, 0, s >> 1, &ic1, &ic2, 0), 16000) << 1;
+        s = soft_knee(analog_tap(&flt, 0, (s * 9) >> 4, &ic1, &ic2, 0), 16000) << 1;
         ph = pn;
         pb += inc >> 1;
         out[i] += voice_amp(s, m, i) << 1;
