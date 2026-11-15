@@ -1180,6 +1180,76 @@ int main(void)
         check("RINGS FM sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
     }
 
+    /* 4q. RINGS (TYPE 14), the STRING model (E1 64): the key's pitch, DAMPING lengthens the ring, POSITION is a comb, bounded sweeps */
+    {
+        static const uint8_t keys[] = {33, 45, 57, 69, 81};
+        double peak = 0, e_a, e_b, a1, a2, p_mid, p_q, f1;
+        uint32_t k, j, st, br, dm, ps, w, lag, best;
+        int ok = 1;
+        for (k = 0; k < 5; k++) {
+            double f = hz(keys[k]), bc = -2, T = FS / f, cents;
+            setup_ri(64, 32, 100, 80, 20);
+            play(keys[k], y, 16384);
+            best = 0;
+            for (lag = (uint32_t)(T * 0.8); lag < (uint32_t)(T * 1.25); lag++) {
+                double c = 0;
+                for (j = 3000; j < 9000; j++)
+                    c += y[j] * y[j + lag];
+                if (c > bc) {
+                    bc = c;
+                    best = lag;
+                }
+            }
+            cents = 1200 * log2(T / best);
+            printf("   RINGS STRING key %u: period %.1f, found %u, %.1f cents\n", keys[k], T, best, cents);
+            if (fabs(cents) > 40 && !(best > T * 0.99 && best < T * 1.01))
+                ok = 0;
+        }
+        check("RINGS STRING plays the key (the period within 40 cents, or a sample, from key 33 to 81)", ok);
+        for (w = 0; w < 2; w++) {
+            a1 = a2 = 0;
+            setup_ri(64, 32, 100, w ? 110 : 40, 20);
+            play(57, y, FS);
+            for (j = FS / 16; j < FS / 16 + 4096; j++)
+                a1 += y[j] * y[j];
+            for (j = FS / 2; j < FS / 2 + 4096; j++)
+                a2 += y[j] * y[j];
+            if (w)
+                e_b = a2 / (a1 > 0 ? a1 : 1);
+            else
+                e_a = a2 / (a1 > 0 ? a1 : 1);
+        }
+        printf("   RINGS STRING energy at half a second over that at a sixteenth: %.5f at DAMPING 40, %.5f at DAMPING 110\n", e_a, e_b);
+        check("RINGS STRING DAMPING lengthens the ring (the tail at 110 holds over 10x the energy of 40)", e_b > 10 * e_a && e_b > 0);
+        f1 = hz(57);
+        setup_ri(64, 32, 100, 100, 64);
+        play(57, y, n);
+        p_mid = tone_at(y, a, n, 2 * f1) / (tone_at(y, a, n, f1) + 1);
+        setup_ri(64, 32, 100, 100, 32);
+        play(57, y, n);
+        p_q = tone_at(y, a, n, 4 * f1) / (tone_at(y, a, n, f1) + 1);
+        w = (uint32_t)(tone_at(y, a, n, 2 * f1) / (tone_at(y, a, n, f1) + 1) * 1000);
+        printf("   RINGS STRING 2f/f at POSITION 64: %.3f; at POSITION 32: 2f/f %.3f, 4f/f %.3f\n", p_mid, w / 1000.0, p_q);
+        check("RINGS STRING POSITION is a comb (2f nearly gone in the middle, 4f at a quarter, 2f there is not)", p_mid < 0.15 && p_q < 0.15 && w > 4 * p_mid * 1000);
+        for (st = 0; st <= 127; st += 32)
+            for (br = 0; br <= 127; br += 64)
+                for (dm = 0; dm <= 127; dm += 63)
+                    for (ps = 0; ps <= 127; ps += 32)
+                        for (k = 0; k < 3; k++) {
+                            static const uint8_t kk[] = {24, 60, 108};
+                            setup_ri(64, st, br, dm, ps);
+                            play(kk[k], y, 8192);
+                            for (j = 0; j < 8192; j++)
+                                if (fabs(y[j]) > peak) {
+                                    peak = fabs(y[j]);
+                                    if (peak > 60000)
+                                        printf("      peak %.0f at st %u br %u dm %u ps %u key %u\n", peak, st, br, dm, ps, kk[k]);
+                                }
+                        }
+        printf("   RINGS STRING sweep: peak %.0f\n", peak);
+        check("RINGS STRING sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;

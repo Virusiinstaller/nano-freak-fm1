@@ -84,4 +84,10 @@ if len(sys.argv) > 5:                                  # RINGS FM: the structure
     assert len(v) == 129, len(v)
     out.append("/* RINGS FM: the structure -> ratio table, semitones + 12 in Q6 (129 entries) */")
     out.append("static const uint16_t NANO_RFMQ[129] = {\n    " + ",\n    ".join(", ".join(str(int(round((x + 12) * 64))) for x in v[i:i + 16]) for i in range(0, len(v), 16)) + "\n};")
+if len(sys.argv) > 5:                                  # RINGS STRING: the IIR damping filter's delay, 1 - lut_svf_shift[0..128], Q16
+    m = re.search(r'nfr_lut_svf_shift\[\d+\] = \{(.*?)\};', rsrc, re.S)
+    v = [float(x.strip().rstrip('f')) for x in m.group(1).replace('\n', ' ').split(',') if x.strip()]
+    assert len(v) == 257, len(v)
+    out.append("/* RINGS STRING: the damping filter's delay as a share of the string's (1 - shift), Q16, indexed by the cutoff in semitones (0..129) */")
+    out.append("static const uint16_t NANO_RSVF[130] = {\n    " + ",\n    ".join(", ".join(str(int(round((1 - x) * 65535))) for x in v[i:i + 13]) for i in range(0, 130, 13)) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")
