@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """Regenerate firmware/src/eng_nano_tables.h: the WAVESHAPER tables of the NANO engine, taken from the Nano Freak test bed's
-nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c [path/to/nano-freak/dsp/nf_braids_tables.c [path/to/nano-freak/dsp/nf_wt_tables.c]]"""
+nf_tables.c (tables of Mutable Instruments Plaits, Emilie Gillet, MIT). Usage: gen_nano_tables.py path/to/nano-freak/dsp/nf_tables.c path/to/nano-freak/dsp/nf_chord_waves.c [path/to/nano-freak/dsp/nf_braids_tables.c [path/to/nano-freak/dsp/nf_wt_tables.c [path/to/nano-freak/dsp/nf_rings_tables.c]]]"""
 import re, sys
 src = open(sys.argv[1]).read()
 wsrc = open(sys.argv[2]).read() if len(sys.argv) > 2 else ""
@@ -71,4 +71,11 @@ if len(sys.argv) > 4:                                  # WAVETABLE: the test bed
     assert len(v) == 16 * 16 * 129, len(v)
     out.append("/* WAVETABLE: 16 tables x 16 waves x 129 samples (the last repeats the first), int8 */")
     out.append("static const int8_t NANO_WT[16 * 16 * 129] = {\n    " + ",\n    ".join(", ".join(str(x) for x in v[i:i + 129]) for i in range(0, len(v), 129)) + "\n};")
+if len(sys.argv) > 5:                                  # RINGS (Mutable Instruments Rings, MIT): the stiffness table, 257 entries, Q20
+    rsrc = open(sys.argv[5]).read()
+    m = re.search(r'nfr_lut_stiffness\[\d+\] = \{(.*?)\};', rsrc, re.S)
+    v = [float(x.strip().rstrip('f')) for x in m.group(1).replace('\n', ' ').split(',') if x.strip()]
+    assert len(v) == 257, len(v)
+    out.append("/* RINGS: the structure -> stiffness table of Rings' resonator (257 entries, Q20: the modes are tuned by it) */")
+    out.append("static const int32_t NANO_RSTIF[257] = {\n    " + ",\n    ".join(", ".join(str(int(round(x * 1048576))) for x in v[i:i + 16]) for i in range(0, len(v), 16)) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")

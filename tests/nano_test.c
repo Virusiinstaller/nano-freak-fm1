@@ -19,6 +19,7 @@
  * 4l. SAW: sync repeats at the master period, comb feedback sign, CS80, bounded sweep.
  * 4m. WAVETABLE: every table repeats at the key's period, POSITION, CHORUS, MORPH into the next table, bounded sweep.
  * 4n. V.ANALOG: the saw repeats at the key's period, DETUNE puts it a fifth / two octaves away, SYNC changes the square, bounded sweep.
+ * 4o. RINGS (modal model): pitch, DAMPING, STRUCTURE, POSITION, four voices, bounded sweep.
  * 4j. PLUCK: the string's pitch, DECAY, POSITION, voices past the fourth silent, bounded sweep.
  * 6. the preset table plays: every NANO preset makes sound. */
 #define main hostsim_main
@@ -144,6 +145,14 @@ static void setup_va(uint32_t detune, uint32_t sync, uint32_t shape)
 {
     setup(detune, sync, shape, 0, 127);
     trk[0].p[P_E0] = 13;
+}
+
+/* RINGS: MODEL STRUCTURE BRIGHTNESS DAMPING on E1..E4, POSITION on E7, the filter open */
+static void setup_ri(uint32_t model, uint32_t st, uint32_t br, uint32_t dm, uint32_t ps)
+{
+    setup(model, st, br, dm, 127);
+    trk[0].p[P_E0] = 14;
+    trk[0].p[P_E7] = (int16_t)ps;
 }
 
 static void play(uint32_t note, double *y, uint32_t n)
@@ -1036,6 +1045,90 @@ int main(void)
                     }
         printf("   V.ANALOG sweep: peak %.0f\n", peak);
         check("V.ANALOG sweep (DETUNE, SYNC, SHAPE, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
+    /* 4o. RINGS (TYPE 14), the modal model: the struck bank's pitch, DAMPING, STRUCTURE, POSITION, voices past the fourth, bounded sweeps */
+    {
+        double f = hz(57), early, late, e2a, e2b, l0, l1, peak = 0, e5 = 0, rp0, rp1;
+        uint32_t k, j, st, br, dm, ps, w;
+        for (k = 0; k < 4; k++) {
+            static const uint8_t rk[] = {45, 57, 69, 81};
+            double best = 0, bc = 0, c;
+            setup_ri(0, 32, 64, 64, 64);
+            play(rk[k], y, n);
+            for (c = -40; c <= 40; c += 2) {
+                double h = tone_at(y, a, n, hz(rk[k]) * pow(2.0, c / 1200.0));
+                if (h > best) {
+                    best = h;
+                    bc = c;
+                }
+            }
+            printf("   RINGS key %u: strongest line %+.0f cents from the key\n", rk[k], bc);
+            check("RINGS modal rings at the key's pitch (within 10 cents) with STRUCTURE at harmonic", fabs(bc) <= 10);
+        }
+        for (w = 0; w < 2; w++) {
+            double a1 = 0, a2 = 0;
+            setup_ri(0, 32, 64, w ? 120 : 40, 64);
+            play(57, y, FS);
+            for (j = FS / 8; j < FS / 8 + 4096; j++)
+                a1 += y[j] * y[j];
+            for (j = FS / 2; j < FS / 2 + 4096; j++)
+                a2 += y[j] * y[j];
+            if (w)
+                late = a2 / (a1 > 0 ? a1 : 1);
+            else
+                early = a2 / (a1 > 0 ? a1 : 1);
+            if (w)
+                e2b = late;
+            else
+                e2a = early;
+        }
+        printf("   RINGS energy after half a second over that at an eighth: %.5f at DAMPING 40, %.5f at DAMPING 120\n", e2a, e2b);
+        check("RINGS DAMPING lengthens the ring (the tail at 120 holds over 10x the energy of 40)", e2b > 10 * e2a);
+        setup_ri(0, 32, 64, 80, 64);
+        play(57, y, n);
+        l0 = tone_at(y, a, n, 3 * f) / (tone_at(y, a, n, f) + 1);
+        setup_ri(0, 100, 64, 80, 64);
+        play(57, y, n);
+        l1 = tone_at(y, a, n, 3 * f) / (tone_at(y, a, n, f) + 1);
+        printf("   RINGS 3rd harmonic over the fundamental: %.3f at STRUCTURE 32, %.3f at STRUCTURE 100\n", l0, l1);
+        check("RINGS STRUCTURE away from harmonic detunes the partials (the 3rd harmonic line drops below a third)", l1 < l0 / 3);
+        setup_ri(0, 32, 64, 80, 64);
+        play(57, y, n);
+        rp0 = tone_at(y, a, n, 2 * f) / (tone_at(y, a, n, f) + 1);
+        setup_ri(0, 32, 64, 80, 20);
+        play(57, y, n);
+        rp1 = tone_at(y, a, n, 2 * f) / (tone_at(y, a, n, f) + 1);
+        printf("   RINGS 2nd harmonic over the fundamental: %.3f at POSITION 64, %.3f at POSITION 20\n", rp0, rp1);
+        check("RINGS POSITION in the middle cancels the even modes (the 2nd harmonic under a tenth, and over 3x that elsewhere)", rp0 < 0.1 && rp1 > 3 * rp0);
+        setup_ri(0, 32, 64, 80, 64);
+        for (k = 0; k < 6; k++)
+            trk_note_on(&trk[0], 60 + (int)k, 100);
+        {
+            static int32_t b[CTL];
+            uint32_t blk;
+            for (blk = 0; blk < 64; blk++) {
+                track_render(&trk[0], b, CTL);
+                for (j = 0; j < CTL; j++)
+                    e5 += fabs((double)b[j]);
+            }
+            printf("   RINGS six held notes: summed magnitude %.0f\n", e5);
+            check("RINGS six notes at once stay bounded (voices past the fourth are silent, no crash)", e5 < 64.0 * CTL * 65536);
+        }
+        for (st = 0; st <= 127; st += 32)
+            for (br = 0; br <= 127; br += 64)
+                for (dm = 0; dm <= 127; dm += 63)
+                    for (ps = 0; ps <= 127; ps += 63)
+                        for (k = 0; k < 3; k++) {
+                            static const uint8_t keys[] = {24, 60, 108};
+                            setup_ri(0, st, br, dm, ps);
+                            play(keys[k], y, 8192);
+                            for (j = 0; j < 8192; j++)
+                                if (fabs(y[j]) > peak)
+                                    peak = fabs(y[j]);
+                        }
+        printf("   RINGS sweep: peak %.0f\n", peak);
+        check("RINGS sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

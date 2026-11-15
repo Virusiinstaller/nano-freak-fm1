@@ -25,6 +25,7 @@
  *
  * TYPE 8 is HARMONIC (Braids' Harmo): PEAK, WIDTH, CHORUS, STRETCH (E4).
  *
+ * TYPE 14 is RINGS (Mutable Instruments Rings): MODEL, STRUCTURE, BRIGHTNESS, DAMPING, POSITION on E7.
  * TYPE 13 is V.ANALOG (Plaits' virtual analog): DETUNE, SYNC, SHAPE.
  * TYPE 12 is WAVETABLE (16 tables of 16 waves): TABLE, POSITION, CHORUS, MORPH.
  * TYPE 11 is SAW (Braids' SAW_SYNC / SAW_COMB / CSAW): WAVE, E2, E3.
@@ -39,7 +40,7 @@
  * the half level of osc_pulse(), whose edges are the other way round, which matters when it is crossfaded into the saw).
  * State: ph[0] master, ph[1] the synced slave, ph[2] the sub; s[0] s[1] the filter, s[2] the restart correction owed to the
  * next sample. 32-bit multiplies per sample; the 64-bit one is once a block (the slave's increment). */
-static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW", "WAVETABLE", "V.ANALOG"};
+static const char *const N_NANO_TYPE[] = {"BASIC", "TWO OP FM", "WAVESHAPER", "FORMANT", "NOISE", "CHORDS", "MODAL", "SWARM", "HARMONIC", "PLUCK", "BASS", "SAW", "WAVETABLE", "V.ANALOG", "RINGS"};
 
 typedef struct {
     int32_t t, u, rev;           /* MORPH: pulse -> saw (Q15), the second saw's level (Q15), 1 / (1 + u) (Q15) */
@@ -477,6 +478,7 @@ typedef union {
     uint32_t sa[16];                                    /* SAW's nano_sa_t (below) */
     uint32_t wt[4];                                     /* WAVETABLE's nano_wt_t (below) */
     uint32_t va[20];                                    /* V.ANALOG's nano_va_t (below) */
+    uint32_t ri[80];                                    /* RINGS's nano_ri_t (below) */
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
@@ -1708,6 +1710,201 @@ static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int
     v->s[1] = ic2;
 }
 
+/* A precise state variable filter for resonators, as Rings has them (Rings' own tan approximation, worked out per block in 64 bit).
+ * The trapezoidal SVF of nano_svf_coef, rearranged for a low frequency: a1 = 1 - b1 and the small coefficients b1 (about g^2 + g k),
+ * a2 (about g) and a3 (about g^2) are 12 bit mantissas with their own shifts, and the two products that add only a hundredth of the
+ * state or less (b1 s1 and a3 v3) keep their remainder from one sample to the next, so that a low mode holds its tuning and its
+ * decay (a Q13 a3 is a few units at 220 Hz). k24 is the damping 1 / Q, Q24. Per mode state: s1, s2 and the two remainders. */
+typedef struct {
+    int32_t b1r, a2r, a3r, nb1, n2, n3;                                  /* the shifts include the 13 of the mantissa */
+} nano_hs_t;
+
+static void nano_hs_coef(nano_hs_t *c, uint32_t inc, uint32_t k24, int dirty)
+{
+    uint64_t f28, f2, inner, term, g24, gg, d48, t1, t2, t3;
+    uint32_t a1_16;
+    int32_t n;
+    if (inc > 0x7D70A3D7u)
+        inc = 0x7D70A3D7u;
+    f28 = inc >> 4;
+    f2 = (f28 * f28) >> 28;
+    if (dirty)                                                           /* the exciter's own approximation: f (pi + 0.3736 pi^3 f^2) */
+        term = 843314857ull + ((f2 * 3109541550ull) >> 28);
+    else {
+        inner = 2713357990ull + ((14975313081ull * f2) >> 28);
+        term = 843314857ull + ((f2 * inner) >> 28);
+    }
+    g24 = ((f28 * term) >> 28) >> 4;                                     /* tan(pi f), Q24 */
+    if (g24 < 1)
+        g24 = 1;
+    gg = g24 * (g24 + k24);                                              /* g (g + k), Q48 */
+    d48 = (1ull << 48) + gg;
+    a1_16 = 0xFFFFFFFFu / (uint32_t)(d48 >> 32);                         /* 1 / (1 + g (g + k)), Q16 */
+    t1 = (gg >> 16) * a1_16;                                             /* b1 = 1 - a1, Q48 */
+    t2 = g24 * a1_16;                                                    /* a2, Q40 */
+    t3 = ((g24 * g24) >> 16) * a1_16;                                    /* a3, Q48 */
+    for (n = 0; n < 17 && (t1 >> (35 - n)) < 4096u; n++)
+        ;
+    c->nb1 = 13 + n;
+    c->b1r = (int32_t)(t1 >> (35 - n));
+    for (n = 0; n < 17 && (t2 >> (27 - n)) < 4096u; n++)
+        ;
+    c->n2 = 13 + n;
+    c->a2r = (int32_t)(t2 >> (27 - n));
+    for (n = 0; n < 17 && (t3 >> (35 - n)) < 4096u; n++)
+        ;
+    c->n3 = 13 + n;
+    c->a3r = (int32_t)(t3 >> (35 - n));
+    if (c->b1r > 8191)
+        c->b1r = 8191;
+    if (c->a2r > 8191)
+        c->a2r = 8191;
+    if (c->a3r > 8191)
+        c->a3r = 8191;
+}
+
+/* one sample: st[0], st[1] the states, st[2]..st[5] the remainders; returns the band-pass, the low-pass goes to *lp */
+static inline int32_t nano_hs_step(const nano_hs_t *c, int32_t *st, int32_t in, int32_t *lp)
+{
+    int32_t s1 = st[0], s2 = st[1], v3 = in - s2, acc, d1, e1, e2, e3, v1, v2;
+    acc = c->b1r * s1 + st[2];
+    d1 = acc >> c->nb1;
+    st[2] = acc - (d1 << c->nb1);
+    acc = c->a3r * v3 + st[3];
+    e3 = acc >> c->n3;
+    st[3] = acc - (e3 << c->n3);
+    acc = c->a2r * v3 + st[4];
+    e1 = acc >> c->n2;
+    st[4] = acc - (e1 << c->n2);
+    acc = c->a2r * s1 + st[5];
+    e2 = acc >> c->n2;
+    st[5] = acc - (e2 << c->n2);
+    v1 = s1 - d1 + e1;
+    v2 = s2 + e2 + e3;
+    st[0] = clamp(2 * v1 - s1, -65536, 65536);
+    st[1] = clamp(2 * v2 - s2, -65536, 65536);
+    *lp = v2;
+    return v1;
+}
+
+/* RINGS (Mutable Instruments Rings, MIT, as in the Nano Freak test bed): E1 MODEL, E2 STRUCTURE, E3 BRIGHTNESS, E4 DAMPING, and
+ * POSITION on E7 (KTR is not used by this type: the filter does not track the key). Models: 0 MODAL (the resonator bank struck at the
+ * note-on); 1 SYMPA, 2 STRING, 3 FM and 4 QUANT are still to come and are silent. MODAL: twelve modes (Rings' 64 / 4 - 4) at the
+ * harmonics of the key stretched by STRUCTURE's stiffness, the odd ones minus the even ones weighted by a cosine of POSITION.
+ * Only the first NANO_MODAL_POLY voices sound. Left out against Rings: the exciter's 2^(2 f^2) term;
+ * State in the slot union (nano_ri_t). */
+typedef struct {
+    int32_t st[NANO_MODES][6];                           /* the resonators: two states and four remainders */
+    int32_t ex[6], strike;
+} nano_ri_t;
+
+static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    nano_su_t *U = nano_slot(t, v);
+    nano_ri_t *S;
+    int32_t tmp[CTL], acc[CTL], gn[NANO_MODES], model = (p[P_E1] * 5) / 127, hq, bq, dq, pq, i, mi, ic1 = v->s[0], ic2 = v->s[1];
+    int32_t cut = (p[P_E5] << 8) + m->cutoff;
+    uint32_t f0 = m->inc;
+    tsvf_t flt;
+    nano_hs_t ex, md[NANO_MODES];
+    if (!U || n > CTL || (uint32_t)(v - t->v) >= NANO_MODAL_POLY)
+        return;
+    S = (nano_ri_t *)U;
+    if (model != 0)
+        return;                                                          /* the other models are not ported yet */
+    hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    hq = hq + (hq >> 7);                                                 /* STRUCTURE 0..32767 */
+    bq = p[P_E3] * 258;
+    dq = p[P_E4] * 258;
+    pq = p[P_E7] * 258;
+    {   /* the exciter: an impulse through a low-pass (Q 1.5) at the key x 2^((c - 0.5) 8), c = b (2 - b) */
+        int32_t c = (bq * (65536 - bq)) >> 15, stri = 0;
+        uint32_t fc = nano_inc_c(f0 >> 4, (uint32_t)(768 + 48 * 64 + (((c - 16384) * 96 * 64) >> 15)), 0x66666666u);
+        nano_hs_coef(&ex, fc, 11184811u, 1);
+        if (S->strike) {
+            uint32_t r = 0xFFFFFFFFu / (fc >> 8 ? fc >> 8 : 1u);        /* 256 / fc */
+            stri = (int32_t)(r > 3000000u ? 3000000u : r) >> 1;          /* 0.25 / fc, Q9: small enough for the 17 bit states */
+        }
+        {
+            for (i = 0; i < (int32_t)n; i++) {
+                int32_t lp;
+                nano_hs_step(&ex, S->ex, i == 0 ? stri : 0, &lp);
+                tmp[i] = lp << 2;                                        /* x 0.125, back from Q9, and the headroom */
+                acc[i] = 0;
+            }
+            S->strike = 0;
+        }
+    }
+    {   /* the resonators */
+        int32_t si = hq >> 7, sf = (hq & 127) << 8, stiff = (NANO_RSTIF[si] << 4) + (int32_t)(((int64_t)(NANO_RSTIF[si + 1] - NANO_RSTIF[si]) * sf) >> 11);   /* Q24 */
+        int32_t e = (int32_t)(((int64_t)dq * 217651) >> 15), qs, qm, u, bb, ql, rate, stretch = 1 << 24, st = stiff, cc, y0, y1, sign;
+        {
+            int32_t oct = e >> 15, fr = e & 32767, ix = (fr * 24) >> 15;
+            uint32_t f5 = (((uint32_t)fr * 24u) & 32767u) >> 10, a = NANO_P2[ix], b = NANO_P2[ix + 1];
+            qs = (int32_t)((((a + (((b - a) * f5) >> 5)) << oct)) >> 8);   /* Q8 */
+        }
+        qs = (qs * qs) >> 8;
+        qm = (500 * qs) >> 8;                                            /* q = 500 x 10^(4 damping) */
+        bb = (bq * bq) >> 15;                                            /* Rings is given brightness^2 */
+        u = 32768 - hq;                                                  /* (1 - structure)^8 */
+        u = (u * u) >> 15;
+        u = (u * u) >> 15;
+        u = (u * u) >> 15;
+        bb = (bb * (32768 - ((u * 6554) >> 15))) >> 15;
+        ql = ((((bb * (65536 - bb)) >> 15) * 27853) >> 15) + 4915;       /* b (2 - b) 0.85 + 0.15 */
+        rate = (((hq * (65536 - hq)) >> 15) * 3277) >> 15;               /* structure (2 - structure) 0.1 */
+        {   /* the cosine of POSITION: CosineOscillator::InitApproximate, Q15 */
+            int32_t f = pq - 8192;
+            sign = 16;
+            if (f < 0)
+                f = -f;
+            else if (f > 16384)
+                f -= 16384;
+            else
+                sign = -16;
+            cc = sign * ((f * (32768 - 2 * f)) >> 15);                   /* Q15, |c| <= 2 */
+            y1 = cc >> 2;
+            y0 = 16384;
+        }
+        for (mi = 0; mi < NANO_MODES; mi++) {
+            uint64_t h = (uint64_t)f0 * (uint32_t)(mi + 1);
+            uint32_t mf = h > 0x90000000ull ? 0x7D70A3D7u : (uint32_t)((h * (uint32_t)stretch) >> 24), qq;
+            int32_t w0 = y0, wv = w0 + 16384;                            /* the weight, 0..1 in Q15 */
+            y0 = ((cc * w0) >> 15) - y1;
+            y1 = w0;
+            if (mf >= 0x7D70A3D7u) {
+                gn[mi] = 0;
+                mf = 0x7D70A3D7u;
+            } else {
+                gn[mi] = (mi & 1) ? -wv : wv;
+            }
+            qq = 256u + (uint32_t)(((uint64_t)mf * (uint32_t)qm) >> 24);   /* 1 + f q, Q8 */
+            nano_hs_coef(&md[mi], mf, 0xFFFFFFFFu / qq, 0);
+            stretch += st;
+            st = (int32_t)(((int64_t)st * (st < 0 ? 30474 : 32113)) >> 15);
+            ql += (rate * (32768 - ql)) >> 15;
+            qm = (int32_t)(((int64_t)qm * ql) >> 15);
+        }
+    }
+    for (mi = 0; mi < NANO_MODES; mi++) {
+        const nano_hs_t *c = &md[mi];
+        if (!gn[mi])
+            continue;
+        for (i = 0; i < (int32_t)n; i++) {
+            int32_t lp;
+            acc[i] += (gn[mi] * nano_hs_step(c, S->st[mi], tmp[i], &lp)) >> 15;
+        }
+    }
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < (int32_t)n; i++) {
+        int32_t s = soft_knee(analog_tap(&flt, 0, clamp(soft_knee(acc[i], 16000), -32768, 32767) >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(s, m, (uint32_t)i) << 1;
+    }
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
+
 static void nano_note_on(track_t *t, voice_t *v)
 {
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
@@ -1730,6 +1927,15 @@ static void nano_note_on(track_t *t, voice_t *v)
                 ((uint32_t *)U)[k] = 0;
             U->ch.morph = t->p[P_E3] * 258;
             U->ch.timbre = t->p[P_E2] * 258;
+        }
+    }
+    if (t->p[P_E0] == 14) {                               /* RINGS: a clean slot and a strike */
+        nano_su_t *U = nano_slot(t, v);
+        if (U) {
+            uint32_t k;
+            for (k = 0; k < sizeof *U / 4; k++)
+                ((uint32_t *)U)[k] = 0;
+            ((nano_ri_t *)U)->strike = 1;
         }
     }
     if (t->p[P_E0] == 13) {                               /* V.ANALOG: a clean slot, everything starts at the knobs */
@@ -1874,6 +2080,10 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         nano_render_va(t, v, out, n, m);
         return;
     }
+    if (p[P_E0] == 14) {
+        nano_render_ri(t, v, out, n, m);
+        return;
+    }
     tsvf_t flt;
     uint32_t i, ph = v->ph[0], ps = v->ph[1], pb = v->ph[2], inc = m->inc, incs = inc, k = (uint32_t)p[P_E4];
     int32_t morph = clamp((p[P_E1] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq, sym = p[P_E2] * 258;
@@ -1995,13 +2205,17 @@ static const preset_t NANO_PRESETS[] = {
     {"VA SYNC LEAD", {13, 64, 100, 20, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"VA FIFTH SAW", {13, 90, 20, 40, 0, 127, 0, 64}, {0, 60, 100, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"VA NOTCH PAD", {13, 70, 30, 100, 0, 110, 0, 64}, {40, 70, 100, 70}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    /* RINGS (modal model): TYPE MODEL STRUCTURE BRIGHTNESS DAMPING | CUT RES POSITION */
+    {"RINGS BELL", {14, 0, 85, 90, 100, 127, 0, 64}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"RINGS MARIMBA", {14, 0, 40, 50, 60, 127, 0, 45}, {0, 40, 127, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"RINGS GLASS", {14, 0, 110, 100, 110, 127, 0, 80}, {0, 40, 127, 70}, 0, 0, FX(0, 40, 40, 40), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {
     .name = "NANO",
     .page_title = {"OSC", "FLT"},
     .edit = {
-        {"TYPE", F_ENUM, 0, 13, 0, N_NANO_TYPE, 0},
+        {"TYPE", F_ENUM, 0, 14, 0, N_NANO_TYPE, 0},
         {"MORPH", F_PCT, 0, 127, 64, 0, 0},
         {"SYM", F_PCT, 0, 127, 64, 0, 0},
         {"SUB", F_PCT, 0, 127, 0, 0, 0},
