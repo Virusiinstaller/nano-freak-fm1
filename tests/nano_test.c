@@ -1131,6 +1131,55 @@ int main(void)
         check("RINGS sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
     }
 
+    /* 4p. RINGS (TYPE 14), the FM model (E1 77): a sine at zero BRIGHTNESS, sidebands with it, DAMPING lengthens the strike's decay, bounded sweeps */
+    {
+        double f = hz(57), c0, c1, e_a, e_b, a1, a2, peak = 0, h0, h1, h3, h5;
+        uint32_t k, j, st, br, dm, ps, w;
+        setup_ri(77, 64, 0, 64, 64);
+        play(57, y, n);
+        c0 = tone_at(y, a, n, f);
+        h0 = tone_at(y, a, n, 2 * f) + tone_at(y, a, n, 3 * f);
+        printf("   RINGS FM at BRIGHTNESS 0: key line %.0f, 2f + 3f lines %.0f\n", c0, h0);
+        check("RINGS FM at BRIGHTNESS 0 is a sine at the key (the 2nd and 3rd lines under 5 % of it)", c0 > 0 && h0 < 0.05 * c0);
+        setup_ri(77, 64, 127, 64, 64);
+        play(57, y, n);
+        c1 = tone_at(y, a, n, f);
+        h1 = tone_at(y, a, n, 3 * f) + tone_at(y, a, n, 5 * f);
+        h3 = tone_at(y, a, n, 2 * f);
+        h5 = h1;
+        printf("   RINGS FM at BRIGHTNESS 127 (ratio 12): key line %.0f, 3f + 5f lines %.0f, 2f %.0f\n", c1, h1, h3);
+        check("RINGS FM BRIGHTNESS brings in sidebands (the 3f + 5f lines over 30 % of the key's)", h5 > 0.3 * c1);
+        for (w = 0; w < 2; w++) {
+            a1 = a2 = 0;
+            setup_ri(77, 64, 64, w ? 120 : 40, 64);
+            play(57, y, FS);
+            for (j = FS / 8; j < FS / 8 + 4096; j++)
+                a1 += y[j] * y[j];
+            for (j = FS / 2; j < FS / 2 + 4096; j++)
+                a2 += y[j] * y[j];
+            if (w)
+                e_b = a2 / (a1 > 0 ? a1 : 1);
+            else
+                e_a = a2 / (a1 > 0 ? a1 : 1);
+        }
+        printf("   RINGS FM energy after half a second over that at an eighth: %.5f at DAMPING 40, %.5f at DAMPING 120\n", e_a, e_b);
+        check("RINGS FM DAMPING lengthens the decay (the tail at 120 holds over 10x the energy of 40)", e_b > 10 * e_a);
+        for (st = 0; st <= 127; st += 32)
+            for (br = 0; br <= 127; br += 64)
+                for (dm = 0; dm <= 127; dm += 63)
+                    for (ps = 0; ps <= 127; ps += 32)
+                        for (k = 0; k < 3; k++) {
+                            static const uint8_t keys[] = {24, 60, 108};
+                            setup_ri(77, st, br, dm, ps);
+                            play(keys[k], y, 8192);
+                            for (j = 0; j < 8192; j++)
+                                if (fabs(y[j]) > peak)
+                                    peak = fabs(y[j]);
+                        }
+        printf("   RINGS FM sweep: peak %.0f\n", peak);
+        check("RINGS FM sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;

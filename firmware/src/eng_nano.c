@@ -1789,7 +1789,7 @@ static inline int32_t nano_hs_step(const nano_hs_t *c, int32_t *st, int32_t in, 
 
 /* RINGS (Mutable Instruments Rings, MIT, as in the Nano Freak test bed): E1 MODEL, E2 STRUCTURE, E3 BRIGHTNESS, E4 DAMPING, and
  * POSITION on E7 (KTR is not used by this type: the filter does not track the key). Models: 0 MODAL (the resonator bank struck at the
- * note-on); 1 SYMPA, 2 STRING, 3 FM and 4 QUANT are still to come and are silent. MODAL: twelve modes (Rings' 64 / 4 - 4) at the
+ * note-on); 3 FM (below); 1 SYMPA, 2 STRING and 4 QUANT are still to come and are silent. MODAL: twelve modes (Rings' 64 / 4 - 4) at the
  * harmonics of the key stretched by STRUCTURE's stiffness, the odd ones minus the even ones weighted by a cosine of POSITION.
  * Only the first NANO_MODAL_POLY voices sound. Left out against Rings: the exciter's 2^(2 f^2) term;
  * State in the slot union (nano_ri_t). */
@@ -1797,6 +1797,104 @@ typedef struct {
     int32_t st[NANO_MODES][6];                           /* the resonators: two states and four remainders */
     int32_t ex[6], strike;
 } nano_ri_t;
+
+/* RINGS' FM voice (rings/dsp/fm_voice.cc, no audio input so the envelope follower is just the strike): a carrier phase-modulated by a
+ * modulator at a ratio picked by STRUCTURE, the modulation depth set by BRIGHTNESS with an envelope, DAMPING the envelopes' decay,
+ * POSITION (E7) the feedback (below the middle the modulator's, from phase feedback; above it the modulator's self feedback).
+ * State overlays the modal bank's (nano_rf_t); the envelopes decay once a block. Q15 samples, Q30 envelopes. */
+typedef struct {
+    uint32_t cph, mph;
+    int32_t prev, amp_env, bri_env, gain, amount, started;
+} nano_rf_t;
+
+/* 2^(e / 32768), Q16, for e from 0 to 8 octaves */
+static uint32_t nano_pow2_q16(uint32_t e)
+{
+    uint32_t oct = e >> 15, fr = e & 32767u, ix = (fr * 24u) >> 15, f5 = ((fr * 24u) & 32767u) >> 10, a = NANO_P2[ix], b = NANO_P2[ix + 1];
+    return (a + (((b - a) * f5) >> 5)) << oct;
+}
+
+static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m, nano_ri_t *S)
+{
+    const int16_t *p = t->p;
+    nano_rf_t *F = (nano_rf_t *)S->st;
+    int32_t hq, bq, dq, pq, fbp, mfb, pf, bv, amin, amax, env_amt, ic1 = v->s[0], ic2 = v->s[1], amp_e, bri_e, i, target, prev, gain, amount, aslew;
+    int32_t cut = (p[P_E5] << 8) + m->cutoff;
+    uint32_t inc = m->inc > 0x7FFFFFFFu ? 0x7FFFFFFFu : m->inc, minc, ratio6, cph, mph, ix, fx;
+    tsvf_t flt;
+    hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    hq = hq + (hq >> 7);
+    bq = p[P_E3] * 258;
+    dq = p[P_E4] * 258;
+    pq = p[P_E7] * 258;
+    ix = (uint32_t)hq >> 8;
+    fx = (uint32_t)hq & 255u;
+    ratio6 = NANO_RFMQ[ix] + (((NANO_RFMQ[ix + 1] - NANO_RFMQ[ix]) * fx) >> 8);
+    minc = nano_inc_c(inc, ratio6, 0x7FFFFFFFu);
+    if (!F->started) {
+        F->started = 1;
+        F->amp_env = F->bri_env = 1 << 30;
+    }
+    if (S->strike) {
+        F->amp_env = F->bri_env = 1 << 30;
+        S->strike = 0;
+    }
+    env_amt = dq < 29491 ? 65536 : (int32_t)(((32768 - dq) * 10 * 2));                 /* 1 below 0.9, else (1 - damping) 10; Q16 */
+    {   /* the envelopes' decay over this block: e^-x, x = 6.9078 n / rt60, rt60 = 0.1 s 2^(8 damping) and 2^(7 damping) */
+        uint32_t x1 = (uint32_t)(((uint64_t)n * 6727000u) / nano_pow2_q16((uint32_t)dq * 8u));        /* Q16: 6.9078 n / (0.1 s x 44100 x 2^(8 d)) */
+        uint32_t x2 = (uint32_t)(((uint64_t)n * 6727000u) / nano_pow2_q16((uint32_t)dq * 7u));
+        uint32_t f1 = 65536u - x1 + ((x1 * x1) >> 17) - (((((x1 * x1) >> 16) * x1) >> 16) * 10923u >> 16);
+        uint32_t f2 = 65536u - x2 + ((x2 * x2) >> 17) - (((((x2 * x2) >> 16) * x2) >> 16) * 10923u >> 16);
+        F->amp_env = (int32_t)(((uint64_t)F->amp_env * (f1 > 65536u ? 0 : f1)) >> 16);
+        F->bri_env = (int32_t)(((uint64_t)F->bri_env * (f2 > 65536u ? 0 : f2)) >> 16);
+    }
+    amp_e = F->amp_env >> 15;                                                            /* Q15 */
+    bri_e = F->bri_env >> 15;
+    bv = (bq * bq) >> 15;                                                                /* brightness^2 */
+    amin = bv < 16384 ? 0 : bv * 2 - 32768;
+    amax = bv < 16384 ? bv * 2 : 32768;
+    {
+        int32_t fe = 16384 + (((bri_e - 16384) * (env_amt >> 1)) >> 15);                 /* 0.5 + envelope_amount (env - 0.5) */
+        target = (amin + ((amax * fe) >> 15)) * 2;                                      /* Q15, up to 4 */
+    }
+    aslew = 164 + ((amax * 492) >> 15);                                                  /* 0.005 + 0.015 max */
+    fbp = (pq - 16384) * 2;                                                              /* feedback_param, Q15 -1..1 */
+    pf = fbp < 0 ? ((fbp * fbp) >> 16) : 0;                                              /* 0.5 fb^2 for fb < 0 */
+    mfb = fbp > 0 ? ((fbp * fbp) >> 17) : 0;                                             /* 0.25 fb^2 for fb > 0 */
+    cph = F->cph;
+    mph = F->mph;
+    prev = F->prev;
+    gain = F->gain;
+    amount = F->amount;
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < (int32_t)n; i++) {
+        int32_t e = target - amount, mod, car, g_t, s, k, pp;
+        uint32_t minc2;
+        e = e > aslew ? aslew : (e < -aslew ? -aslew : e);
+        amount += e;
+        pp = (prev * pf) >> 15;
+        minc2 = minc + (uint32_t)(int32_t)(((int32_t)(minc >> 16) * pp) << 1);
+        mph += minc2;
+        cph += inc;
+        mod = sine_i(mph + (uint32_t)(((prev * mfb) >> 15) << 17));
+        car = sine_i(cph + (uint32_t)((int32_t)(((int64_t)amount * mod) >> 15) << 17));
+        prev += ((car - prev) * 3277) >> 15;
+        g_t = 32768 - (((32768 - amp_e) * (env_amt >> 1)) >> 15);                        /* 1 + envelope_amount (amp_env - 1) */
+        k = 164 + (((amount > 131071 ? 131071 : amount) * 1475) >> 15);
+        gain += ((g_t - gain) * (k > 32768 ? 32768 : k)) >> 15;
+        s = (car * gain) >> 15;
+        s = (s * 22938) >> 15;                                                           /* the model gain 0.7 */
+        s = soft_knee(analog_tap(&flt, 0, s >> 1, &ic1, &ic2, 0), 16000) << 1;
+        out[i] += voice_amp(s, m, (uint32_t)i) << 1;
+    }
+    F->cph = cph;
+    F->mph = mph;
+    F->prev = prev;
+    F->gain = gain;
+    F->amount = amount;
+    v->s[0] = ic1;
+    v->s[1] = ic2;
+}
 
 static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
@@ -1811,6 +1909,10 @@ static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int
     if (!U || n > CTL || (uint32_t)(v - t->v) >= NANO_MODAL_POLY)
         return;
     S = (nano_ri_t *)U;
+    if (model == 3) {
+        nano_render_rf(t, v, out, n, m, S);
+        return;
+    }
     if (model != 0)
         return;                                                          /* the other models are not ported yet */
     hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
@@ -2209,6 +2311,10 @@ static const preset_t NANO_PRESETS[] = {
     {"RINGS BELL", {14, 0, 85, 90, 100, 127, 0, 64}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     {"RINGS MARIMBA", {14, 0, 40, 50, 60, 127, 0, 45}, {0, 40, 127, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"RINGS GLASS", {14, 0, 110, 100, 110, 127, 0, 80}, {0, 40, 127, 70}, 0, 0, FX(0, 40, 40, 40), PAT(0)},
+    /* RINGS (FM model, MODEL 77) */
+    {"RINGS FM BELL", {14, 77, 80, 90, 70, 127, 0, 64}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"RINGS FM KEYS", {14, 77, 40, 70, 50, 127, 0, 64}, {0, 40, 127, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"RINGS FM BASS", {14, 77, 20, 100, 40, 127, 0, 64}, {0, 40, 127, 30}, 0, 0, FX(0, 0, 0, 0), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {

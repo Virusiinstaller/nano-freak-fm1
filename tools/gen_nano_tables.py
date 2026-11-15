@@ -78,4 +78,10 @@ if len(sys.argv) > 5:                                  # RINGS (Mutable Instrume
     assert len(v) == 257, len(v)
     out.append("/* RINGS: the structure -> stiffness table of Rings' resonator (257 entries, Q20: the modes are tuned by it) */")
     out.append("static const int32_t NANO_RSTIF[257] = {\n    " + ",\n    ".join(", ".join(str(int(round(x * 1048576))) for x in v[i:i + 16]) for i in range(0, len(v), 16)) + "\n};")
+if len(sys.argv) > 5:                                  # RINGS FM: the structure -> ratio table, in semitones + 12, Q6 (0..3072)
+    m = re.search(r'nfr_lut_fmq\[\d+\] = \{(.*?)\};', rsrc, re.S)
+    v = [float(x.strip().rstrip('f')) for x in m.group(1).replace('\n', ' ').split(',') if x.strip()]
+    assert len(v) == 129, len(v)
+    out.append("/* RINGS FM: the structure -> ratio table, semitones + 12 in Q6 (129 entries) */")
+    out.append("static const uint16_t NANO_RFMQ[129] = {\n    " + ",\n    ".join(", ".join(str(int(round((x + 12) * 64))) for x in v[i:i + 16]) for i in range(0, len(v), 16)) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")
