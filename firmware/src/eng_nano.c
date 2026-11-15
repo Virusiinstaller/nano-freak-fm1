@@ -114,6 +114,24 @@ static uint32_t nano_isqrt(uint32_t x)
 /* TWO OP FM (Plaits' two-operator FM, simplified: no oversampling): E1 RATIO (the quantizer's modulator ratio), E2 INDEX
  * (0..2 cycles of phase modulation, squared, tamed as the modulator rises), E3 FEEDBACK (64 none; above: the modulator feeds
  * itself, below: the carrier feeds the modulator's pitch). ph[0] carrier, ph[1] modulator, s[2] the last carrier sample, s[3] the DC blocker. */
+/* FOLD (the Nano Freak test bed's K4 on the types that have no use of the fourth knob of their own, all but BASIC, HARMONIC, WAVETABLE and RINGS): a
+ * triangle fold of the voice before the filter, the gain 1 to 7 with the knob and the effect faded in over its first tenth. x is the filter's
+ * input, Q14 (1.0 = 16384); k the knob, 0 to 127. */
+static inline int32_t nano_k4(int32_t x, int32_t k)
+{
+    int32_t gq, wet, u, t, f, xc;
+    if (k <= 0)
+        return x;
+    xc = x > 65535 ? 65535 : (x < -65535 ? -65535 : x);
+    gq = 4096 + k * 193;                                                  /* 1 + 6 k / 127, Q12 */
+    wet = k * 2580;                                                       /* 10 k / 127, Q15, to 1 */
+    wet = wet > 32767 ? 32767 : wet;
+    u = ((((xc * gq) >> 12) + 16384) >> 2) & 16383;                        /* (x g + 1) / 4, its fraction */
+    t = u * 4 - 32768;
+    f = 16384 - (t < 0 ? -t : t);
+    return xc + (((f - xc) * wet) >> 15);
+}
+
 static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
     const int16_t *p = t->p;
@@ -146,7 +164,7 @@ static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         prev += (co - prev) >> 4;
         dcb += (co - dcb) >> 11;                                  /* FM at equal frequencies has a DC term: a 3 Hz blocker */
         co -= dcb;
-        s = soft_knee(analog_tap(&flt, 0, co >> 1, &ic1, &ic2, 0), 16000) << 1;
+        s = soft_knee(analog_tap(&flt, 0, nano_k4(co >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
@@ -237,7 +255,7 @@ static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         fold = NANO_FOLD[fi] + (((NANO_FOLD[fi + 1] - NANO_FOLD[fi]) * (idx & 63)) >> 6);
         dcb += (fold - dcb) >> 11;
         fold -= dcb;
-        fold = soft_knee(analog_tap(&flt, 0, fold >> 1, &ic1, &ic2, 0), 16000) << 1;
+        fold = soft_knee(analog_tap(&flt, 0, nano_k4(fold >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(fold, m, i) << 1;
         ph += inc;
     }
@@ -354,7 +372,7 @@ static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         pc = pn;
         dcb += ((s - dcb) * a) >> 15;
         s -= dcb;
-        s = soft_knee(analog_tap(&flt, 0, s >> 1, &ic1, &ic2, 0), 16000) << 1;     /* the grains are hot: as the other types, half into the filter */
+        s = soft_knee(analog_tap(&flt, 0, nano_k4(s >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;     /* the grains are hot: as the other types, half into the filter */
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
@@ -436,7 +454,7 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         hp = xin - ((kq * v1) >> 12) - v2;
         o = ((hp >> 3) * hg + (v1 >> 3) * bg + (v2 >> 3) * lg) >> 12;
         o = clamp(o, -49152, 49152);                                     /* a resonant peak: kept inside the voice's range */
-        s = soft_knee(analog_tap(&flt, 0, o >> 1, &ic1, &ic2, 0), 16000) << 1;
+        s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
@@ -636,7 +654,7 @@ static __attribute__((noinline)) void nano_render_ch(track_t *t, voice_t *v, int
     }
     tsvf_coef(&flt, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t s = soft_knee(analog_tap(&flt, 0, acc[i] >> 1, &ic1, &ic2, 0), 16000) << 1;
+        int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4(acc[i] >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
@@ -757,7 +775,7 @@ static __attribute__((noinline)) void nano_render_mo(track_t *t, voice_t *v, int
     }
     tsvf_coef(&flt, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t s = soft_knee(analog_tap(&flt, 0, clamp(soft_knee(acc[i] << 1, 16000), -32768, 32767), &ic1, &ic2, 0), 11000) << 1;
+        int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4(clamp(soft_knee(acc[i] << 1, 16000), -32768, 32767), p[P_E4]), &ic1, &ic2, 0), 11000) << 1;
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
@@ -839,7 +857,7 @@ static __attribute__((noinline)) void nano_render_sw(track_t *t, voice_t *v, int
         hp = notch - lp;
         bp += (f * hp) >> 15;
         o = clamp(hp, -32767, 32767);
-        s = soft_knee(analog_tap(&flt, 0, o >> 1, &ic1, &ic2, 0), 16000) << 1;
+        s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, i) << 1;
     }
     W->bp = bp;
@@ -1168,7 +1186,7 @@ static __attribute__((noinline)) void nano_render_bs(track_t *t, voice_t *v, int
             q = start + (delta * xx >> 15);
             gain = (q < 16384 ? (16383 - q) : (q - 16384)) << 1;
             sample = (x[j] * (65535 - gain) + y[j] * gain) >> 16;
-            s = soft_knee(analog_tap(&flt, 0, (sample * 3) >> 3, &ic1, &ic2, 0), 16000) << 1;
+            s = soft_knee(analog_tap(&flt, 0, nano_k4((sample * 3) >> 3, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
             out[i + j] += voice_amp(s, m, i + j) << 1;
         }
         B->prev_p1 = p1;
@@ -1276,7 +1294,7 @@ static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int
         }
         sample = clamp(sample, -32767, 32767);
         for (k = 0; k < 2; k++) {
-            int32_t x = k ? sample : (prev + sample) >> 1, s = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+            int32_t x = k ? sample : (prev + sample) >> 1, s = soft_knee(analog_tap(&flt, 0, nano_k4(x >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
             out[i + k] += voice_amp(s, m, i + k) << 1;
         }
         prev = sample;
@@ -1377,7 +1395,7 @@ static __attribute__((noinline)) void nano_render_sa(track_t *t, voice_t *v, int
                 x[j] = (int16_t)clamp(((x[j] + shift) * 13) >> 3, -32767, 32767);
         }
         for (j = 0; j < size; j++) {
-            int32_t s = soft_knee(analog_tap(&flt, 0, x[j] >> 1, &ic1, &ic2, 0), 16000) << 1;
+            int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4(x[j] >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
             out[i + j] += voice_amp(s, m, i + j) << 1;
         }
     }
@@ -1696,7 +1714,7 @@ static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int
         V->appw = ap;
         sawo = (((2 * this_a - 65536) >> 2) * 54613) >> 14;              /* / 1.2 */
         o = (((sawo >> 1) * wgv) >> 15) + (((sqo >> 1) * sgv) >> 15);
-        s = soft_knee(analog_tap(&flt, 0, o >> 2, &ic1, &ic2, 0), 16000) << 1;
+        s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 2, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(s, m, i) << 1;
     }
     (void)sw;
@@ -2660,7 +2678,7 @@ static const preset_t NANO_PRESETS[] = {
     {"VA NOTCH PAD", {13, 70, 30, 100, 0, 110, 0, 64}, {40, 70, 100, 70}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     /* RINGS (modal model): TYPE MODEL STRUCTURE BRIGHTNESS DAMPING | CUT RES POSITION */
     {"RINGS BELL", {14, 0, 85, 90, 100, 127, 0, 64}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
-    {"RINGS MARIMBA", {14, 0, 40, 50, 60, 127, 0, 45}, {0, 40, 127, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"RINGS MARIMBA", {14, 0, 40, 65, 70, 127, 0, 45}, {0, 40, 127, 40}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"RINGS GLASS", {14, 0, 110, 100, 110, 127, 0, 80}, {0, 40, 127, 70}, 0, 0, FX(0, 40, 40, 40), PAT(0)},
     /* RINGS (FM model, MODEL 77) */
     {"RINGS FM BELL", {14, 77, 80, 90, 70, 127, 0, 64}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
@@ -2669,7 +2687,7 @@ static const preset_t NANO_PRESETS[] = {
     /* RINGS (string model, MODEL 64) */
     {"RINGS GUITAR", {14, 64, 32, 90, 80, 127, 0, 30}, {0, 40, 127, 60}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"RINGS HARP", {14, 64, 32, 100, 100, 127, 0, 20}, {0, 40, 127, 70}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
-    {"RINGS PIANO", {14, 64, 70, 60, 70, 127, 0, 25}, {0, 40, 127, 50}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    {"RINGS PIANO", {14, 64, 70, 85, 85, 127, 0, 25}, {0, 40, 127, 50}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     /* RINGS (SYMPA, MODEL 38, and QUANT, MODEL 114) */
     {"RINGS SYMPA", {14, 38, 40, 100, 90, 127, 0, 40}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     {"RINGS FIFTHS", {14, 38, 75, 90, 100, 127, 0, 50}, {20, 60, 127, 80}, 0, 0, FX(0, 40, 40, 40), PAT(0)},

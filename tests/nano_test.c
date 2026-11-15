@@ -1306,6 +1306,35 @@ int main(void)
         check("RINGS SYMPA and QUANT sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
     }
 
+    /* 4s. FOLD on the fourth knob (the types that have no use of it): a sine gets its harmonics, 0 changes nothing, every such type stays bounded */
+    {
+        static const uint8_t types[] = {1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 13};
+        double f = hz(57), h0, h1, c1, peak = 0;
+        uint32_t k, j, ty;
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_E0] = 1;
+        play(57, y, n);
+        h0 = tone_at(y, a, n, 3 * f);
+        c1 = tone_at(y, a, n, f);
+        setup(0, 0, 0, 127, 127);
+        trk[0].p[P_E0] = 1;
+        play(57, y, n);
+        h1 = tone_at(y, a, n, 3 * f) + tone_at(y, a, n, 5 * f);
+        printf("   FOLD on TWO OP FM (a sine at the key): 3f line %.0f without, 3f + 5f %.0f at 127 (key line %.0f)\n", h0, h1, c1);
+        check("FOLD at 127 brings in odd harmonics a sine does not have (3f + 5f over 10 % of the key line)", h1 > 0.1 * c1 && h1 > 5 * h0);
+        for (ty = 0; ty < sizeof types; ty++)
+            for (k = 1; k <= 127; k += 63) {
+                setup(64, 64, 64, k, 127);
+                trk[0].p[P_E0] = types[ty];
+                play(57, y, 8192);
+                for (j = 0; j < 8192; j++)
+                    if (fabs(y[j]) > peak)
+                        peak = fabs(y[j]);
+            }
+        printf("   FOLD sweep over the 11 types: peak %.0f\n", peak);
+        check("FOLD sweep (11 types, knob 1, 64, 127): bounded (peak under 65536)", peak < 65536);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;
