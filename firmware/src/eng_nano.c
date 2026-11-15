@@ -482,7 +482,7 @@ typedef union {
 } nano_su_t;
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
-#define NANO_PL_DL 1026
+#define NANO_PL_DL 1282
 ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS + NANO_PL_V * NANO_PL_DL * 2);
 
 static nano_su_t *nano_slot(track_t *t, voice_t *v)
@@ -1789,7 +1789,7 @@ static inline int32_t nano_hs_step(const nano_hs_t *c, int32_t *st, int32_t in, 
 
 /* RINGS (Mutable Instruments Rings, MIT, as in the Nano Freak test bed): E1 MODEL, E2 STRUCTURE, E3 BRIGHTNESS, E4 DAMPING, and
  * POSITION on E7 (KTR is not used by this type: the filter does not track the key). Models: 0 MODAL (the resonator bank struck at the
- * note-on); 3 FM (below); 1 SYMPA and 4 QUANT are still to come and are silent; 2 STRING (below). MODAL: twelve modes (Rings' 64 / 4 - 4) at the
+ * note-on); 3 FM (below); 1 SYMPA, 2 STRING and 4 QUANT (below). MODAL: twelve modes (Rings' 64 / 4 - 4) at the
  * harmonics of the key stretched by STRUCTURE's stiffness, the odd ones minus the even ones weighted by a cosine of POSITION.
  * Only the first NANO_MODAL_POLY voices sound. Left out against Rings: the exciter's 2^(2 f^2) term;
  * State in the slot union (nano_ri_t). */
@@ -1896,27 +1896,41 @@ static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->s[1] = ic2;
 }
 
-/* RINGS' STRING model (rings/dsp/string.cc and plucker.h, as in the Nano Freak test bed): a Karplus-Strong string excited by a plucker
- * (a burst of noise through a comb whose delay is POSITION, then a low-pass at the brightness), damped each pass by Rings' damping filter
- * (a two-tap FIR whose BRIGHTNESS sets the highs, then a low-pass at the damping cutoff) whose gain gives the DAMPING decay. STRUCTURE below
- * the middle bends the bridge (the pitch dips with the amplitude), above it stretches the string with an all-pass (and, near the top, a
- * noise on the delay). The output is the string minus the same line read at POSITION (a comb). The three lines share the voice's PLUCK
- * region: the string 512 samples, the stretch all-pass 256 and the plucker's comb 256, so a note below about 86 Hz runs the string at a
- * half or a quarter of the sample rate (as Rings does below its delay line) and the lowest note is about 22 Hz. Left out against Rings:
- * linear reads in place of Hermite, the dispersion ramps (they hold their block's value), the voice is monophonic (one string per voice).
- * Internal amplitude Q13 (1.0 = 8192). State overlays the modal bank's (nano_rs_t). */
+/* RINGS' STRING, SYMPA and QUANT models (rings/dsp/string.cc and plucker.h, as in the Nano Freak test bed): a Karplus-Strong string
+ * excited by a plucker (a burst of noise through a comb whose delay is POSITION, then a low-pass at the brightness), damped each pass
+ * by Rings' damping filter (a two-tap FIR whose BRIGHTNESS sets the highs, then a low-pass at the damping cutoff) whose gain gives the
+ * DAMPING decay. The output is the string minus the same line read at POSITION (a comb).
+ * STRING (E1 64): one string; STRUCTURE below the middle bends the bridge (the pitch dips with the amplitude), above it stretches the
+ * string with an all-pass (and, near the top, a noise on the delay).
+ * SYMPA (E1 38) and QUANT (E1 102): two strings, the plucked one at the key and a second one fed from the first (a tenth of it), which
+ * is not plucked but sympathetic: SYMPA tunes it by STRUCTURE through the octaves and fifths (-12, -7, 0, +7, +12, +19, +24 st, with
+ * the gaps squashed so that it sits on the notes), QUANT to one of eleven fixed intervals; its BRIGHTNESS is a glide, DAMPING is
+ * kept long and POSITION swings with a slow LFO.
+ * The lines are in the voice's PLUCK region (NANO_PL_DL 1282): the string 512 samples, the plucker's comb 256, then the stretch
+ * all-pass 256 (STRING) or the second string 512 (SYMPA, QUANT). A note below about 86 Hz runs a string at half or a quarter of the
+ * sample rate (as Rings does below its delay line): the lowest note is about 22 Hz. Left out against Rings: linear reads in place
+ * of Hermite, the dispersion ramps (they hold their block's value). Internal amplitude Q13 (1.0 = 8192).
+ * State overlays the modal bank's (nano_rs_t). */
 #define NANO_RS_STR 512
 typedef struct {
-    nano_hs_t iirc, plc;
-    int32_t iir[6], pls[6];
-    int32_t x, x1, res, c0, c1, c0inc, c1inc, delay, srcph;
-    uint32_t wp, awp, cwp, rng, remaining, period;
-    int32_t gain, pdcx, pdcy, pdcr, acx, acy, acr, curved, dnoise, out0, out1, aux0, aux1;
+    nano_hs_t iirc;
+    int32_t iir[6];
+    int32_t x, x1, res, c0, c1, delay, srcph, out0, out1, aux0, aux1, freq;
+    uint32_t wp;
+} nano_rstr_t;
+
+typedef struct {
+    nano_rstr_t s[2];
+    nano_hs_t plc;
+    int32_t pls[6];
+    uint32_t cwp, rng, remaining, period;
+    int32_t gain, pdcx, pdcy, pdcr;
+    uint32_t awp;
+    int32_t acx, acy, acr, curved, dnoise, lph;
 } nano_rs_t;
+_Static_assert(sizeof(nano_rs_t) <= __builtin_offsetof(nano_ri_t, strike), "nano_rs_t overlays the modal bank");
 
-_Static_assert(sizeof(nano_rs_t) <= sizeof(((nano_ri_t *)0)->st), "nano_rs_t overlays the modal bank");
-
-/* 64 / 64 bit division by shift and subtract (the target has no 64-bit divide; used once per block) */
+/* 64 / 64 bit division by shift and subtract (the target has no 64-bit divide; used a few times per block) */
 static uint64_t nano_div64(uint64_t num, uint64_t den)
 {
     uint64_t q = 0, r = 0;
@@ -1945,28 +1959,33 @@ static inline int32_t nano_rs_rd(const int16_t *l, uint32_t mask, uint32_t wp, u
     return a + (((b - a) * (int32_t)((d & 0xffffu) >> 1)) >> 15);
 }
 
-static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m, nano_ri_t *S)
+/* Rings' squash: x^16 / 2 below the middle, the mirror above (Q15) */
+static int32_t nano_squash(int32_t x)
 {
-    const int16_t *p = t->p;
-    int16_t *sl = nano_dl(t, v), *al, *cl;
-    nano_rs_t *R = (nano_rs_t *)S->st;
-    int32_t tmp[CTL];
-    int32_t hq, bq, dq, pq, disp, ic1 = v->s[0], ic2 = v->s[1], cut = (p[P_E5] << 8) + m->cutoff, i, ti, cut6, comp16, pos16, br16, damp16;
-    int32_t sp16 = 0, apg = 0, noa = 0, bcv = 0, acm = 0, nf12 = 0, invn = 0, dstep;
-    uint32_t f0 = m->inc > 0x7D70A3D7u ? 0x7D70A3D7u : m->inc, dtot, d, shift = 0, ratio16, wp, awp;
-    tsvf_t flt;
-    if (!sl)
-        return;
-    al = sl + NANO_RS_STR;
-    cl = al + 256;
+    int32_t u, k;
+    if (x < 16384) {
+        u = x * 2;
+        for (k = 0; k < 4; k++)
+            u = (u * u) >> 15;
+        return u >> 1;
+    }
+    u = 65536 - 2 * x;
+    u = u < 0 ? 0 : u;
+    for (k = 0; k < 4; k++)
+        u = (u * u) >> 15;
+    return 32768 - (u >> 1);
+}
+
+/* one string for a block: adds its output into ob and its pickup (the line read at POSITION) into ab; in is the excitation,
+ * disp the dispersion (Q15, STRING only, else 0), al the stretch line, init sets the smoothers to the block's targets */
+static void nano_rs_string(nano_rs_t *R, nano_rstr_t *s, int16_t *sl, int16_t *al, uint32_t f0, int32_t bq, int32_t dq, int32_t pq, int32_t disp,
+                           int32_t init, const int32_t *in, int32_t *ob, int32_t *ab, uint32_t n)
+{
+    int32_t ti, cut6, comp16, pos16, br16, damp16, sp16 = 0, apg = 0, noa = 0, bcv = 0, acm = 0, nf12 = 0, invn = 0, dstep, c0inc, c1inc, i;
+    uint32_t dtot, d, shift = 0, ratio16, wp = s->wp, awp = R->awp;
     if (f0 < 65536u)
         f0 = 65536u;
-    hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
-    hq = hq + (hq >> 7);
-    bq = p[P_E3] * 258;
-    dq = p[P_E4] * 258;
-    pq = p[P_E7] * 258;
-    dtot = (uint32_t)nano_div64(1ull << 48, f0);                                /* 1 / frequency, Q16 samples */
+    dtot = (uint32_t)nano_div64(1ull << 48, f0);                         /* 1 / frequency, Q16 samples */
     d = dtot < (4u << 16) ? (4u << 16) : dtot;
     while (d > (500u << 16) && shift < 2) {
         d >>= 1;
@@ -1975,8 +1994,7 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     if (d > (504u << 16))
         d = 504u << 16;
     ratio16 = 65536u >> shift;
-    pos16 = (16384 - (((pq > 16384 ? pq - 16384 : 16384 - pq) * 32113) >> 15)) << 1;            /* 0.5 - 0.98 |position - 0.5|, Q16 */
-    disp = hq < 7864 ? ((hq - 7864) * 136511) >> 15 : (hq > 8520 ? ((hq - 8520) * 44283) >> 15 : 0);
+    pos16 = (16384 - (((pq > 16384 ? pq - 16384 : 16384 - pq) * 32113) >> 15)) << 1;     /* 0.5 - 0.98 |position - 0.5|, Q16 */
     if (disp > 0) {
         int32_t a = (disp * (65536 - disp)) >> 15, na = disp > 24576 ? (disp - 24576) * 4 : 0;
         sp16 = (a * 31130) >> 15;
@@ -2024,66 +2042,28 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     }
     {
         int32_t c0t = (int32_t)(((uint32_t)damp16 * (uint32_t)((65536 + br16) >> 1)) >> 8), c1t = (int32_t)(((uint32_t)damp16 * (uint32_t)((65536 - br16) >> 2)) >> 8);
-        if (S->strike) {
-            int32_t c = (bq * (65536 - bq)) >> 15, ratio15 = ((pq * 29491) >> 15) + 1638;
-            uint32_t cp = (uint32_t)(((uint64_t)ratio15 * dtot) >> 15), k;
-            for (k = 0; k < sizeof *R / 4; k++)
-                ((uint32_t *)R)[k] = 0;
-            for (k = 0; k < NANO_PL_DL; k++)
-                sl[k] = 0;
-#ifdef NANO_RS_TESTSEED
-            R->rng = 0x21u;                                              /* the reference comparison runs both on Rings' own seed */
-#else
-            R->rng = (0x21u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 16)) | 1u;
-#endif
-            R->remaining = cp >> 16;
-            while (cp >= (255u << 16))
-                cp >>= 1;
-            R->period = cp;
-            R->gain = ((32768 - pq) * 26214) >> 15;
-            nano_hs_coef(&R->plc, nano_inc_c(nano_inc_c(f0, (uint32_t)(768 + (((c - 16384) * 96 * 64) >> 15)), 0x7DF3B645u), 768 + 36 * 64, 0x7DF3B645u), 1u << 24, 1);
-            R->delay = (int32_t)d;
-            R->srcph = 65536;
-            R->c0 = c0t;
-            R->c1 = c1t;
-            S->strike = 0;
+        nano_hs_coef(&s->iirc, nano_inc_c(f0, (uint32_t)(768 + cut6), 0x7DF3B645u), 33554432u, 0);
+        if (init) {
+            s->delay = (int32_t)d;
+            s->srcph = 65536;
+            s->c0 = c0t;
+            s->c1 = c1t;
         }
-        nano_hs_coef(&R->iirc, nano_inc_c(f0, (uint32_t)(768 + cut6), 0x7DF3B645u), 33554432u, 0);
-        dstep = ((int32_t)d - R->delay) / (int32_t)n;
-        R->c0inc = (c0t - R->c0) / (int32_t)n;
-        R->c1inc = (c1t - R->c1) / (int32_t)n;
+        dstep = ((int32_t)d - s->delay) / (int32_t)n;
+        c0inc = (c0t - s->c0) / (int32_t)n;
+        c1inc = (c1t - s->c1) / (int32_t)n;
     }
-    for (i = 0; i < (int32_t)n; i++) {                                   /* the plucker: noise into a comb, low-passed, DC blocked */
-        int32_t x = 0, lp, tt;
-        if (R->remaining) {
-            R->rng = R->rng * 1664525u + 1013904223u;
-            x = (int16_t)(R->rng >> 16) >> 2;
-            R->remaining--;
-        }
-        x += (R->gain * nano_rs_rd(cl, 255, R->cwp, R->period)) >> 15;
-        cl[R->cwp] = (int16_t)clamp(x, -32767, 32767);
-        R->cwp = (R->cwp - 1) & 255;
-        nano_hs_step(&R->plc, R->pls, x, &lp);
-        tt = R->pdcy * 15 + R->pdcr;
-        R->pdcr = tt & 0xffff;
-        R->pdcy += lp - R->pdcx - (tt >> 16);
-        R->pdcx = lp;
-        tmp[i] = R->pdcy;
-    }
-    tsvf_coef(&flt, cut, p[P_E6]);
-    wp = R->wp;
-    awp = R->awp;
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t ob, ab, x;
-        R->srcph += (int32_t)ratio16;
-        if (R->srcph > 65536) {
+        int32_t x;
+        s->srcph += (int32_t)ratio16;
+        if (s->srcph > 65536) {
             uint32_t dc, cd, dd, ap;
             int32_t val, lp, acc, y;
-            R->srcph -= 65536;
-            R->delay += dstep;
-            R->c0 += R->c0inc;
-            R->c1 += R->c1inc;
-            dc = (uint32_t)R->delay;
+            s->srcph -= 65536;
+            s->delay += dstep;
+            s->c0 += c0inc;
+            s->c1 += c1inc;
+            dc = (uint32_t)s->delay;
             cd = nano_mulq16(dc, (uint32_t)pos16);
             dd = nano_mulq16(dc, (uint32_t)comp16) - 65536u;
             if (dd < (2u << 16))
@@ -2114,30 +2094,151 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
                 R->curved = y > 0 ? (val > 0 ? 2 * y : -3 * y) : 0;
             } else
                 val = nano_rs_rd(sl, 511, wp, dd);
-            val += tmp[i];
+            val += in[i];
             val = clamp(val, -20000, 20000);
-            acc = (R->c0 >> 8) * R->x + (R->c1 >> 8) * (val + R->x1) + R->res;      /* the damping filter */
+            acc = (s->c0 >> 8) * s->x + (s->c1 >> 8) * (val + s->x1) + s->res;      /* the damping filter */
             y = acc >> 16;
-            R->res = acc - (y << 16);
-            R->x1 = R->x;
-            R->x = val;
-            nano_hs_step(&R->iirc, R->iir, y, &lp);
+            s->res = acc - (y << 16);
+            s->x1 = s->x;
+            s->x = val;
+            nano_hs_step(&s->iirc, s->iir, y, &lp);
             val = clamp(lp, -16000, 16000);
             sl[wp] = (int16_t)val;
             wp = (wp - 1) & 511;
-            R->out1 = R->out0;
-            R->aux1 = R->aux0;
-            R->out0 = val;
-            R->aux0 = nano_rs_rd(sl, 511, wp, cd);
+            s->out1 = s->out0;
+            s->aux1 = s->aux0;
+            s->out0 = val;
+            s->aux0 = nano_rs_rd(sl, 511, wp, cd);
         }
-        ob = R->out1 + (((R->out0 - R->out1) * (R->srcph >> 1)) >> 15);
-        ab = R->aux1 + (((R->aux0 - R->aux1) * (R->srcph >> 1)) >> 15);
-        x = clamp(((ob - ab) * 11) >> 1, -24000, 24000);                 /* x 1.4 (Rings' gain) x 4 (Q13 to Q15) */
+        x = s->out1 + (((s->out0 - s->out1) * (s->srcph >> 1)) >> 15);
+        ob[i] += x;
+        x = s->aux1 + (((s->aux0 - s->aux1) * (s->srcph >> 1)) >> 15);
+        ab[i] += x;
+    }
+    s->wp = wp;
+    R->awp = awp;
+}
+
+/* the second string's tuning in Q6 semitones from the key: SYMPA from STRUCTURE (a position among -12 -7 0 +7 +12 +19 +24 +24, the last gap
+ * squashed), QUANT from one of eleven chords; the first string's too (QUANT's last one is an octave down). The tonic of SYMPA's first
+ * position is MIDI note 0: a pitch under the range, the lowest the string plays. */
+static int32_t nano_rs_tune(int32_t model, int32_t hq, int32_t *first)
+{
+    static const int16_t sy[9] = {-30000, -768, -449, 0, 449, 768, 1217, 1536, 1536};
+    static const int16_t qu[11] = {-768, 128, 192, 256, 320, 448, 576, 640, 704, 768, 768};
+    *first = 0;
+    if (model == 4) {
+        int32_t k = (hq * 11) >> 15;
+        k = k > 10 ? 10 : k;
+        *first = k == 10 ? -768 : 0;
+        return k == 10 ? 768 : qu[k];
+    } else {
+        int32_t nt = hq * 7, ni = nt >> 15, fr = nano_squash(nt & 32767);
+        return sy[ni] + (((sy[ni + 1] - sy[ni]) * fr) >> 15);
+    }
+}
+
+static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m, nano_ri_t *S, int32_t model)
+{
+    static const uint32_t lfo_inc[4] = {20550, 19478, 16654, 22400};
+    const int16_t *p = t->p;
+    int16_t *sl = nano_dl(t, v), *cl, *al, *l2;
+    nano_rs_t *R = (nano_rs_t *)S->st;
+    int32_t tmp[CTL], ob[CTL], ab[CTL], symp[CTL];
+    int32_t hq, bq, dq, pq, disp = 0, ic1 = v->s[0], ic2 = v->s[1], cut = (p[P_E5] << 8) + m->cutoff, i, init = S->strike, gx = model == 2 ? 11 : 8;
+    uint32_t f0 = m->inc > 0x7D70A3D7u ? 0x7D70A3D7u : m->inc;
+    tsvf_t flt;
+    if (!sl)
+        return;
+    cl = sl + NANO_RS_STR;
+    al = l2 = cl + 256;
+    if (f0 < 65536u)
+        f0 = 65536u;
+    hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
+    hq = hq + (hq >> 7);
+    bq = p[P_E3] * 258;
+    dq = p[P_E4] * 258;
+    pq = p[P_E7] * 258;
+    if (model == 2)
+        disp = hq < 7864 ? ((hq - 7864) * 136511) >> 15 : (hq > 8520 ? ((hq - 8520) * 44283) >> 15 : 0);
+    if (S->strike) {                                                     /* the plucker, triggered */
+        int32_t c = (bq * (65536 - bq)) >> 15, ratio15 = ((pq * 29491) >> 15) + 1638;
+        uint32_t dtot = (uint32_t)nano_div64(1ull << 48, f0), cp = (uint32_t)(((uint64_t)ratio15 * dtot) >> 15), k;
+        for (k = 0; k < sizeof *R / 4; k++)
+            ((uint32_t *)R)[k] = 0;
+        for (k = 0; k < NANO_PL_DL; k++)
+            sl[k] = 0;
+#ifdef NANO_RS_TESTSEED
+        R->rng = 0x21u;                                                  /* the reference comparison runs both on Rings' own seed */
+#else
+        R->rng = (0x21u ^ (v->age * 2654435761u) ^ ((uint32_t)v->note << 16)) | 1u;
+#endif
+        R->remaining = cp >> 16;
+        while (cp >= (255u << 16))
+            cp >>= 1;
+        R->period = cp;
+        R->gain = ((32768 - pq) * 26214) >> 15;
+        nano_hs_coef(&R->plc, nano_inc_c(nano_inc_c(f0, (uint32_t)(768 + (((c - 16384) * 96 * 64) >> 15)), 0x7DF3B645u), 768 + 36 * 64, 0x7DF3B645u), 1u << 24, 1);
+        S->strike = 0;
+    }
+    for (i = 0; i < (int32_t)n; i++) {                                   /* the plucker: noise into a comb, low-passed, DC blocked */
+        int32_t x = 0, lp, tt;
+        if (R->remaining) {
+            R->rng = R->rng * 1664525u + 1013904223u;
+            x = (int16_t)(R->rng >> 16) >> 2;
+            R->remaining--;
+        }
+        x += (R->gain * nano_rs_rd(cl, 255, R->cwp, R->period)) >> 15;
+        cl[R->cwp] = (int16_t)clamp(x, -32767, 32767);
+        R->cwp = (R->cwp - 1) & 255;
+        nano_hs_step(&R->plc, R->pls, x, &lp);
+        tt = R->pdcy * 15 + R->pdcr;
+        R->pdcr = tt & 0xffff;
+        R->pdcy += lp - R->pdcx - (tt >> 16);
+        R->pdcx = lp;
+        tmp[i] = R->pdcy;
+        ob[i] = ab[i] = 0;
+    }
+    if (model == 2) {
+        nano_rs_string(R, &R->s[0], sl, al, f0, bq, dq, pq, disp, init, tmp, ob, ab, n);
+    } else {
+        int32_t off1, off0, b2, d2, p2, amt, lfo, glide;
+        uint32_t t0, t1, ph;
+        off1 = nano_rs_tune(model, hq, &off0);
+        t0 = nano_inc_c(f0, (uint32_t)(768 + off0), 0x7DF3B645u);
+        t1 = off1 < -768 ? 2045000u : nano_inc_c(f0, (uint32_t)(768 + off1), 0x7DF3B645u);
+        if (t1 < 2045000u)
+            t1 = 2045000u;
+        if (init) {
+            R->s[0].freq = (int32_t)t0;
+            R->s[1].freq = (int32_t)t1;
+        }
+        R->s[0].freq = (int32_t)t0;                                      /* glide 1 */
+        b2 = (bq * (65536 - bq)) >> 15;
+        b2 = (b2 * (65536 - b2)) >> 15;                                  /* b (2 - b), twice */
+        {
+            uint32_t val = nano_pow2_q16((uint32_t)(3 * (32768 - b2)));
+            glide = (int32_t)(0xFFFFFFFFu / val);                        /* 2^((b - 1) 3), Q16 */
+        }
+        R->s[1].freq += (int32_t)(((int64_t)((int32_t)t1 - R->s[1].freq) * glide) >> 16);
+        d2 = 22938 + ((dq * 8847) >> 15);                                /* 0.7 + 0.27 d */
+        d2 += (31130 - d2) >> 1;                                         /* + 0.5 (0.95 - d) */
+        ph = (uint32_t)R->lph;
+        lfo = (32768 + sine_i(ph + 0x40000000u)) >> 1;
+        R->lph = (int32_t)(ph + lfo_inc[(uint32_t)(v - t->v) & 3] * n);
+        amt = (((16384 - (pq > 16384 ? pq - 16384 : 16384 - pq)) * 29491) >> 15);
+        p2 = pq + ((lfo * amt) >> 15);
+        nano_rs_string(R, &R->s[0], sl, al, (uint32_t)R->s[0].freq, bq, dq, pq, 0, init, tmp, ob, ab, n);
+        for (i = 0; i < (int32_t)n; i++)
+            symp[i] = ((ob[i] - ab[i]) * 3277) >> 15;
+        nano_rs_string(R, &R->s[1], l2, al, (uint32_t)R->s[1].freq, b2, d2, p2, 0, init, symp, ob, ab, n);
+    }
+    tsvf_coef(&flt, cut, p[P_E6]);
+    for (i = 0; i < (int32_t)n; i++) {
+        int32_t x = clamp(((ob[i] - ab[i]) * gx) >> 1, -24000, 24000);   /* Rings' gain (1.4 STRING, 1 the others) x 4 (Q13 to Q15) */
         x = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
         out[i] += voice_amp(x, m, (uint32_t)i) << 1;
     }
-    R->wp = wp;
-    R->awp = awp;
     v->s[0] = ic1;
     v->s[1] = ic2;
 }
@@ -2159,12 +2260,12 @@ static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int
         nano_render_rf(t, v, out, n, m, S);
         return;
     }
-    if (model == 2) {
-        nano_render_rs(t, v, out, n, m, S);
+    if (model == 1 || model == 2 || model == 4) {
+        nano_render_rs(t, v, out, n, m, S, model);
         return;
     }
     if (model != 0)
-        return;                                                          /* SYMPA and QUANT are not ported yet */
+        return;
     hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
     hq = hq + (hq >> 7);                                                 /* STRUCTURE 0..32767 */
     bq = p[P_E3] * 258;
@@ -2569,6 +2670,11 @@ static const preset_t NANO_PRESETS[] = {
     {"RINGS GUITAR", {14, 64, 32, 90, 80, 127, 0, 30}, {0, 40, 127, 60}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
     {"RINGS HARP", {14, 64, 32, 100, 100, 127, 0, 20}, {0, 40, 127, 70}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
     {"RINGS PIANO", {14, 64, 70, 60, 70, 127, 0, 25}, {0, 40, 127, 50}, 0, 0, FX(0, 20, 20, 20), PAT(0)},
+    /* RINGS (SYMPA, MODEL 38, and QUANT, MODEL 114) */
+    {"RINGS SYMPA", {14, 38, 40, 100, 90, 127, 0, 40}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"RINGS FIFTHS", {14, 38, 75, 90, 100, 127, 0, 50}, {20, 60, 127, 80}, 0, 0, FX(0, 40, 40, 40), PAT(0)},
+    {"RINGS QUANT OCT", {14, 114, 105, 100, 90, 127, 0, 35}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
+    {"RINGS QUANT 5TH", {14, 114, 58, 90, 80, 127, 0, 45}, {0, 40, 127, 60}, 0, 0, FX(0, 30, 30, 30), PAT(0)},
 };
 
 static const engine_t ENG_NANO = {

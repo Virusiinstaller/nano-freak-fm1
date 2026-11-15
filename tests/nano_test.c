@@ -1250,6 +1250,62 @@ int main(void)
         check("RINGS STRING sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
     }
 
+    /* 4r. RINGS (TYPE 14), SYMPA (E1 38) and QUANT (E1 114): the key's pitch, the second string's tuning is heard, bounded sweeps */
+    {
+        static const uint8_t keys[] = {45, 57, 69};
+        static const uint8_t mdl[] = {38, 114};
+        double peak = 0, r_oct, r_ref;
+        uint32_t k, j, st, br, dm, ps, w, lag, best;
+        int ok = 1;
+        for (w = 0; w < 2; w++)
+            for (k = 0; k < 3; k++) {
+                double f = hz(keys[k]), bc = -2, T = FS / f, cents;
+                setup_ri(mdl[w], 5, 100, 80, 20);
+                play(keys[k], y, 16384);
+                best = 0;
+                for (lag = (uint32_t)(T * 0.8); lag < (uint32_t)(T * 1.25); lag++) {
+                    double c = 0;
+                    for (j = 3000; j < 9000; j++)
+                        c += y[j] * y[j + lag];
+                    if (c > bc) {
+                        bc = c;
+                        best = lag;
+                    }
+                }
+                cents = 1200 * log2(T / best);
+                printf("   RINGS %s key %u: period %.1f, found %u, %.1f cents\n", w ? "QUANT" : "SYMPA", keys[k], T, best, cents);
+                if (fabs(cents) > 40)
+                    ok = 0;
+            }
+        check("RINGS SYMPA and QUANT play the key (the period within 40 cents, keys 45 to 69)", ok);
+        {
+            double f1 = hz(57);
+            setup_ri(114, 105, 100, 110, 64);                            /* chord 9: an octave up */
+            play(57, y, FS);
+            r_oct = tone_at(y + FS / 4, a, 16384, 2 * f1) / (tone_at(y + FS / 4, a, 16384, f1) + 1);
+            setup_ri(114, 15, 100, 110, 64);                             /* chord 1: a second (2 st) */
+            play(57, y, FS);
+            r_ref = tone_at(y + FS / 4, a, 16384, 2 * f1) / (tone_at(y + FS / 4, a, 16384, f1) + 1);
+            printf("   RINGS QUANT 2f/f in the tail: %.3f with the octave string, %.3f with a second\n", r_oct, r_ref);
+            check("RINGS QUANT tunes the second string (the octave strengthens 2f in the tail)", r_oct > 1.2 * r_ref);
+        }
+        for (w = 0; w < 2; w++)
+            for (st = 0; st <= 127; st += 21)
+                for (br = 0; br <= 127; br += 63)
+                    for (dm = 0; dm <= 127; dm += 63)
+                        for (ps = 0; ps <= 127; ps += 32)
+                            for (k = 0; k < 3; k++) {
+                                static const uint8_t kk[] = {24, 60, 108};
+                                setup_ri(mdl[w], st, br, dm, ps);
+                                play(kk[k], y, 8192);
+                                for (j = 0; j < 8192; j++)
+                                    if (fabs(y[j]) > peak)
+                                        peak = fabs(y[j]);
+                            }
+        printf("   RINGS SYMPA and QUANT sweep: peak %.0f\n", peak);
+        check("RINGS SYMPA and QUANT sweep (STRUCTURE, BRIGHTNESS, DAMPING, POSITION, keys): bounded (peak under 65536)", peak < 65536);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;
