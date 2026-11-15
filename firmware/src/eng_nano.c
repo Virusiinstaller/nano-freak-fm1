@@ -1958,7 +1958,7 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     if (d > (504u << 16))
         d = 504u << 16;
     ratio16 = 65536u >> shift;
-    pos16 = (16384 - ((abs(pq - 16384) * 32113) >> 15)) << 1;            /* 0.5 - 0.98 |position - 0.5|, Q16 */
+    pos16 = (16384 - (((pq > 16384 ? pq - 16384 : 16384 - pq) * 32113) >> 15)) << 1;            /* 0.5 - 0.98 |position - 0.5|, Q16 */
     disp = hq < 7864 ? ((hq - 7864) * 136511) >> 15 : (hq > 8520 ? ((hq - 8520) * 44283) >> 15 : 0);
     if (disp > 0) {
         int32_t a = (disp * (65536 - disp)) >> 15, na = disp > 24576 ? (disp - 24576) * 4 : 0;
