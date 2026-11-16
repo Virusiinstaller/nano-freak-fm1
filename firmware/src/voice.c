@@ -592,7 +592,10 @@ static __attribute__((noinline)) void esync_coef(track_t *t)   /* (not inlined: 
                                                                     * audio ISR's loop over the voices) */
 {
     const int16_t *p = t->p;
-    if (p[P_ESYNC]) {
+    if (ENGINES[t->engine] == &ENG_NANO && !p[P_ESYNC]) {   /* NANO: the test bed's laws; the release is the DECAY knob's time */
+        T_ESYNC(t)[0] = NANO_ENV_ATK[p[P_ATK] & 127];
+        T_ESYNC(t)[1] = T_ESYNC(t)[2] = NANO_ENV_DEC[p[P_DEC] & 127];
+    } else if (p[P_ESYNC]) {
         uint32_t q = beat_samples();
         T_ESYNC(t)[0] = esync_one(q, p[P_ATK], 0);
         T_ESYNC(t)[1] = esync_one(q, p[P_DEC], 1);
@@ -612,7 +615,9 @@ static int32_t env_tick(track_t *t, voice_t *v)
     switch (v->stage) {
     case 1:
 #if FELUCCA_FMINI_ONLY
-        {   /* the Minimoog's capacitor charges toward a level above full (a concave rise ending in a corner), like the filter's */
+        if (ENGINES[t->engine] == &ENG_NANO)
+            v->env += (int32_t)T_ESYNC(t)[0];           /* NANO: linear, to full */
+        else {   /* the Minimoog's capacitor charges toward a level above full (a concave rise ending in a corner), like the filter's */
             int32_t d = (int32_t)(((int64_t)((5 << 22) - v->env) * (int32_t)(T_ESYNC(t)[0] >> 1) * 824) >> 32);
             v->env += d < 1 ? 1 : d;
         }

@@ -90,4 +90,14 @@ if len(sys.argv) > 5:                                  # RINGS STRING: the IIR d
     assert len(v) == 257, len(v)
     out.append("/* RINGS STRING: the damping filter's delay as a share of the string's (1 - shift), Q16, indexed by the cutoff in semitones (0..129) */")
     out.append("static const uint16_t NANO_RSVF[130] = {\n    " + ",\n    ".join(", ".join(str(int(round((1 - x) * 65535))) for x in v[i:i + 13]) for i in range(0, 130, 13)) + "\n};")
+# the amplitude envelope's laws, the test bed's (mf_core.c attack_time / decay_time): the attack is linear and takes 1 ms .. 5 s
+# (1 ms * 2^(v 12.3/127)); the decay and the release (one knob, DECAY) are exponential: 5 ms .. 10 s (5 ms * 2^(v 11/127)), 98 % of the way
+# in that time (e^-4). One step (Q24) and one coefficient (Q16) per control tick of 32 samples.
+import math
+_a = [(1 << 24) * 32 / (0.001 * 2 ** (v * 12.3 / 127) * 44100.0) for v in range(128)]
+_d = [1 - math.exp(-4.0 * 32 / (0.005 * 2 ** (v * 11.0 / 127) * 44100.0)) for v in range(128)]
+out.append("/* ENVELOPE: the attack's step per control tick, Q24 (the test bed's 1 ms .. 5 s) */")
+out.append("static const uint32_t NANO_ENV_ATK[128] = {\n    " + ",\n    ".join(", ".join(str(max(1, int(round(x)))) for x in _a[i:i + 16]) for i in range(0, 128, 16)) + "\n};")
+out.append("/* ENVELOPE: the decay's and the release's coefficient per control tick, Q16 (the test bed's 5 ms .. 10 s, to 98 %) */")
+out.append("static const uint16_t NANO_ENV_DEC[128] = {\n    " + ",\n    ".join(", ".join(str(max(1, min(65535, int(round(65536 * x))))) for x in _d[i:i + 16]) for i in range(0, 128, 16)) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")

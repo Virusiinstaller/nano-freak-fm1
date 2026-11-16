@@ -1405,6 +1405,88 @@ int main(void)
 #undef SAWF
     }
 
+    /* 4u. THE ENVELOPE: the test bed's laws: ATK linear 1 ms * 2^(v 12.3/127); DEC (and the release) 5 ms * 2^(v 11/127), 98 % of the way */
+    {
+        static double e[1 << 16];
+        static int32_t b[CTL];
+        uint32_t i, k, nb = (1u << 16) / CTL, pk = 0, t90 = 0, td = 0, tr = 0;
+        double top = 0, ta, tdec, trel, wa, wd;
+        /* attack 40: 14.7 ms: 90 % of the top at 0.9 of that */
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_E0] = 1;
+        trk[0].p[P_ATK] = 40;
+        trk[0].p[P_SUS] = 127;
+        trk_note_on(&trk[0], 57, 127);
+        for (i = 0; i < nb; i++) {
+            double m = 0;
+            track_render(&trk[0], b, CTL);
+            for (k = 0; k < CTL; k++)
+                if (fabs((double)b[k]) > m)
+                    m = fabs((double)b[k]);
+            e[i] = m;
+            if (m > top)
+                top = m;
+        }
+        for (i = 0; i < nb && e[i] < 0.9 * top; i++)
+            ;
+        t90 = i * CTL;
+        wa = 0.9 * 0.001 * pow(2.0, 40 * 12.3 / 127) * FS;
+        ta = (double)t90;
+        /* decay 40 to sustain 0: 55 ms to 2 % */
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_E0] = 1;
+        trk[0].p[P_DEC] = 40;
+        trk[0].p[P_SUS] = 0;
+        trk_note_on(&trk[0], 57, 127);
+        top = 0;
+        for (i = 0; i < nb; i++) {
+            double m = 0;
+            track_render(&trk[0], b, CTL);
+            for (k = 0; k < CTL; k++)
+                if (fabs((double)b[k]) > m)
+                    m = fabs((double)b[k]);
+            e[i] = m;
+            if (m > top) {
+                top = m;
+                pk = i;
+            }
+        }
+        for (i = pk; i < nb && e[i] > 0.02 * top; i++)
+            ;
+        td = (i - pk) * CTL;
+        wd = 0.005 * pow(2.0, 40 * 11.0 / 127) * FS;
+        tdec = (double)td;
+        /* the release takes the DECAY's time too (REL is not used): note off at the sustain */
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_E0] = 1;
+        trk[0].p[P_DEC] = 40;
+        trk[0].p[P_REL] = 120;
+        trk[0].p[P_SUS] = 127;
+        trk_note_on(&trk[0], 57, 127);
+        for (i = 0; i < 32; i++)
+            track_render(&trk[0], b, CTL);
+        trk_note_off(&trk[0], 57);
+        top = 0;
+        for (i = 0; i < nb; i++) {
+            double m = 0;
+            track_render(&trk[0], b, CTL);
+            for (k = 0; k < CTL; k++)
+                if (fabs((double)b[k]) > m)
+                    m = fabs((double)b[k]);
+            e[i] = m;
+            if (i == 0)
+                top = m;
+        }
+        for (i = 0; i < nb && e[i] > 0.02 * top; i++)
+            ;
+        tr = i * CTL;
+        trel = (double)tr;
+        printf("   ENVELOPE: ATK 40 90 %% at %.0f (want %.0f), DEC 40 to 2 %% at %.0f (want %.0f), release at %.0f\n", ta, wa, tdec, wd, trel);
+        check("ENVELOPE ATK is linear and takes the test bed's time (90 % of the top within 10 % of 0.9 T)", fabs(ta - wa) < 0.1 * wa + CTL);
+        check("ENVELOPE DEC falls to 2 % in the test bed's time (within 15 %)", fabs(tdec - wd) < 0.15 * wd + CTL);
+        check("ENVELOPE release follows the DECAY knob (REL is not used): the time of DEC 40 within 15 %", fabs(trel - wd) < 0.15 * wd + CTL);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;
