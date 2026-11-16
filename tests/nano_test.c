@@ -1487,6 +1487,25 @@ int main(void)
         check("ENVELOPE release follows the DECAY knob (REL is not used): the time of DEC 40 within 15 %", fabs(trel - wd) < 0.15 * wd + CTL);
     }
 
+    /* 4v. THE FILTER ENVELOPE: FLT (P_ED_FLT) is the test bed's FAMT: +-7 octaves, FLT 63 = 6.9 octaves of the cutoff at full level */
+    {
+        double f1 = hz(57), ra, rb, rn;
+        setup(0, 0, 0, 0, 40);
+        trk[0].p[P_ED_FLT] = 32;
+        play(57, y, n);
+        ra = tone_at(y, a, n, 7 * f1) / (tone_at(y, a, n, f1) + 1);
+        setup(0, 0, 0, 0, 84);
+        play(57, y, n);
+        rb = tone_at(y, a, n, 7 * f1) / (tone_at(y, a, n, f1) + 1);
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_ED_FLT] = -64;
+        play(57, y, n);
+        rn = tone_at(y, a, n, 7 * f1) / (tone_at(y, a, n, f1) + 1);
+        printf("   FILTER ENV: 7f / f %.3f at CUT 40 + FLT 32, %.3f at CUT 84; %.3f at CUT 127 with FLT -64\n", ra, rb, rn);
+        check("FILTER ENV FLT 32 opens the cutoff by 32 * 89 / 64 = 44.5 dial units (the 7th harmonic as CUT 84, within 15 %)", fabs(ra - rb) < 0.15 * rb);
+        check("FILTER ENV FLT -64 closes it by 5 octaves (the 7th harmonic under 40 % of the open one)", rn < 0.4 * rb);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;
