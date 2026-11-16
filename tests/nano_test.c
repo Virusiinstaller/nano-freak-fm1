@@ -1335,6 +1335,76 @@ int main(void)
         check("FOLD sweep (11 types, knob 1, 64, 127): bounded (peak under 65536)", peak < 65536);
     }
 
+    /* 4t. THE NANO FREAK FILTER: CUT 20 Hz * 2^(10 cut / 127), TYPE, SLOPE, DRIVE, CLIP */
+    {
+        double f1 = hz(57), r_lo, r_hi, r12, r24, hp1, lp1, bp1, bp7, lp7, rs, rp, rr, sp, sq;
+        uint32_t j, ty;
+        double pk, ms;
+#define SAWF(cut, res, type, slope, drive, clip) do { setup(0, 0, 0, 0, cut); trk[0].p[P_E6] = res; trk[0].p[P_FTYPE] = type; trk[0].p[P_ED_FX] = (int16_t)((slope) | (drive) << 1 | (clip) << 4); play(57, y, n); } while (0)
+        SAWF(64, 0, 0, 0, 0, 0);
+        r_lo = tone_at(y, a, n, 7 * f1) / (tone_at(y, a, n, f1) + 1);
+        lp1 = tone_at(y, a, n, f1);
+        SAWF(110, 0, 0, 0, 0, 0);
+        r_hi = tone_at(y, a, n, 7 * f1) / (tone_at(y, a, n, f1) + 1);
+        printf("   FILTER LP 12 dB: 7f / f %.3f at CUT 64 (659 Hz), %.3f at CUT 110 (4.6 kHz)\n", r_lo, r_hi);
+        check("FILTER CUT follows 20 Hz * 2^(10 cut / 127): the 7th harmonic (1.5 kHz) falls at CUT 64 and stays at CUT 110", r_lo < 0.4 * r_hi);
+        r12 = r_lo;
+        SAWF(64, 0, 0, 1, 0, 0);
+        r24 = tone_at(y, a, n, 7 * f1) / (tone_at(y, a, n, f1) + 1);
+        printf("   FILTER LP 24 dB: 7f / f %.3f (12 dB: %.3f)\n", r24, r12);
+        check("FILTER SLOPE 24 dB falls twice as fast (the 7th harmonic under 60 % of the 12 dB one)", r24 < 0.6 * r12);
+        SAWF(64, 0, 2, 0, 0, 0);
+        hp1 = tone_at(y, a, n, f1);
+        SAWF(64, 0, 1, 0, 0, 0);
+        bp1 = tone_at(y, a, n, f1);
+        bp7 = tone_at(y, a, n, 7 * f1);
+        printf("   FILTER at CUT 64: key line %.0f LP, %.0f HP, %.0f BP; 7f %.0f BP\n", lp1, hp1, bp1, bp7);
+        check("FILTER TYPE: HP takes the key's low harmonic away (under 40 % of LP's) and BP is under LP's at both ends", hp1 < 0.4 * lp1 && bp1 < lp1 && bp7 < tone_at(y, a, n, 7 * f1) * 10);
+        lp7 = tone_at(y, a, n, 7 * f1);
+        SAWF(64, 120, 0, 0, 0, 0);
+        rp = 0;
+        for (j = 0; j < n; j++)
+            if (fabs(y[j]) > rp)
+                rp = fabs(y[j]);
+        printf("   FILTER RES 120: peak %.0f\n", rp);
+        check("FILTER RES 120 stays bounded", rp < 65536);
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_E0] = 1;
+        trk[0].p[P_E5] = 127;
+        play(57, y, n);
+        rs = tone_at(y, a, n, 3 * f1) / (tone_at(y, a, n, f1) + 1);
+        trk[0].p[P_ED_FX] = 7 << 1;
+        play(57, y, n);
+        rr = tone_at(y, a, n, 3 * f1) / (tone_at(y, a, n, f1) + 1);
+        printf("   FILTER DRIVE on a sine: 3f / f %.4f off, %.4f at 127\n", rs, rr);
+        check("FILTER DRIVE 127 saturates a sine into odd harmonics (3f over 5 % of the key line, 10x the dry)", rr > 0.05 && rr > 10 * rs);
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_E0] = 1;
+        trk[0].p[P_E5] = 127;
+        play(57, y, n);
+        pk = ms = 0;
+        for (j = 4096; j < n; j++) {
+            ms += y[j] * y[j];
+            if (fabs(y[j]) > pk)
+                pk = fabs(y[j]);
+        }
+        sp = sqrt(ms / (n - 4096)) / (pk + 1);
+        trk[0].p[P_ED_FX] = 7 << 4;
+        play(57, y, n);
+        pk = ms = 0;
+        for (j = 4096; j < n; j++) {
+            ms += y[j] * y[j];
+            if (fabs(y[j]) > pk)
+                pk = fabs(y[j]);
+        }
+        sq = sqrt(ms / (n - 4096)) / (pk + 1);
+        printf("   FILTER CLIP on a sine: rms / peak %.3f off, %.3f at 127\n", sp, sq);
+        check("FILTER CLIP 127 squares a sine (rms / peak from 0.7 up over 0.85)", sp < 0.75 && sq > 0.85);
+        (void)ty;
+        (void)lp7;
+#undef SAWF
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;

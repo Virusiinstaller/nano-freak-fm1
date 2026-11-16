@@ -92,6 +92,80 @@ static uint32_t nano_inc_c(uint32_t inc, uint32_t r6, uint64_t cap)
     return x > cap ? (uint32_t)cap : (uint32_t)x;
 }
 
+/* THE NANO FREAK FILTER (the test bed's run_filter, mf_core.c): the trapezoidal state variable filter of the host, but with the test bed's laws.
+ * CUT 0..127 (plus the host's modulation and the key tracking) is 20 Hz * 2^(10 cut / 127), up to 18 kHz; RES is the damping k = 2 (1 - 0.97 res / 127);
+ * P_FTYPE picks LP, BP (peak 1 at the cutoff, v1 k) or HP. The other three live in the 7 bits of P_ED_FX (a parameter nothing else reads, and a
+ * place in the project format that is already there): bit 0 SLOPE, 24 dB: a second stage behind the first with k2 = 2 sqrt(k / 2); bits 1-3 DRIVE
+ * 0..7 (x 127 / 7): soft-clips the input (gain 1 to 8, levelled by 1 / (1 + 0.1 (gain - 1))); bits 4-6 CLIP 0..7: gains the output 1 to 7 and
+ * clips it at the half scale. (The stored value is -64..63: its low 7 bits.) The
+ * second stage's states live beside the voice slots (nano_flst), the first stage's in v->s[0..1] as before. Drive and clip at 0 are bypasses.
+ * The output keeps the host's soft knee (a resonant peak saturates there rather than wraps). */
+typedef struct {
+    tsvf_t c2;
+    int32_t ic3, ic4, k, k2, dg, dl, cg, type, slope;
+    int32_t *st;
+} nano_fx_t;
+
+static void nano_svf_coef(tsvf_t *c, uint32_t inc, int32_t k);
+static uint32_t nano_isqrt(uint32_t x);
+static int32_t *nano_flst(const track_t *t, const voice_t *v);
+
+static void nano_fcoef(tsvf_t *c, nano_fx_t *f, const track_t *t, const voice_t *v, int32_t cut, int32_t res)
+{
+    const int16_t *p = t->p;
+    uint32_t inc;
+    int32_t k, drive = ((p[P_ED_FX] >> 1) & 7) * 127 / 7, clip = ((p[P_ED_FX] >> 4) & 7) * 127 / 7;
+    cut = clamp(cut, 0, 127 << 8);
+    inc = nano_inc_c(1947830u, 768u + (uint32_t)((cut * 30960) >> 17), 0x66666666u);       /* 20 Hz * 2^(10 cut / 127) */
+    k = 8192 - ((res * 16018) >> 8);                                                       /* 2 (1 - 0.97 res), Q12 */
+    nano_svf_coef(c, inc, k);
+    f->k = k;
+    f->type = p[P_FTYPE] > 2 ? 2 : p[P_FTYPE];
+    f->slope = (p[P_ED_FX] & 1);
+    if (f->slope) {
+        f->k2 = (int32_t)nano_isqrt((uint32_t)k << 13);                                    /* 2 sqrt(k / 2), Q12 */
+        nano_svf_coef(&f->c2, inc, f->k2);
+    }
+    f->dg = drive > 0 ? 4096 + drive * 226 : 0;
+    f->dl = drive > 0 ? (int32_t)((4096u * 4096u) / (uint32_t)(4096 + ((f->dg - 4096) / 10))) : 4096;
+    f->cg = clip > 0 ? 256 + clip * 12 : 0;
+    f->st = nano_flst(t, v);
+    f->ic3 = f->st[0];
+    f->ic4 = f->st[1];
+}
+
+static inline int32_t nano_ftap(const tsvf_t *c, nano_fx_t *f, int32_t x, int32_t *ic1, int32_t *ic2)
+{
+    int32_t v1, v2, v3, y;
+    if (f->dg) {
+        int32_t u = clamp((x * 2 * f->dg) >> 12, -98304, 98304) >> 3, u2 = (u * u) >> 12, n = u * (110592 + u2), d = 110592 + 9 * u2;
+        x = (((n / d) * f->dl) >> 12) << 2;
+    }
+    v3 = x - *ic2;
+    v1 = (c->a1 * *ic1 + c->a2 * v3) >> 13;
+    v2 = *ic2 + ((c->a2 * *ic1 + c->a3 * v3) >> 13);
+    *ic1 = clamp(2 * v1 - *ic1, -150000, 150000);
+    *ic2 = clamp(2 * v2 - *ic2, -150000, 150000);
+    if (f->slope) {
+        int32_t x2 = f->type == 0 ? v2 : (f->type == 1 ? (v1 * f->k) >> 12 : x - ((f->k * v1) >> 12) - v2), w1, w2, w3 = x2 - f->ic4;
+        w1 = (f->c2.a1 * f->ic3 + f->c2.a2 * w3) >> 13;
+        w2 = f->ic4 + ((f->c2.a2 * f->ic3 + f->c2.a3 * w3) >> 13);
+        f->ic3 = clamp(2 * w1 - f->ic3, -150000, 150000);
+        f->ic4 = clamp(2 * w2 - f->ic4, -150000, 150000);
+        y = f->type == 0 ? w2 : (f->type == 1 ? (w1 * f->k2) >> 12 : x2 - ((f->k2 * w1) >> 12) - w2);
+    } else
+        y = f->type == 0 ? v2 : (f->type == 1 ? (v1 * f->k) >> 12 : x - ((f->k * v1) >> 12) - v2);
+    if (f->cg)
+        y = clamp((y * f->cg) >> 8, -16384, 16384);
+    return soft_knee(y, 16000) << 1;
+}
+
+static inline void nano_fend(const nano_fx_t *f)
+{
+    f->st[0] = f->ic3;
+    f->st[1] = f->ic4;
+}
+
 static uint32_t nano_fm_inc(uint32_t inc, uint32_t r6) { return nano_inc_c(inc, r6, 0x50000000u); }
 
 static uint32_t nano_isqrt(uint32_t x)
@@ -150,6 +224,7 @@ static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
 {
     const int16_t *p = t->p;
     tsvf_t flt;
+    nano_fx_t nfl;
     uint32_t i, pc = v->ph[0], pm = v->ph[1], inc = m->inc, minc = nano_fm_inc(inc, NANO_FMR[p[P_E1] > 129 ? 129 : p[P_E1]]);
     int32_t idx = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), prev = v->s[2], tam, fbp, fbn;
     int32_t ic1 = v->s[0], ic2 = v->s[1], fb = p[P_E3] - 64, amt, dcb = v->s[3];
@@ -162,7 +237,7 @@ static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     amt = (amt * 512) >> 15;                                                     /* 2 cycles at the top, Q8 */
     fbp = fb > 0 ? ((fb * fb) >> 2) : 0;                                         /* 0.25 (fb/64)^2 cycles, Q12 */
     fbn = fb < 0 ? ((fb * fb) >> 1) : 0;                                         /* 0.5 (fb/64)^2, Q12 */
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         uint32_t mi = minc;
         int32_t mo, co, s;
@@ -178,13 +253,14 @@ static void nano_render_fm(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         prev += (co - prev) >> 4;
         dcb += (co - dcb) >> 11;                                  /* FM at equal frequencies has a DC term: a 3 Hz blocker */
         co -= dcb;
-        s = soft_knee(analog_tap(&flt, 0, nano_k4((co * 3) >> 3, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        s = nano_ftap(&flt, &nfl, nano_k4((co * 3) >> 3, p[P_E4]), &ic1, &ic2);
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
     v->ph[1] = pm;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
     v->s[2] = prev;
     v->s[3] = dcb;
 }
@@ -215,6 +291,7 @@ static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     const int16_t *p = t->p;
     const int16_t *tabs[5] = {NANO_WS[0], NANO_WS[1], NANO_WS[2], NANO_WS[3], NANO_WS[4]};
     tsvf_t flt;
+    nano_fx_t nfl;
     uint32_t i, ph = v->ph[0], inc = m->inc;
     int32_t hq = p[P_E1] * 258, mo = p[P_E3] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), f0 = (int32_t)(inc >> 16);
     int32_t pq, rup, rdn, slope, sa, att, shape_t, wf_t, shape_m, wf_m, dshape, dwf, ic1 = v->s[0], ic2 = v->s[1], dcb = v->s[2];
@@ -237,7 +314,7 @@ static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     dwf = ((wf_t - wf_m) << 8) / (int32_t)n;
     shape_m <<= 8;
     wf_m <<= 8;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t o, pos, wi, fr, x, y, mix, idx, fi, fold, si, sf;
         const int16_t *s1, *s2;
@@ -269,7 +346,7 @@ static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         fold = NANO_FOLD[fi] + (((NANO_FOLD[fi + 1] - NANO_FOLD[fi]) * (idx & 63)) >> 6);
         dcb += (fold - dcb) >> 11;
         fold -= dcb;
-        fold = soft_knee(analog_tap(&flt, 0, nano_k4(fold >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        fold = nano_ftap(&flt, &nfl, nano_k4(fold >> 1, p[P_E4]), &ic1, &ic2);
         out[i] += voice_amp(fold, m, i) << 1;
         ph += inc;
     }
@@ -278,6 +355,7 @@ static void nano_render_ws(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->ph[2] = (uint32_t)(wf_m >> 8);
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
     v->s[2] = dcb;
     v->s[3] = 0;
 }
@@ -317,6 +395,7 @@ static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     const int16_t *p = t->p;
     nano_g w;
     tsvf_t flt;
+    nano_fx_t nfl;
     uint32_t i, pc = v->ph[0], pf1 = v->ph[1], pf2 = v->ph[2], inc = m->inc, f1, f2;
     int32_t hq = p[P_E1] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq = p[P_E3] * 258;
     int32_t k, sh, si, sf, t3, bleed, held = v->s[2], dcb = v->s[3], ic1 = v->s[0], ic2 = v->s[1], a;
@@ -358,7 +437,7 @@ static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     }
     a = ((int32_t)(inc >> 16) * 1931) >> 10;                             /* the DC blocker's pole: 0.3 f0 */
     a = a > 32768 ? 32768 : a;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t s = held, d;                                             /* the output lags one sample, as Plaits': the step's first part goes to the sample before the wrap */
         uint32_t pn = pc + inc;
@@ -386,7 +465,7 @@ static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         pc = pn;
         dcb += ((s - dcb) * a) >> 15;
         s -= dcb;
-        s = soft_knee(analog_tap(&flt, 0, nano_k4(s >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;     /* the grains are hot: as the other types, half into the filter */
+        s = nano_ftap(&flt, &nfl, nano_k4(s >> 1, p[P_E4]), &ic1, &ic2);     /* the grains are hot: as the other types, half into the filter */
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
@@ -394,6 +473,7 @@ static void nano_render_fo(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     v->ph[2] = pf2;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
     v->s[2] = held;
     v->s[3] = dcb;
 }
@@ -409,6 +489,7 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
 {
     const int16_t *p = t->p;
     tsvf_t nf, flt;
+    nano_fx_t nfl;
     uint32_t i, pc = v->ph[0], cinc;
     int32_t hq = p[P_E1] * 258, tq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq = p[P_E3] * 258;
     int32_t kq, qq8, oct, frac, fac, gain, hg, bg, lg, amount, sample = v->s[2], nxt = v->s[3], s4 = v->s[4], s5 = v->s[5];
@@ -435,7 +516,7 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     lg = hq < 16384 ? 32768 - 2 * hq : 0;
     bg = 32768 - 2 * (hq > 16384 ? hq - 16384 : 16384 - hq);
     tsvf_coef_k(&nf, nano_cut(v->pitch16), kq);
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t raw, this_s, c, xin, v3, v1, v2, hp, o, s;
         uint32_t pn = pc + cinc;
@@ -471,12 +552,13 @@ static void nano_render_no(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         nano_lim_follow(&v->s[7], o);
         o = (clamp(o, -65535, 65535) * lg7) >> 15;                       /* the limiter: a resonant peak is brought down, not cut */
         o = clamp(o, -49152, 49152);
-        s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        s = nano_ftap(&flt, &nfl, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2);
         out[i] += voice_amp(s, m, i) << 1;
     }
     v->ph[0] = pc;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
     v->s[2] = sample;
     v->s[3] = nxt;
     v->s[4] = s4;
@@ -521,7 +603,8 @@ typedef union {
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
 #define NANO_PL_DL 1282
-ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS + NANO_PL_V * NANO_PL_DL * 2);
+#define NANO_FLST_B (NANO_SLOTS * 2 * 4)                    /* the second filter stage's two states a voice */
+ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS + NANO_FLST_B + NANO_PL_V * NANO_PL_DL * 2);
 
 static nano_su_t *nano_slot(track_t *t, voice_t *v)
 {
@@ -530,6 +613,15 @@ static nano_su_t *nano_slot(track_t *t, voice_t *v)
         return 0;
     i = (uint32_t)(v - t->v);
     return i < NANO_SLOTS ? (nano_su_t *)ENG_MEM(t - trk) + i : 0;
+}
+
+static int32_t *nano_flst(const track_t *t, const voice_t *v)
+{
+    static int32_t spare[2];
+    uint32_t i = (uint32_t)(v - t->v);
+    if (t < &trk[0] || t >= &trk[NPART] || i >= NANO_SLOTS)
+        return spare;
+    return (int32_t *)((uint8_t *)ENG_MEM(t - trk) + sizeof(nano_su_t) * NANO_SLOTS) + i * 2;
 }
 
 static const uint16_t NANO_CH_FADE[NANO_CH_V] = {18022, 15401, 16056, 16712, 17367};      /* 0.55 0.47 0.49 0.51 0.53, Q15 */
@@ -544,6 +636,7 @@ static __attribute__((noinline)) void nano_render_ch(track_t *t, voice_t *v, int
     int32_t harm[8], ratio_ok[NANO_CH_V] = {0, 0, 0, 0, 0}, amps[NANO_CH_V] = {0, 0, 0, 0, 0}, vq, ii, ifr, rot, nrot, i, j, r, ri, rf, wq, wi, wf;
     uint32_t ratios[NANO_CH_V] = {0, 0, 0, 0, 0}, inc0;
     tsvf_t flt;
+    nano_fx_t nfl;
     int32_t ic1 = v->s[0], ic2 = v->s[1];
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     if (!S || n > CTL)
@@ -672,13 +765,14 @@ static __attribute__((noinline)) void nano_render_ch(track_t *t, voice_t *v, int
         S->add[j] = tdd;
         S->awt[j] = twt;
     }
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4(acc[i] >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        int32_t s = nano_ftap(&flt, &nfl, nano_k4(acc[i] >> 1, p[P_E4]), &ic1, &ic2);
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* MODAL (Plaits' modal voice with continuous dust excitation): dust through a low-pass rings a bank of resonators at the
@@ -706,6 +800,7 @@ static __attribute__((noinline)) void nano_render_mo(track_t *t, voice_t *v, int
     nano_mo_t *S = U ? &U->mo : 0;
     int32_t tmp[CTL], acc[CTL], gn[NANO_MODES];
     tsvf_t md[NANO_MODES], ex, flt;
+    nano_fx_t nfl;
     int32_t hq = p[P_E1] * 258, bq0 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8), dq0 = p[P_E3] * 258;
     int32_t bq, dq, bb, dens, dust16, amp, si, sf, stiff, st, str3, qs, qm, ql, e, k, i, mi, ic1 = v->s[0], ic2 = v->s[1], lg7;
     uint32_t f0 = m->inc, f0c, exinc, rng;
@@ -793,17 +888,18 @@ static __attribute__((noinline)) void nano_render_mo(track_t *t, voice_t *v, int
         S->s1[mi] = s1;
         S->s2[mi] = s2;
     }
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     lg7 = nano_lim_gain(v->s[7]);
     for (i = 0; i < (int32_t)n; i++) {
         int32_t a = clamp(acc[i] * NANO_MO_HOT, -(1 << 18), 1 << 18), s;
         nano_lim_follow(&v->s[7], a);                                    /* Plaits' limiter: what rings hot is brought down to the same loudness */
         a = (clamp(a, -65535, 65535) * lg7) >> 15;
-        s = soft_knee(analog_tap(&flt, 0, nano_k4(clamp(soft_knee(a << 1, 16000), -32768, 32767), p[P_E4]), &ic1, &ic2, 0), 11000) << 1;
+        s = nano_ftap(&flt, &nfl, (nano_k4(clamp(soft_knee(a << 1, 16000), -32768, 32767), p[P_E4]) * 3) >> 2, &ic1, &ic2);
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* SWARM (Braids' SuperWave, in the Nano Freak test bed): seven oscillators, the centre in tune and six spread by DETUNE,
@@ -841,6 +937,7 @@ static __attribute__((noinline)) void nano_render_sw(track_t *t, voice_t *v, int
     int32_t wave = p[P_E1] >= 96 ? 3 : p[P_E1] >> 5, detune, vol, den, f, bp, lp, ic1 = v->s[0], ic2 = v->s[1];
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U)
         return;
     W = (nano_sw_t *)U;
@@ -858,7 +955,7 @@ static __attribute__((noinline)) void nano_render_sw(track_t *t, voice_t *v, int
     k = (uint32_t)((7 * 65536) / den);
     bp = W->bp;
     lp = W->lp;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t c, sm, notch, hp, o, sx, s;
         uint32_t j;
@@ -881,13 +978,14 @@ static __attribute__((noinline)) void nano_render_sw(track_t *t, voice_t *v, int
         hp = notch - lp;
         bp += (f * hp) >> 15;
         o = clamp(hp, -32767, 32767);
-        s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        s = nano_ftap(&flt, &nfl, nano_k4(o >> 1, p[P_E4]), &ic1, &ic2);
         out[i] += voice_amp(s, m, i) << 1;
     }
     W->bp = bp;
     W->lp = lp;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* HARMONIC (Braids' Harmo, in the Nano Freak test bed): twelve sine harmonics whose levels follow a moving spectral peak,
@@ -918,6 +1016,7 @@ static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     int st = stretch > 0;
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U)
         return;
     H = (nano_hm_t *)U;
@@ -968,7 +1067,7 @@ static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int
         amp[i] = H->amp[i];
     }
     c = chorus;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (j = 0; j < nn; j += 2) {
         int32_t a = 0, b = 0, r, k;
         phase += inc;
@@ -991,7 +1090,7 @@ static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int
         b = clamp(b, -32767, 32767);
         r = c ? (int32_t)(((int64_t)a * (131072 - c) + (int64_t)b * c) >> 17) : a;
         for (k = 0; k < 2; k++) {
-            int32_t x = k ? r : (r + prev) >> 1, s = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+            int32_t x = k ? r : (r + prev) >> 1, s = nano_ftap(&flt, &nfl, x >> 1, &ic1, &ic2);
             out[j + k] += voice_amp(s, m, j + k) << 1;
         }
         prev = r;
@@ -1003,6 +1102,7 @@ static __attribute__((noinline)) void nano_render_hm(track_t *t, voice_t *v, int
         H->amp[i] = amp[i];
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* Braids' AnalogOscillator (polyBLEP square, variable saw, saw, CSAW), shared by BASS and SAW: the increment is given
@@ -1191,13 +1291,14 @@ static __attribute__((noinline)) void nano_render_bs(track_t *t, voice_t *v, int
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     uint32_t i, j, size, inc = m->inc;
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U)
         return;
     B = (nano_bs_t *)U;
     p0 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
     p0 = p0 + (p0 >> 7);                                                 /* 0..32767 */
     p1 = p[P_E3] * 258;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i += size) {
         int32_t start = B->prev_p1, delta = p1 - B->prev_p1, incr, xx = 0;
         size = n - i < NANO_AO_MAX ? n - i : NANO_AO_MAX;
@@ -1210,13 +1311,14 @@ static __attribute__((noinline)) void nano_render_bs(track_t *t, voice_t *v, int
             q = start + (delta * xx >> 15);
             gain = (q < 16384 ? (16383 - q) : (q - 16384)) << 1;
             sample = (x[j] * (65535 - gain) + y[j] * gain) >> 16;
-            s = soft_knee(analog_tap(&flt, 0, nano_k4((sample * 3) >> 3, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+            s = nano_ftap(&flt, &nfl, nano_k4((sample * 3) >> 3, p[P_E4]), &ic1, &ic2);
             out[i + j] += voice_amp(s, m, i + j) << 1;
         }
         B->prev_p1 = p1;
     }
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* PLUCK (Braids' KarplusStr, in the Nano Freak test bed): a string made of a delay line that is averaged at random, struck by
@@ -1233,7 +1335,7 @@ static int16_t *nano_dl(track_t *t, voice_t *v)
     uint32_t i = (uint32_t)(v - t->v);
     if (t < &trk[0] || t >= &trk[NPART] || i >= NANO_PL_V)
         return 0;
-    return (int16_t *)((uint8_t *)ENG_MEM(t - trk) + sizeof(nano_su_t) * NANO_SLOTS) + i * NANO_PL_DL;
+    return (int16_t *)((uint8_t *)ENG_MEM(t - trk) + sizeof(nano_su_t) * NANO_SLOTS + NANO_FLST_B) + i * NANO_PL_DL;
 }
 
 static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -1246,6 +1348,7 @@ static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int
     int32_t p0 = p[P_E3] * 258, p1, bow = p[P_E1] * 258, loss, prev, ic1 = v->s[0], ic2 = v->s[1];
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U || !dl)
         return;
     P = (nano_pl_t *)U;
@@ -1275,7 +1378,7 @@ static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int
     loss = p0 < 16384 ? (loss * (16384 - p0)) >> 14 : 0;
     prev = P->prev;
     rng = P->rng;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < nn; i += 2) {
         int32_t sample = 0, k;
         if (P->init_ptr) {
@@ -1318,7 +1421,7 @@ static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int
         }
         sample = clamp(sample, -32767, 32767);
         for (k = 0; k < 2; k++) {
-            int32_t x = k ? sample : (prev + sample) >> 1, s = soft_knee(analog_tap(&flt, 0, nano_k4(x >> 1, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+            int32_t x = k ? sample : (prev + sample) >> 1, s = nano_ftap(&flt, &nfl, nano_k4(x >> 1, p[P_E4]), &ic1, &ic2);
             out[i + k] += voice_amp(s, m, i + k) << 1;
         }
         prev = sample;
@@ -1327,6 +1430,7 @@ static __attribute__((noinline)) void nano_render_pl(track_t *t, voice_t *v, int
     P->rng = rng;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* SAW (Braids' SAW_SYNC / SAW_COMB / CSAW, in the Nano Freak test bed): E1 WAVE (sync, comb, CS80), E2 and E3 as below.
@@ -1353,13 +1457,14 @@ static __attribute__((noinline)) void nano_render_sa(track_t *t, voice_t *v, int
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     uint32_t i, j, size, inc = m->inc;
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U)
         return;
     S = (nano_sa_t *)U;
     p0 = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
     p0 = p0 + (p0 >> 7);                                                 /* 0..32767 */
     p1 = p[P_E3] * 258;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i += size) {
         size = n - i < NANO_AO_MAX ? n - i : NANO_AO_MAX;
         if (model == 0) {
@@ -1419,12 +1524,13 @@ static __attribute__((noinline)) void nano_render_sa(track_t *t, voice_t *v, int
                 x[j] = (int16_t)clamp(((x[j] + shift) * 13) >> 3, -32767, 32767);
         }
         for (j = 0; j < size; j++) {
-            int32_t s = soft_knee(analog_tap(&flt, 0, nano_k4((x[j] * 3) >> 3, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+            int32_t s = nano_ftap(&flt, &nfl, nano_k4((x[j] * 3) >> 3, p[P_E4]), &ic1, &ic2);
             out[i + j] += voice_amp(s, m, i + j) << 1;
         }
     }
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* WAVETABLE (the Nano Freak test bed's player, after Braids' RenderWavetables): 16 tables of 16 single-cycle waves of 129 int8,
@@ -1454,6 +1560,7 @@ static __attribute__((noinline)) void nano_render_wt(track_t *t, voice_t *v, int
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     uint32_t i, inc = (m->inc > 1932735283u ? 1932735283u : m->inc) >> 1, inc2, ph, ph2, d;
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U)
         return;
     W = (nano_wt_t *)U;
@@ -1474,7 +1581,7 @@ static __attribute__((noinline)) void nano_render_wt(track_t *t, voice_t *v, int
     ph2 = W->phase2;
     base0 = NANO_WT + tab * 16 * 129;
     base1 = NANO_WT + ((tab + 1) & 15) * 16 * 129;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t ip, fr, acc = 0, k, x;
         const int8_t *a0, *a1, *b0, *b1;
@@ -1515,7 +1622,7 @@ static __attribute__((noinline)) void nano_render_wt(track_t *t, voice_t *v, int
             acc += sa;
         }
         x = acc >> 1;
-        x = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+        x = nano_ftap(&flt, &nfl, x >> 1, &ic1, &ic2);
         out[i] += voice_amp(x, m, i) << 1;
     }
     W->phase = ph;
@@ -1523,6 +1630,7 @@ static __attribute__((noinline)) void nano_render_wt(track_t *t, voice_t *v, int
     W->pos = target;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* V.ANALOG (Plaits' virtual analog, variant 2, in the Nano Freak test bed): a hard-synced square (the "double varishape" out
@@ -1562,6 +1670,7 @@ static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int
     int32_t cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (v->pitch16 - 60 * 16) >> 4);
     uint32_t i, inc = m->inc > 0x40000000u ? 0x40000000u : m->inc, mf_t, sf_t, af_t, sqp, ap, ap16, su, sd, mf, sf, af, sgn;
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!U)
         return;
     V = (nano_va_t *)U;
@@ -1641,7 +1750,7 @@ static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int
     su = 0xFFFFFFFFu / ap16;
     sd = 0xFFFFFFFFu / (65536u - ap16);
     sw = 0;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t this_s = V->nxt, this_a = V->anxt, sqo, sawo, o, nsaw, tri_v, notch_amt, s;
         uint32_t rt = 0, wrapped, reset = 0, tdr = 0;
@@ -1738,7 +1847,7 @@ static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int
         V->appw = ap;
         sawo = (((2 * this_a - 65536) >> 2) * 54613) >> 14;              /* / 1.2 */
         o = (((sawo >> 1) * wgv) >> 15) + (((sqo >> 1) * sgv) >> 15);
-        s = soft_knee(analog_tap(&flt, 0, nano_k4(o >> 2, p[P_E4]), &ic1, &ic2, 0), 16000) << 1;
+        s = nano_ftap(&flt, &nfl, nano_k4(o >> 2, p[P_E4]), &ic1, &ic2);
         out[i] += voice_amp(s, m, i) << 1;
     }
     (void)sw;
@@ -1750,6 +1859,7 @@ static __attribute__((noinline)) void nano_render_va(track_t *t, voice_t *v, int
     V->wg = wgv;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* A precise state variable filter for resonators, as Rings has them (Rings' own tan approximation, worked out per block in 64 bit).
@@ -1864,6 +1974,7 @@ static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     int32_t cut = (p[P_E5] << 8) + m->cutoff;
     uint32_t inc = m->inc > 0x7FFFFFFFu ? 0x7FFFFFFFu : m->inc, minc, ratio6, cph, mph, ix, fx;
     tsvf_t flt;
+    nano_fx_t nfl;
     hq = clamp((p[P_E2] << 8) + m->shape - (64 << 8), 0, 127 << 8);
     hq = hq + (hq >> 7);
     bq = p[P_E3] * 258;
@@ -1908,7 +2019,7 @@ static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     prev = F->prev;
     gain = F->gain;
     amount = F->amount;
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
         int32_t e = target - amount, mod, car, g_t, s, k, pp;
         uint32_t minc2;
@@ -1926,7 +2037,7 @@ static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         gain += ((g_t - gain) * (k > 32768 ? 32768 : k)) >> 15;
         s = (car * gain) >> 15;
         s = (s * 22938) >> 15;                                                           /* the model gain 0.7 */
-        s = soft_knee(analog_tap(&flt, 0, s >> 1, &ic1, &ic2, 0), 16000) << 1;
+        s = nano_ftap(&flt, &nfl, s >> 1, &ic1, &ic2);
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     F->cph = cph;
@@ -1936,6 +2047,7 @@ static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     F->amount = amount;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 /* RINGS' STRING, SYMPA and QUANT models (rings/dsp/string.cc and plucker.h, as in the Nano Freak test bed): a Karplus-Strong string
@@ -2190,6 +2302,7 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     int32_t hq, bq, dq, pq, disp = 0, ic1 = v->s[0], ic2 = v->s[1], cut = (p[P_E5] << 8) + m->cutoff, i, init = S->strike, gx = model == 2 ? 11 : 8;
     uint32_t f0 = m->inc > 0x7D70A3D7u ? 0x7D70A3D7u : m->inc;
     tsvf_t flt;
+    nano_fx_t nfl;
     if (!sl)
         return;
     cl = sl + NANO_RS_STR;
@@ -2275,14 +2388,15 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
             symp[i] = ((ob[i] - ab[i]) * 3277) >> 15;
         nano_rs_string(R, &R->s[1], l2, al, (uint32_t)R->s[1].freq, b2, d2, p2, 0, init, symp, ob, ab, n);
     }
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
         int32_t x = clamp(((ob[i] - ab[i]) * gx) >> 1, -24000, 24000);   /* Rings' gain (1.4 STRING, 1 the others) x 4 (Q13 to Q15) */
-        x = soft_knee(analog_tap(&flt, 0, x >> 1, &ic1, &ic2, 0), 16000) << 1;
+        x = nano_ftap(&flt, &nfl, x >> 1, &ic1, &ic2);
         out[i] += voice_amp(x, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -2294,6 +2408,7 @@ static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int
     int32_t cut = (p[P_E5] << 8) + m->cutoff;
     uint32_t f0 = m->inc;
     tsvf_t flt;
+    nano_fx_t nfl;
     nano_hs_t ex, md[NANO_MODES];
     if (!U || n > CTL || (uint32_t)(v - t->v) >= NANO_MODAL_POLY)
         return;
@@ -2391,13 +2506,14 @@ static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int
             acc[i] += (gn[mi] * nano_hs_step(c, S->st[mi], tmp[i], &lp)) >> 15;
         }
     }
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t s = soft_knee(analog_tap(&flt, 0, clamp(soft_knee(acc[i], 16000), -32768, 32767) >> 1, &ic1, &ic2, 0), 16000) << 1;
+        int32_t s = nano_ftap(&flt, &nfl, clamp(soft_knee(acc[i], 16000), -32768, 32767) >> 1, &ic1, &ic2);
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
 }
 
 static void nano_note_on(track_t *t, voice_t *v)
@@ -2405,6 +2521,7 @@ static void nano_note_on(track_t *t, voice_t *v)
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
     v->ph[2] = v->ph[0] >> 1;                         /* the sub: an octave down, in step with it */
     v->s[0] = v->s[1] = 0;                            /* filter */
+    nano_flst(t, v)[0] = nano_flst(t, v)[1] = 0;      /* and its second stage */
     v->s[2] = 0;                                      /* no restart pending */
     v->s[3] = t->p[P_E0] == 2 ? -1 : 0;              /* FM: no DC yet; WAVESHAPER: -1, start from this block's own values */
     if (t->p[P_E0] == 2)
@@ -2582,6 +2699,7 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         return;
     }
     tsvf_t flt;
+    nano_fx_t nfl;
     uint32_t i, ph = v->ph[0], ps = v->ph[1], pb = v->ph[2], inc = m->inc, incs = inc, k = (uint32_t)p[P_E4];
     int32_t morph = clamp((p[P_E1] << 8) + m->shape - (64 << 8), 0, 127 << 8), mq, sym = p[P_E2] * 258;
     int32_t sub = p[P_E3] * 258, d, ic1 = v->s[0], ic2 = v->s[1], pend = v->s[2];
@@ -2600,7 +2718,7 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         uint64_t x = ((uint64_t)inc * r8) >> 8;
         incs = x > 0x73333333u ? 0x73333333u : (uint32_t)x;
     }
-    tsvf_coef(&flt, cut, p[P_E6]);
+    nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < n; i++) {
         int32_t s, sn;
         uint32_t pn = ph + inc;
@@ -2629,7 +2747,7 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
         }
         sn = sine_i(pb);
         s = (s + mulq15(sn, sub)) >> 1;                           /* (wave + sub) / 2 */
-        s = soft_knee(analog_tap(&flt, 0, (s * 9) >> 4, &ic1, &ic2, 0), 16000) << 1;
+        s = nano_ftap(&flt, &nfl, (s * 9) >> 4, &ic1, &ic2);
         ph = pn;
         pb += inc >> 1;
         out[i] += voice_amp(s, m, i) << 1;
@@ -2639,6 +2757,7 @@ static __attribute__((noinline)) void nano_render(track_t *t, voice_t *v, int32_
     v->ph[2] = pb;
     v->s[0] = ic1;
     v->s[1] = ic2;
+    nano_fend(&nfl);
     v->s[2] = pend;
 }
 
@@ -2739,6 +2858,6 @@ static const engine_t ENG_NANO = {
     .note_on = nano_note_on,
     .render = nano_render,
     .knob = {P_E1, P_E2, P_E3, P_E4},
-    .mem = sizeof(nano_su_t) * NANO_SLOTS + NANO_PL_V * NANO_PL_DL * 2,
+    .mem = sizeof(nano_su_t) * NANO_SLOTS + NANO_FLST_B + NANO_PL_V * NANO_PL_DL * 2,
     .keep = 0x03,                /* the filter */
 };
