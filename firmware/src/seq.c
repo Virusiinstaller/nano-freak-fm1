@@ -179,26 +179,15 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
 /* ------------------------------------------------------------- arp --- */
 static void arp_add(track_t *t, uint32_t note)
 {
-    uint32_t i, k = in_key - 1u, fresh = t->arp_phys == 0u;
+    uint32_t i, k = in_key - 1u;
     if (t->p[P_AHOLD] && t->arp_phys == 0u)
         t->nheld = 0;                               /* new chord replaces the latched one */
     t->arp_phys++;                                  /* every key-down: arp_remove counts every key-up */
     for (i = 0; i < t->nheld; i++)
         if (t->held[i] == note)
             return;                                 /* repeated note-on: not a new note */
-    if (NANO_T(t)) {                                /* AS PLAYED remembers the keys in press order (up to LENGTH); PATTERN's dice */
-        uint32_t len = nano_alen(t);
-        if (fresh)
-            t->arp_np = 0;
-        if (t->arp_np >= len) {
-            for (i = 0; i + 1u < t->arp_np; i++)
-                t->arp_played[i] = t->arp_played[i + 1u];
-            t->arp_np = (uint8_t)(len - 1u);
-        }
-        t->arp_played[t->arp_np++] = (uint8_t)note;
-        for (i = 0; i < 8u; i++)
-            t->arp_patt[i] = (uint16_t)(nv_rand() + 32768);
-    }
+    if (NANO_T(t))                                  /* PATTERN's dice: new at every key press (one seed, nv_patt) */
+        t->arp_seed = ((uint32_t)(nv_rand() + 32768) << 16 | (uint32_t)(nv_rand() + 32768)) | 1u;
     if (t->nheld < 16u) {
         /* #191: a key the track's scale keyboard maps (not the DRUM grid, not an engine's own map) is kept as that
          * key, so TRN, ROOT, SCALE and QNT reach the notes the arp holds (arp_list); the octave stays the one it was
@@ -337,7 +326,7 @@ static __attribute__((noinline)) uint32_t arp_pick(track_t *t, uint32_t *list, u
             k = i % (2u * (len - 1u));
             return (k & 1u) ? 1u + k / 2u : 0u;
         case AM_PTRN:                               /* eight steps of dice: a rest or a place */
-            k = t->arp_patt[i & 7u];
+            k = nv_patt(t, i & 7u);
             return (k & 7u) == 0u ? ARP_REST : (k >> 3) % len;
         default:                                    /* AM_ASPL: the list is the keys as played */
             return i % len;
@@ -447,10 +436,11 @@ static uint32_t arp_list(const track_t *t, uint32_t *list, uint32_t *cnt)
         if (j == n)
             list[n++] = x;
     }
-    if (NANO_T(t) && t->p[P_AMODE] == AM_ASPL && t->arp_np) {   /* AS PLAYED: the keys in the order they were pressed */
-        n = 0;
-        for (i = 0; i < t->arp_np && i < 16u; i++)
-            list[n++] = t->arp_played[i];
+    if (NANO_T(t) && t->p[P_AMODE] == AM_ASPL && n > nano_alen(t)) {   /* AS PLAYED: the keys in press order (held[]), the last LENGTH */
+        uint32_t d = n - nano_alen(t);
+        for (i = 0; i + d < n; i++)
+            list[i] = list[i + d];
+        n -= d;
     }
     *cnt = n;
     if (!t->p[P_AORDER] && t->p[P_AMODE] != AM_ORD && !(NANO_T(t) && t->p[P_AMODE] == AM_ASPL))   /* (ORD: as pressed, held[] keeps that order) */

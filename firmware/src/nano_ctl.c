@@ -26,24 +26,19 @@ static const uint8_t NANO_RC[8][4] = {{0, 4, 7, 12}, {0, 3, 7, 12}, {0, 4, 7, 10
                                        {0, 4, 7, 11}, {0, 5, 7, 12}, {0, 3, 6, 9}, {0, 7, 12, 19}};
 
 /* ------------------------------------------------------ Impress / Chance --- */
-static int16_t nv_gd[NSTEP], nv_vd[NSTEP];              /* the status of each step: gate and velocity, Q15 */
-static int8_t nv_od[NSTEP];                             /* octave: -1, 0, +1 */
-static uint32_t nv_rnd = 0x9E3779B9u;
-static int32_t nv_rand(void)                            /* -32768 .. 32767 */
-{
-    nv_rnd ^= nv_rnd << 13;
-    nv_rnd ^= nv_rnd >> 17;
-    nv_rnd ^= nv_rnd << 5;
-    return (int32_t)(nv_rnd >> 16) - 32768;
-}
+/* the status of each step in a byte: the gate in the top six bits (Q5, -32..31) and the octave in the low two (1 = +1, 2 = -1);
+ * the velocity's is the gate's of another step (a fixed shuffle): 64 bytes in all, the RAM is tight */
+static int8_t nv_s[NSTEP];
+static int32_t nv_rand(void) { return (int32_t)(rng() >> 16) - 32768; }   /* -32768 .. 32767 */
 static void nv_roll(uint32_t chance)
 {
     uint32_t i;
     for (i = 0; i < NSTEP; i++) {
-        nv_gd[i] = (int16_t)clamp(nv_gd[i] + nv_rand() * (int32_t)chance / 127, -32767, 32767);
-        nv_vd[i] = (int16_t)clamp(nv_vd[i] + nv_rand() * (int32_t)chance / 127, -32767, 32767);
+        int32_t g = (nv_s[i] >> 2) + (((nv_rand() * (int32_t)chance / 127) + (nv_rand() < 0 ? -512 : 512)) >> 10);   /* (a random walk) */
+        int32_t o = nv_s[i] & 3;
         if (nv_rand() + 32768 < (int32_t)chance * 516)
-            nv_od[i] = (int8_t)(nv_rand() + 32768 < 7864 ? (nv_rand() < 0 ? -1 : 1) : 0);
+            o = nv_rand() + 32768 < 7864 ? (nv_rand() < 0 ? 2 : 1) : 0;
+        nv_s[i] = (int8_t)(clamp(g, -31, 31) * 4 + o);
     }
 }
 static int32_t nv_imp(const track_t *t) { return NANO_T(t) ? (int32_t)(t->p[P_LN3] & 127) : 0; }
@@ -51,17 +46,32 @@ static int32_t nv_imp(const track_t *t) { return NANO_T(t) ? (int32_t)(t->p[P_LN
 static int32_t nv_gate(const track_t *t, uint32_t i, int32_t base)
 {
     int32_t imp = nv_imp(t);
-    return imp ? clamp(base + ((imp * nv_gd[i & 63u]) >> 15), 0, 128) : base;
+    return imp ? clamp(base + ((imp * (nv_s[i & 63u] >> 2)) >> 5), 0, 128) : base;
 }
 static uint32_t nv_vel(const track_t *t, uint32_t i, uint32_t vel)
 {
     int32_t imp = nv_imp(t), q;
     if (!imp)
         return vel;
-    q = (imp * nv_vd[i & 63u]) >> 15;
+    q = (imp * (nv_s[(i * 7u + 13u) & 63u] >> 2)) >> 5;
     return (uint32_t)clamp((int32_t)vel + (((int32_t)vel * q * 155) >> 16), 1, 127);
 }
-static int32_t nv_oct(const track_t *t, uint32_t i) { return nv_imp(t) > 76 ? 12 * nv_od[i & 63u] : 0; }
+static int32_t nv_oct(const track_t *t, uint32_t i)
+{
+    uint32_t o = (uint32_t)nv_s[i & 63u] & 3u;
+    return nv_imp(t) > 76 ? (o == 1u ? 12 : o == 2u ? -12 : 0) : 0;
+}
+/* PATTERN's dice for step i (0..7): the key press's seed run through a xorshift */
+static uint32_t nv_patt(const track_t *t, uint32_t i)
+{
+    uint32_t x = t->arp_seed ? t->arp_seed : 1u, k;
+    for (k = 0; k <= i; k++) {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+    }
+    return x >> 16;
+}
 /* once a block (voice.c track_render) for a NANO part: a new CHANCE rolls the dice */
 static void nano_poll(track_t *t)
 {
@@ -209,7 +219,7 @@ static int32_t nano_ctl_get(const track_t *t, uint32_t k)
 
 /* the main loop: a NANO control changed (motion_capture): its CC(s) go out, in the audio ISR's hands (midi_out_event has one
  * producer: nano_cc_flush) */
-#define NCO_Q 32u
+#define NCO_Q 4u
 static volatile uint32_t nco_q[NCO_Q];
 static volatile uint8_t nco_w, nco_r;
 static void nano_cc_out(const track_t *t, uint32_t id)
