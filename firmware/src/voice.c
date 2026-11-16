@@ -12,11 +12,14 @@
  * declicks it); one of the part's own is restarted in place, as before. Extra UNISON
  * voices only start when there is room. */
 static uint32_t vage;                                   /* voice ages: one clock for every part */
-static int32_t lfo_wave(track_t *t, uint32_t ph)
+static int32_t lfo_wave1(track_t *t, uint32_t ph, int32_t w)
 {
-    switch (t->p[P_LWAVE]) {
+    const int nano = ENGINES[t->engine] == &ENG_NANO;
+    switch (w) {
+    case 5:                                             /* GLD (NANO): a random glide, the S&H's values joined by lines */
+        return (int32_t)t->lfo_prev + (((mod_sh(t) - (int32_t)t->lfo_prev) * (int32_t)(ph >> 17)) >> 15);
     case 1:
-        return osc_tri(ph);
+        return osc_tri(nano ? ph + 0x40000000u : ph);   /* (NANO: from 0, rising, as the test bed's) */
     case 2:
         return (int32_t)(ph >> 16) - 32768;
     case 3:
@@ -26,6 +29,14 @@ static int32_t lfo_wave(track_t *t, uint32_t ph)
     default:
         return osc_sine(ph);
     }
+}
+
+static int32_t lfo_wave(track_t *t, uint32_t ph)
+{
+    int32_t w = t->p[P_LWAVE] > 5 ? 5 : t->p[P_LWAVE], y = lfo_wave1(t, ph, w);
+    if (ENGINES[t->engine] == &ENG_NANO && t->p[P_FM2_ATK] > 0)     /* NANO's MORPH (P_FM2_ATK): into the next shape in the list */
+        y += (lfo_wave1(t, ph, w == 5 ? 0 : w + 1) - y) * (t->p[P_FM2_ATK] & 127) / 127;
+    return y;
 }
 
 /* the S&H value of a new LFO cycle. Parts 1..3 draw it from the shared generator (rng); part 4 has its
@@ -48,6 +59,10 @@ static uint32_t lfo_rand(track_t *t)
  * advances 2^32 x CTL / cycle a block (two 32-bit divides; the 1-bit truncation of 0xFFFFFFFF drifts by less than a
  * millionth of a cycle a cycle). OFF: RATE's table, as before */
 static uint32_t div_samples(uint32_t div);         /* (fx.c) */
+static uint32_t lfo_rate_inc(const track_t *t)         /* RATE's step: the table, NANO's own law (the test bed's 0.005 Hz * 2^(14.3 n)) */
+{
+    return ENGINES[t->engine] == &ENG_NANO ? NANO_LFO_INC[t->p[P_LRATE] & 127] : LFO_INC[t->p[P_LRATE] & 127];
+}
 static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t)   /* (not inlined: its divides stay out of
                                                                            * the audio ISR's loop over the tracks) */
 {
@@ -66,7 +81,7 @@ static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t)   /* (n
 static void track_lfo_adv(track_t *t)
 {
     uint32_t old = t->lfo_ph;
-    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t) : LFO_INC[t->p[P_LRATE] & 127];
+    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t) : lfo_rate_inc(t);
     t->lfo_wrap = t->lfo_ph < old;
 }
 static void track_lfo_end(track_t *t)
@@ -93,7 +108,7 @@ static void track_lfo_tick(track_t *t)                  /* (both at once: the te
 static void track_lfo_tick(track_t *t)                  /* (one core: the whole block in track_render, as up to 1.6) */
 {
     uint32_t old = t->lfo_ph;
-    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t) : LFO_INC[t->p[P_LRATE] & 127];
+    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t) : lfo_rate_inc(t);
     if (t->lfo_ph < old) {
         t->lfo_prev = (int16_t)mod_sh(t);               /* mod.c SLEW: it glides on from there */
         t->lfo_rnd = lfo_rand(t);
@@ -430,6 +445,7 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         vel = 127;                                      /* VELOCITY SENS. OFF (2.5.5): every note at full loudness; the
                                                          * keys still send their velocity to MIDI OUT (seq.c key_on) */
 #endif
+    t->cyc_trig = 1;                                    /* NANO: the cycling envelope's trigger */
     vel = mod_note(t, note, vel);                       /* the matrix's VEL / KEY / RAND (1.5.6: VEL as a destination) */
     for (i = 0; i < NVOICE; i++)
         any |= t->v[i].gate;
@@ -607,6 +623,72 @@ static __attribute__((noinline)) void esync_coef(track_t *t)   /* (not inlined: 
     }
 }
 
+/* NANO's cycling envelope (the test bed's mod_run): once a block per part. MODE (P_FM1_LEVEL) 0 ENV (a note starts it,
+ * the gate holds it at HOLD's level), 1 RUN (free: rise, hold, fall, again), 2 LOOP (as RUN, a note restarts it); RISE FALL
+ * HOLD AMOUNT are P_FM1_ATK DEC SUS REL. HOLD is a level in ENV mode and a time in the others. The source CYC (mod.c) is the
+ * level times AMOUNT */
+static void cyc_tick(track_t *t)
+{
+    const int16_t *p = t->p;
+    uint32_t mode = p[P_FM1_LEVEL] > 2 ? 2u : p[P_FM1_LEVEL] < 0 ? 0u : (uint32_t)p[P_FM1_LEVEL], i, gate = 0;
+    int32_t rise = (int32_t)NANO_CYC_STEP[p[P_FM1_ATK] & 127], fall = (int32_t)NANO_CYC_STEP[p[P_FM1_DEC] & 127];
+    int32_t hq = (int32_t)(p[P_FM1_SUS] & 127) * 132103;
+    for (i = 0; i < NVOICE; i++)
+        gate |= t->v[i].active && (t->v[i].stage == 1 || t->v[i].stage == 2);
+    if (t->cyc_trig) {
+        t->cyc_trig = 0;
+        if (mode == 2u) {
+            t->cyc_lv = 0;
+            t->cyc_st = 1;
+        } else if (mode == 0u)
+            t->cyc_st = 1;
+    }
+    if (mode && !t->cyc_st)
+        t->cyc_st = 1;
+    switch (t->cyc_st) {
+    case 1:
+        if (mode == 0u && !gate) {
+            t->cyc_st = 5;
+            break;
+        }
+        t->cyc_lv += rise;
+        if (t->cyc_lv >= (1 << 24)) {
+            t->cyc_lv = 1 << 24;
+            t->cyc_hold = 0;
+            t->cyc_st = mode == 0u ? 2 : 3;
+        }
+        break;
+    case 2:
+        t->cyc_lv -= fall;
+        if (!gate)
+            t->cyc_st = 5;
+        else if (t->cyc_lv <= hq) {
+            t->cyc_lv = hq;
+            t->cyc_st = 4;
+        }
+        break;
+    case 3:
+        if (++t->cyc_hold >= NANO_CYC_HOLD[p[P_FM1_SUS] & 127])
+            t->cyc_st = 6;
+        break;
+    case 4:
+        t->cyc_lv = hq;
+        if (!gate)
+            t->cyc_st = 5;
+        break;
+    case 5:
+    case 6:
+        t->cyc_lv -= fall;
+        if (t->cyc_lv <= 0) {
+            t->cyc_lv = 0;
+            t->cyc_st = t->cyc_st == 6 && mode ? 1 : 0;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 /* one control tick (CTL samples) of the amplitude envelope; returns Q15 */
 static int32_t env_tick(track_t *t, voice_t *v)
 {
@@ -755,6 +837,8 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
     track_lfo_tick(t);
 #endif
     esync_coef(t);                                      /* this block's envelope steps for env_tick (ENV SYNC) */
+    if (e == &ENG_NANO)
+        cyc_tick(t);
 #if FELUCCA_FMINI_ONLY
     glide_blk[(uint32_t)(t - trk) % NTRK]++;
 #endif

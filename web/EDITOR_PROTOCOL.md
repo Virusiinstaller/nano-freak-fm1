@@ -114,7 +114,7 @@ P_COUNT 69): slot k (1..4) is `SRCk`, `DSTk`, `AMTk` at ids 49 + 3 (k − 1) .. 
 
 | id | label | values |
 | --- | --- | --- |
-| 49, 52, 55, 58 | SRC1..SRC4 | enum: 0 OFF, 1 LFO, 2 ENV, 3 VEL, 4 KEY, 5 RAND, 6 MODW (CC1), 7 AT (channel aftertouch), 8 EXPR (CC11), 9 S&H (a random value held for one cycle of the track LFO), 10 SLEW (S&H gliding from the cycle before's value) |
+| 49, 52, 55, 58 | SRC1..SRC4 | enum: 0 OFF, 1 LFO, 2 ENV, 3 VEL, 4 KEY, 5 RAND, 6 MODW (CC1), 7 AT (channel aftertouch), 8 EXPR (CC11), 9 S&H (a random value held for one cycle of the track LFO), 10 SLEW (S&H gliding from the cycle before's value), 11 CYC (NANO's cycling envelope times its AMOUNT, 0..1; RISE FALL HOLD AMOUNT MODE are the FM operator 1 parameters ATK DEC SUS REL LVL, MODE 0 ENV 1 RUN 2 LOOP) |
 | 50, 53, 56, 59 | DST1..DST4 | enum (23 names; 21 before 1.5.6): 0 OFF, 1 PITCH, 2 CUT, 3 SHP, 4 AMP (per voice); 5 PAN, 6 DIST, 7 CHO, 8 DLY, 9 REV, 10 RATE (LFO rate), 11 VIB (LFO pitch depth), 12..19 E1..E8 = `P_E0..P_E7`, 20 DEPTH (the track LFO's depth: a gain on LFO DEST and the matrix's LFO source) (per block); 1.5.6 (#213), at the note: 21 VEL (the note-on velocity, AMT 64 = +-127, 1..127), 22 TIME (a sequencer step late, 0..30 ms at AMT 64, at most 7/16 of the step). Firmware before 1.5.6 clamps 21 / 22 to 20 (DEPTH) when it loads them |
 | 51, 54, 57, 60 | AMT1..AMT4 | −64..63 (fmt BIPCT) |
 

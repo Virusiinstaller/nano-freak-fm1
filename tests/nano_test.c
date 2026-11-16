@@ -1506,6 +1506,124 @@ int main(void)
         check("FILTER ENV FLT -64 closes it by 5 octaves (the 7th harmonic under 40 % of the open one)", rn < 0.4 * rb);
     }
 
+    /* 4w. THE CYCLING ENVELOPE (the matrix source CYC): RISE / FALL n^2.2 * 10 s, RUN loops, ENV follows the gate and holds HOLD's level */
+    {
+        static int32_t b[CTL];
+        uint32_t i, up = 0, first = 0, t1 = 0, t2 = 0, nblk = 3 * FS / CTL;
+        int32_t lv, top = 0;
+        double want_rise = pow(20 / 127.0, 2.2) * 10.0, want_per = 2 * want_rise + pow(10 / 127.0, 2.2) * 10.0, got_rise, got_per, held, rel;
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_FM1_ATK] = 20;
+        trk[0].p[P_FM1_DEC] = 20;
+        trk[0].p[P_FM1_SUS] = 10;
+        trk[0].p[P_FM1_REL] = 127;
+        trk[0].p[P_FM1_LEVEL] = 1;
+        for (i = 0; i < nblk; i++) {
+            track_render(&trk[0], b, CTL);
+            lv = mod_tsrc(&trk[0], MS_CYC, 0);
+            if (lv > top)
+                top = lv;
+            if (!first && lv >= 32767 * 99 / 100)
+                first = i;
+            if (up == 0 && lv > 16384) {
+                up = 1;
+                if (!t1)
+                    t1 = i;
+                else if (!t2)
+                    t2 = i;
+            } else if (lv < 16384)
+                up = 0;
+        }
+        got_rise = (double)first * CTL / FS;
+        got_per = (double)(t2 - t1) * CTL / FS;
+        printf("   CYC RUN: peak %d, rise %.3f s (want %.3f), period %.3f s (want %.3f)\n", (int)top, got_rise, want_rise, got_per, want_per);
+        check("CYC RUN rises to AMOUNT in the test bed's RISE time (within 10 %)", top > 32000 && fabs(got_rise - want_rise) < 0.1 * want_rise + 0.003);
+        check("CYC RUN loops with period RISE + HOLD + FALL (within 10 %)", t2 && fabs(got_per - want_per) < 0.1 * want_per + 0.003);
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_FM1_ATK] = 10;
+        trk[0].p[P_FM1_DEC] = 10;
+        trk[0].p[P_FM1_SUS] = 64;
+        trk[0].p[P_FM1_REL] = 127;
+        trk[0].p[P_FM1_LEVEL] = 0;
+        for (i = 0; i < 200; i++)
+            track_render(&trk[0], b, CTL);
+        lv = mod_tsrc(&trk[0], MS_CYC, 0);
+        check("CYC ENV is idle (0) with no note", lv == 0);
+        trk_note_on(&trk[0], 57, 100);
+        for (i = 0; i < 2000; i++)
+            track_render(&trk[0], b, CTL);
+        held = mod_tsrc(&trk[0], MS_CYC, 0) / 32767.0;
+        trk_note_off(&trk[0], 57);
+        for (i = 0; i < 2000; i++)
+            track_render(&trk[0], b, CTL);
+        rel = mod_tsrc(&trk[0], MS_CYC, 0) / 32767.0;
+        printf("   CYC ENV: held %.3f (want %.3f), after the note %.3f\n", held, 64 / 127.0, rel);
+        check("CYC ENV settles at HOLD's level while the note is held, and falls to 0 after it", fabs(held - 64 / 127.0) < 0.02 && rel < 0.01);
+    }
+
+    /* 4x. THE LFO: RATE 0.005 Hz * 2^(14.3 n), TRI from 0, GLD (a random glide), MORPH into the next shape */
+    {
+#if FELUCCA_CPU2
+#define LFO_END(t) track_lfo_end(t)
+#else
+#define LFO_END(t) ((void)0)
+#endif
+        static int32_t b[CTL];
+        uint32_t i, last = 0, nc = 0, first = 0, rate = 90;
+        int32_t prev = 0, big = 0, v0, v1;
+        double want = 1.0 / (0.005 * pow(2.0, rate / 127.0 * 14.3)), per;
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_LRATE] = rate;
+        trk[0].p[P_LWAVE] = 0;
+        trk[0].p[P_LFADE] = 0;
+        for (i = 0; i < 3 * FS / CTL; i++) {
+            track_render(&trk[0], b, CTL);
+            LFO_END(&trk[0]);
+            if (prev < 0 && trk[0].lfo_val >= 0 && i > 4) {
+                if (!first)
+                    first = i;
+                last = i;
+                nc++;
+            }
+            prev = trk[0].lfo_val;
+        }
+        per = nc > 1 ? (double)(last - first) * CTL / FS / (nc - 1) : 0;
+        printf("   LFO RATE %u: period %.4f s (want %.4f)\n", rate, per, want);
+        check("LFO RATE follows the test bed's 0.005 Hz * 2^(14.3 n) (the period within 3 %)", fabs(per - want) < 0.03 * want);
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_LRATE] = 0;
+        trk[0].p[P_LWAVE] = 1;
+        trk[0].lfo_ph = 0;
+        track_render(&trk[0], b, CTL);
+            LFO_END(&trk[0]);
+        v0 = trk[0].lfo_val;
+        trk[0].p[P_LWAVE] = 0;
+        trk[0].p[P_FM2_ATK] = 127;                     /* SIN morphed all the way into TRI */
+        trk[0].lfo_ph = 0x30000000u;
+        track_render(&trk[0], b, CTL);
+            LFO_END(&trk[0]);
+        v1 = trk[0].lfo_val;
+        trk[0].p[P_FM2_ATK] = 0;
+        trk[0].p[P_LWAVE] = 1;
+        trk[0].lfo_ph = 0x30000000u;
+        track_render(&trk[0], b, CTL);
+            LFO_END(&trk[0]);
+        printf("   LFO TRI at phase 0: %d; SIN + MORPH 127 at 0.19: %d, TRI there: %d\n", (int)v0, (int)v1, (int)trk[0].lfo_val);
+        check("LFO TRI starts at 0 (|v| under 5 % of full), and MORPH 127 turns SIN into TRI (within 3 %)", abs(v0) < 1700 && abs(v1 - trk[0].lfo_val) < 1000);
+        setup(0, 0, 0, 0, 127);
+        trk[0].p[P_LRATE] = 100;
+        trk[0].p[P_LWAVE] = 5;
+        for (i = 0; i < 2 * FS / CTL; i++) {
+            track_render(&trk[0], b, CTL);
+            LFO_END(&trk[0]);
+            if (i > 100 && abs(trk[0].lfo_val - prev) > big)
+                big = abs(trk[0].lfo_val - prev);
+            prev = trk[0].lfo_val;
+        }
+        printf("   LFO GLD: largest step in a block %d\n", (int)big);
+        check("LFO GLD glides (no step over 3000 in a block while S&H would jump)", big > 0 && big < 3000);
+    }
+
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
     {
         double peak = 0, step = 0, dc = 0, tail = 0;

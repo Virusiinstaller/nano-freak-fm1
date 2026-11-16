@@ -100,4 +100,13 @@ out.append("/* ENVELOPE: the attack's step per control tick, Q24 (the test bed's
 out.append("static const uint32_t NANO_ENV_ATK[128] = {\n    " + ",\n    ".join(", ".join(str(max(1, int(round(x)))) for x in _a[i:i + 16]) for i in range(0, 128, 16)) + "\n};")
 out.append("/* ENVELOPE: the decay's and the release's coefficient per control tick, Q16 (the test bed's 5 ms .. 10 s, to 98 %) */")
 out.append("static const uint16_t NANO_ENV_DEC[128] = {\n    " + ",\n    ".join(", ".join(str(max(1, min(65535, int(round(65536 * x))))) for x in _d[i:i + 16]) for i in range(0, 128, 16)) + "\n};")
+# the cycling envelope: time n^2.2 * 10 s (n = knob / 127, at least 0.5 ms); a tick is 32 samples
+_dt = 32 / 44100.0
+_ct = [max(0.0005, (v / 127.0) ** 2.2 * 10.0) if v else 0.0005 for v in range(128)]
+out.append("/* CYCLING ENVELOPE: the rise's / fall's step per tick, Q24 (the test bed's cyc_time: n^2.2 * 10 s, at least 0.5 ms) */")
+out.append("static const uint32_t NANO_CYC_STEP[128] = {\n    " + ",\n    ".join(", ".join(str(min(1 << 24, int(round((1 << 24) * _dt / x)))) for x in _ct[i:i + 16]) for i in range(0, 128, 16)) + "\n};")
+out.append("/* CYCLING ENVELOPE: the hold in ticks */")
+out.append("static const uint16_t NANO_CYC_HOLD[128] = {\n    " + ",\n    ".join(", ".join(str(max(1, int(round(x / _dt)))) for x in _ct[i:i + 16]) for i in range(0, 128, 16)) + "\n};")
+out.append("/* LFO: RATE's phase step per tick (32 samples), the test bed's 0.005 Hz * 2^(14.3 n), n = RATE / 127 */")
+out.append("static const uint32_t NANO_LFO_INC[128] = {\n    " + ",\n    ".join(", ".join(str(int(0.005 * 2 ** (x / 127.0 * 14.3) * 32 / 44100.0 * 2 ** 32)) for x in range(i, i + 16)) for i in range(0, 128, 16)) + "\n};")
 open("firmware/src/eng_nano_tables.h", "w").write("\n".join(out) + "\n")

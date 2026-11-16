@@ -16,7 +16,8 @@
  *         DEPTH; bipolar, 0 until the LFO's first cycle ends. It follows RATE and SYNC (a step per note value)
  *   SLEW  (#132) S&H slewed: it glides linearly from the cycle before's value to this cycle's over the cycle
  *         (a smooth random line, one cycle behind S&H, continuous where S&H steps); bipolar
- *   Both are per track (one value for every voice) and cost no state but the one value kept per cycle.
+ *   CYC   NANO's cycling envelope (voice.c cyc_tick; RISE FALL HOLD AMOUNT MODE are P_FM1_ATK DEC SUS REL LEVEL), 0..1
+ *   Both S&H and SLEW are per track (one value for every voice) and cost no state but the one value kept per cycle.
  * Destinations:
  *   per voice (vmod_t, like the fixed routings):
  *     PITCH  AMT 63 at a full source = +-11.8 semitones (as LFO DEST PIT)
@@ -50,14 +51,14 @@
  * presets read and write t->p from the main loop, which the ISR preempts; TIMER5 only fills the MIDI rings),
  * and the engines read t->p as before. An engine reads its parameters in note_on (events_block) unmodulated.
  * Nothing active (every slot with SRC, DST or AMT at 0): no work, and the sound is bit-identical. */
-enum { MS_OFF, MS_LFO, MS_ENV, MS_VEL, MS_KEY, MS_RAND, MS_MODW, MS_AT, MS_EXPR, MS_SH, MS_SLEW, MS_N };
+enum { MS_OFF, MS_LFO, MS_ENV, MS_VEL, MS_KEY, MS_RAND, MS_MODW, MS_AT, MS_EXPR, MS_SH, MS_SLEW, MS_CYC, MS_N };
 enum { MD_OFF, MD_PITCH, MD_CUT, MD_SHP, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_RATE, MD_VIB, MD_E1,
        MD_DEPTH = MD_E1 + 8, MD_VEL, MD_TIME, MD_N };   /* (append-only: the stored values keep their meaning) */
 _Static_assert(NELEM(N_MSRC) == MS_N && NELEM(N_MDST) == MD_N, "N_MSRC / N_MDST == MS_* / MD_*");
 _Static_assert(P_M2SRC == P_M1SRC + 3 && P_M4AMT == P_M1SRC + 11 && P_M4AMT + 1 == P_FM1_ATK, "matrix slots: 3 ids each");
 #define NMSLOT 4u
 #define MS_VOICE(s) ((s) >= MS_ENV && (s) <= MS_RAND)             /* a value per voice */
-#define MS_BIPOLAR(s) ((s) == MS_LFO || (s) == MS_KEY || (s) == MS_RAND || (s) >= MS_SH)
+#define MS_BIPOLAR(s) ((s) == MS_LFO || (s) == MS_KEY || (s) == MS_RAND || (s) == MS_SH || (s) == MS_SLEW)
 #define MD_ENGINE(d) ((d) >= MD_E1 && (d) < MD_E1 + 8)           /* E1..E8: P_E0..P_E7 */
 
 /* the track parameter of a per-block destination */
@@ -112,6 +113,8 @@ static int32_t mod_tsrc(const track_t *t, uint32_t s, int32_t lfo)
         return t->lfo_prev + (((mod_sh(t) - t->lfo_prev) * (int32_t)(t->lfo_ph >> 17)) >> 15);
     case MS_LFO:
         return lfo;
+    case MS_CYC:                                        /* NANO's cycling envelope times its AMOUNT, 0..1 (voice.c cyc_tick) */
+        return (((t->cyc_lv >> 9) * t->p[P_FM1_REL]) * 258) >> 15;
     case MS_ENV:
         return t->m_env;
     case MS_VEL:
