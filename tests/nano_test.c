@@ -34,6 +34,7 @@ static void check(const char *what, int ok)
 }
 
 /* track 0 = NANO: MORPH, SYM, SUB, SYNC, CUT 127 (open), RES 0, a held loudness contour */
+#include "nano_arp_table.h"
 static void setup(uint32_t morph, uint32_t sym, uint32_t sub, uint32_t sync, uint32_t cut)
 {
     memset(trk, 0, sizeof trk);
@@ -1622,6 +1623,296 @@ int main(void)
         }
         printf("   LFO GLD: largest step in a block %d\n", (int)big);
         check("LFO GLD glides (no step over 3000 in a block while S&H would jump)", big > 0 && big < 3000);
+    }
+
+    /* 4y. THE ARP, IMPRESS / CHANCE, THE CC MAP, MIDI OUT (nano_ctl.c): the arp's note sequences are the test bed's (nano_arp_table.h) */
+    {
+        static const uint8_t KEYS[3] = {64, 60, 67};
+        static const uint8_t PAT_FW[14] = {1, 2, 3, 5, 4, 15, 16, 9, 10, 17, 18, 14, 19, 20};
+        uint32_t r, bad = 0, ntest = 0, s2, i, k;
+        char want[256];
+        track_t *t = &trk[0];
+        for (r = 0; r < NELEM(ARP_REF); r++) {
+            uint32_t period, L = ARP_REF[r].len, v, got_ok = 1;
+            char got[256] = "";
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            for (v = 0; v < 128 && 1u + v * 15u / 127u != L; v++)
+                ;
+            t->p[P_AMODE] = PAT_FW[ARP_REF[r].pat];
+            t->p[P_AOCT] = ARP_REF[r].range;
+            t->p[P_ASWING] = 0;
+            t->p[P_AHOLD] = 0;
+            t->p[P_LN0] = (int16_t)v;
+            t->p[P_LN1] = ARP_REF[r].rc;
+            t->p[P_LN2] = ARP_REF[r].type;
+            t->nheld = 0;
+            t->arp_phys = 0;
+            for (i = 0; i < (uint32_t)ARP_REF[r].nk; i++)
+                arp_add(t, KEYS[i]);
+            period = div_samples((uint32_t)t->p[P_ARATE]);
+            for (s2 = 0; s2 < 24; s2++) {
+                char b[8];
+                arp_tick(t, period);
+                snprintf(b, sizeof b, "%s%d", s2 ? " " : "", (int)t->arp_note);
+                strcat(got, b);
+            }
+            snprintf(want, sizeof want, "%s", ARP_REF[r].seq);
+            ntest++;
+            if (strcmp(got, want)) {
+                if (bad++ < 4)
+                    printf("   ARP MISMATCH pat %d range %d len %d keys %d rc %d: got %s\n      want %s\n", ARP_REF[r].pat, ARP_REF[r].range, ARP_REF[r].len, ARP_REF[r].nk, ARP_REF[r].rc, got, want);
+            }
+            (void)got_ok;
+        }
+        printf("   ARP: %u of %u sequences differ from the test bed's\n", bad, ntest);
+        check("ARP: UP DOWN UPDOWN ORDER ASPLAYED CONVERGE DIVERGE HOLLOW JEOPARDY BROKEN ALTERNATING, ranges 1-2, LENGTH, ARP CHORD match the test bed note for note", bad == 0);
+        /* PATTERN: eight steps of dice repeating, rests and notes from the keys; RANDOM stays in the keys */
+        {
+            int seq[24], rests = 0, in_set = 1;
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_AMODE] = 15;
+            t->p[P_AOCT] = 1;
+            t->p[P_ASWING] = 0;
+            t->nheld = 0;
+            t->arp_phys = 0;
+            for (i = 0; i < 3; i++)
+                arp_add(t, KEYS[i]);
+            for (s2 = 0; s2 < 24; s2++) {
+                arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+                seq[s2] = t->arp_note;
+                rests += !seq[s2];
+                if (seq[s2] && seq[s2] != 60 && seq[s2] != 64 && seq[s2] != 67)
+                    in_set = 0;
+            }
+            for (s2 = 0; s2 < 16; s2++)
+                if (seq[s2] != seq[s2 + 8])
+                    in_set = 0;
+            printf("   ARP PATTERN: %d rests in 24 steps, repeats every 8: %d\n", rests, in_set);
+            check("ARP PATTERN plays keys and rests, the same eight steps over and over", in_set && rests < 24);
+        }
+        /* ARP CHORD pattern: the keys together, an octave up per step; TYPE chord: each step's note is a chord's root */
+        {
+            uint32_t cnt1, cnt2, ok = 1;
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_AMODE] = 14;
+            t->p[P_AOCT] = 2;
+            t->p[P_ASWING] = 0;
+            t->nheld = 0;
+            t->arp_phys = 0;
+            for (i = 0; i < 3; i++)
+                arp_add(t, KEYS[i]);
+            arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+            cnt1 = 1 + (t->arp_ch[0] != 0) + (t->arp_ch[1] != 0) + (t->arp_ch[2] != 0);
+            arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+            cnt2 = t->arp_note;
+            printf("   ARP CHORD pattern: %u notes, then lowest %u\n", cnt1, cnt2);
+            check("ARP CHORD pattern plays the held notes together and an octave up the next step", cnt1 == 3 && cnt2 == 72);
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_AMODE] = 1;
+            t->p[P_AOCT] = 1;
+            t->p[P_ASWING] = 0;
+            t->p[P_LN1] = 1;
+            t->p[P_LN2] = 1;
+            t->nheld = 0;
+            t->arp_phys = 0;
+            arp_add(t, 60);
+            arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+            ok = t->arp_note == 60 && t->arp_ch[0] == 64 && t->arp_ch[1] == 67 && t->arp_ch[2] == 72;
+            check("ARP TYPE chord: each step plays the chord (Maj) on the pattern's note", ok);
+        }
+        /* IMPRESS / CHANCE: Impress 0 leaves the pattern as the test bed has it, even after a roll; Impress shortens and varies */
+        {
+            int left = 0, same = 1, shifted = 0;
+            char a0[256] = "", a1[256] = "";
+            for (k = 0; k < 2; k++) {
+                setup(0, 0, 0, 0, 127);
+                host_preset(t, ENGI_NANO, 0);
+                t->p[P_AMODE] = 1;
+                t->p[P_AOCT] = 1;
+                t->p[P_ASWING] = 0;
+                t->p[P_LN4] = 127;
+                nano_poll(t);                          /* CHANCE 127: the dice roll */
+                t->p[P_LN3] = k ? 127 : 0;
+                t->nheld = 0;
+                t->arp_phys = 0;
+                for (i = 0; i < 3; i++)
+                    arp_add(t, KEYS[i]);
+                for (s2 = 0; s2 < 48; s2++) {
+                    char b[8];
+                    arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+                    snprintf(b, sizeof b, "%d ", (int)t->arp_note);
+                    strcat(k ? a1 : a0, b);
+                }
+            }
+            for (i = 0; a0[i] && a1[i]; i++)
+                (void)0;
+            {
+                int n0 = 0, n1 = 0, c0 = 0, c1 = 0;
+                for (i = 0; a0[i]; i++)
+                    n0 += a0[i] == '0' && (i == 0 || a0[i - 1] == ' ');
+                for (i = 0; a1[i]; i++)
+                    n1 += a1[i] == '0' && (i == 0 || a1[i - 1] == ' ');
+                c0 = (int)strlen(a0);
+                c1 = (int)strlen(a1);
+                left = n1 - n0;
+                same = strstr(a0, " 0 ") == 0 && n0 == 0;
+                shifted = strchr(a1, '7') != 0 && c1 > 0 && c0 > 0 && strcmp(a0, a1) != 0;
+            }
+            printf("   IMPRESS: Impress 0 has no gaps: %d; Impress 127 leaves %d steps out of 48 out and changes the pattern: %d\n", same, left, shifted);
+            check("IMPRESS 0 keeps every step; Impress 127 after a roll leaves some out and changes the sequence", same && left > 0 && shifted);
+        }
+        {
+            int32_t some_gate = 0, some_oct = 0, vel_moved = 0;
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_LN3] = 127;
+            for (i = 0; i < 64; i++) {
+                some_gate |= nv_gate(t, i, 64) < 5;
+                some_oct |= nv_oct(t, i) != 0;
+                vel_moved |= nv_vel(t, i, 100) != 100;
+            }
+            t->p[P_LN3] = 0;
+            check("IMPRESS 127: some step's gate drops out, some octave moves, some velocity changes", some_gate && some_oct && vel_moved);
+            check("IMPRESS 0: gate, velocity and octave are the written ones", nv_gate(t, 3, 64) == 64 && nv_vel(t, 3, 100) == 100 && nv_oct(t, 3) == 0);
+        }
+        /* the CC map: each CC the table has takes a value in and gives it back */
+        {
+            uint32_t n = 0, ok = 0;
+            static const uint8_t VALS[3] = {0, 64, 127};
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            for (k = 0; k < NELEM(nano_cc); k++) {
+                uint32_t vi;
+                int good = 1;
+                if (nano_cc[k].kind == NC_TRANSP || nano_cc[k].kind == NC_BPM)
+                    continue;
+                for (vi = 0; vi < 3; vi++) {
+                    int32_t back;
+                    int16_t before[P_COUNT];
+                    memcpy(before, t->p, sizeof before);
+                    nano_cc_in(t, nano_cc[k].cc, VALS[vi]);
+                    back = nano_ctl_get(t, k);
+                    {
+                        int16_t keep[P_COUNT];
+                        memcpy(keep, t->p, sizeof keep);
+                        nano_cc_in(t, nano_cc[k].cc, (uint32_t)back);
+                        if (memcmp(keep, t->p, sizeof keep))
+                            good = 0;
+                    }
+                }
+                n++;
+                ok += good;
+            }
+            printf("   CC MAP: %u of %u controls give back what they were set to\n", ok, n);
+            check("CC MAP: every control's value, read back as a CC and applied again, leaves the parameter as it was", ok == n);
+            nano_cc_in(t, 23, 127);
+            check("CC 23 is the cutoff (E5) to its full value", t->p[P_E5] == 127);
+            nano_cc_in(t, 26, 0);
+            check("CC 26 is the filter envelope amount: 0 is -64, 127 is +63", t->p[P_ED_FLT] == -64);
+            nano_cc_in(t, 26, 127);
+            check("CC 26 at 127 is +63", t->p[P_ED_FLT] == 63);
+            nano_cc_in(t, 19, 127);
+            nano_cc_in(t, 18, 127);
+            nano_cc_in(t, 20, 127);
+            check("CC 18 19 20: SLOPE, DRIVE and CLIP are the bits of the FX parameter (127 -> 0x7F)", (t->p[P_ED_FX] & 0x7F) == 0x7F);
+            nano_cc_in(t, 17, 127);
+            check("CC 17 at 127: the filter is HP", t->p[P_FTYPE] == 2);
+            nano_cc_in(t, 73, 127);
+            check("CC 73 at 127: the last arp pattern, ALTERNATING", t->p[P_AMODE] == 20);
+            nano_cc_in(t, 3, 100);
+            nano_poll(t);
+            check("CC 3 is CHANCE", t->p[P_LN4] == 100 && t->nano_ch == 100);
+            check("a CC that is not in the map is not taken", nano_cc_in(t, 1, 5) == 0);
+        }
+        /* CC out: a change of a control queues its CC; MIDI out: the arp's notes go out, and MIDI only keeps them quiet here */
+        {
+            uint32_t w0, packet, n_on = 0, q0;
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_E5] = 127;
+            fm_cc_out = 0;
+            w0 = nco_w;
+            nano_cc_out(t, P_E5);
+            check("CC out: nothing queued while it is off", nco_w == w0);
+            fm_cc_out = 1;
+            nano_cc_out(t, P_E5);
+            packet = nco_q[w0 % NCO_Q];
+            printf("   CC OUT packet %08X\n", packet);
+            check("CC out: a cutoff change queues CC 23 with its value 127 on the part's channel", nco_w == w0 + 1 && ((packet >> 16) & 0xFF) == 23 && (packet >> 24) == 127 && (packet & 0xFF) == 0x0B);
+            usb.config = 1;
+            q0 = mo_w - mo_r;
+            nano_cc_flush();
+            check("CC out: the audio side sends what was queued", nco_r == nco_w && mo_w - mo_r == q0 + 1);
+            fm_cc_out = 0;
+            t->p[P_AMODE] = 1;
+            t->p[P_ASWING] = 0;
+            t->nheld = 0;
+            t->arp_phys = 0;
+            fm_seq_out = 1;
+            arp_add(t, 60);
+            q0 = mo_w - mo_r;
+            arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+            for (i = 0; i < NVOICE; i++)
+                n_on += t->v[i].active;
+            check("MIDI out BOTH: the arp's note goes out and sounds here", mo_w - mo_r == q0 + 1 && n_on > 0);
+            fm_seq_out = 2;
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_AMODE] = 1;
+            t->p[P_ASWING] = 0;
+            t->nheld = 0;
+            t->arp_phys = 0;
+            arp_add(t, 62);
+            q0 = mo_w - mo_r;
+            arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+            n_on = 0;
+            for (i = 0; i < NVOICE; i++)
+                n_on += t->v[i].active;
+            check("MIDI out MIDI only: the note goes out and is silent here", mo_w - mo_r == q0 + 1 && n_on == 0);
+            fm_seq_out = 0;
+            usb.config = 0;
+        }
+    }
+
+    /* 4z. THE SEQUENCER with IMPRESS: Impress 0 plays every step as written; Impress 127 after a roll leaves steps out and moves some */
+    {
+        uint32_t run, n[2] = {0, 0}, moved = 0, shifted_notes = 0, i, b, blocks;
+        track_t *t = &trk[0];
+        for (run = 0; run < 2; run++) {
+            setup(0, 0, 0, 0, 127);
+            host_preset(t, ENGI_NANO, 0);
+            t->p[P_SLEN] = 16;
+            t->p[P_SDIV] = 2;
+            t->p[P_SGATE] = 64;
+            for (i = 0; i < 16u; i++)
+                t->step[i] = (step_t){{(uint8_t)(60 + i % 5)}, 1, ST_NOTE, 0, 100};
+            t->p[P_LN4] = 127;
+            nano_poll(t);
+            t->p[P_LN3] = run ? 127 : 0;
+            blocks = 4u * 16u * div_samples(2) / CTL;
+            seq_start();
+            for (b = 0; b < blocks; b++) {
+                uint32_t v0 = vage;
+                seq_tick(t, CTL);
+                for (; v0 < vage; v0++) {
+                    n[run]++;
+                    for (i = 0; i < NVOICE; i++)
+                        if (t->v[i].age == v0 + 1u) {
+                            if (t->v[i].note < 60 || t->v[i].note > 64)
+                                shifted_notes++;
+                        }
+                }
+            }
+            seq_stop();
+        }
+        (void)moved;
+        printf("   SEQ IMPRESS: %u note-ons in 4 bars at Impress 0, %u at Impress 127 (%u of them off the written notes)\n", n[0], n[1], shifted_notes);
+        check("SEQ: Impress 0 plays all 64 steps as written", n[0] == 64);
+        check("SEQ: Impress 127 after a roll leaves steps out and moves notes by octaves", n[1] < 64 && n[1] > 20 && shifted_notes > 0);
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */

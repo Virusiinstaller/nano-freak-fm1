@@ -627,6 +627,7 @@ static __attribute__((noinline)) void esync_coef(track_t *t)   /* (not inlined: 
  * the gate holds it at HOLD's level), 1 RUN (free: rise, hold, fall, again), 2 LOOP (as RUN, a note restarts it); RISE FALL
  * HOLD AMOUNT are P_FM1_ATK DEC SUS REL. HOLD is a level in ENV mode and a time in the others. The source CYC (mod.c) is the
  * level times AMOUNT */
+static void nano_poll(track_t *t);                      /* (seq.c nano_ctl.c) */
 static void cyc_tick(track_t *t)
 {
     const int16_t *p = t->p;
@@ -837,8 +838,10 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
     track_lfo_tick(t);
 #endif
     esync_coef(t);                                      /* this block's envelope steps for env_tick (ENV SYNC) */
-    if (e == &ENG_NANO)
+    if (e == &ENG_NANO) {
         cyc_tick(t);
+        nano_poll(t);
+    }
 #if FELUCCA_FMINI_ONLY
     glide_blk[(uint32_t)(t - trk) % NTRK]++;
 #endif

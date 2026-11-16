@@ -1387,6 +1387,7 @@ static void apply_preset_to(track_t *t, uint32_t pi)
         t->p[P_E7] = (int16_t)pi;
     fm6_track_loaded(t);                              /* FM6: the preset's patch (its SLOT) */
     fmini_track_loaded(t);                             /* FMINI: the same */
+    nano_track_loaded(t);                              /* NANO: ARP LENGTH 16, IMPRESS / CHANCE 0 */
     load_end(t);
 }
 

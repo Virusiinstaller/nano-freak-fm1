@@ -309,6 +309,8 @@ static int __attribute__((noinline)) midi_learned(uint32_t cc, uint32_t value)
 static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint32_t value)
 {
     uint32_t i, id = 0xFFFFu, e;
+    if (NANO_T(t) && nano_cc_in(t, cc, value))          /* a NANO part answers to the test bed's CC map (nano_ctl.c) */
+        return;
 #if FELUCCA_FMINI_ONLY
     (void)t; (void)i; (void)id; (void)e;
     fm_cc_rx[cc & 127u] = (uint8_t)value;                /* FMini-1: GLO > MIDI CC's map, applied by the main loop */

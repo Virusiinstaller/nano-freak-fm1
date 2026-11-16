@@ -119,6 +119,7 @@ static void host_preset_values(track_t *t, uint32_t e, uint32_t pi, const preset
         t->p[P_E7] = (int16_t)pi;
     fm6_track_loaded(t);                          /* FM6: the preset's patch (ui.c apply_preset_to) */
     fmini_track_loaded(t);
+    nano_track_loaded(t);
 }
 static void host_preset_req(track_t *t, uint32_t e, uint32_t pi)
 {

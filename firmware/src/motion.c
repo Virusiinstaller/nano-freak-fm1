@@ -219,6 +219,7 @@ static uint32_t motion_clear_locks(track_t *t, uint32_t step)
 static int motion_capture(track_t *t, uint32_t id, int16_t value)
 {
     uint32_t k = trk_index(t), idx, len, period, f;
+    nano_cc_out(t, id);                                 /* NANO: the control's CC goes to MIDI OUT (nano_ctl.c) */
     if (!motion_param(id)) return 0;
     if (!rec_on(t) || t != TSEL) {
         /* A live edit becomes a new base, even when an earlier motion value is

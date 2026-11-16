@@ -174,17 +174,31 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
 }
 
 #include "chord.c"
+#include "nano_ctl.c"
 
 /* ------------------------------------------------------------- arp --- */
 static void arp_add(track_t *t, uint32_t note)
 {
-    uint32_t i, k = in_key - 1u;
+    uint32_t i, k = in_key - 1u, fresh = t->arp_phys == 0u;
     if (t->p[P_AHOLD] && t->arp_phys == 0u)
         t->nheld = 0;                               /* new chord replaces the latched one */
     t->arp_phys++;                                  /* every key-down: arp_remove counts every key-up */
     for (i = 0; i < t->nheld; i++)
         if (t->held[i] == note)
             return;                                 /* repeated note-on: not a new note */
+    if (NANO_T(t)) {                                /* AS PLAYED remembers the keys in press order (up to LENGTH); PATTERN's dice */
+        uint32_t len = nano_alen(t);
+        if (fresh)
+            t->arp_np = 0;
+        if (t->arp_np >= len) {
+            for (i = 0; i + 1u < t->arp_np; i++)
+                t->arp_played[i] = t->arp_played[i + 1u];
+            t->arp_np = (uint8_t)(len - 1u);
+        }
+        t->arp_played[t->arp_np++] = (uint8_t)note;
+        for (i = 0; i < 8u; i++)
+            t->arp_patt[i] = (uint16_t)(nv_rand() + 32768);
+    }
     if (t->nheld < 16u) {
         /* #191: a key the track's scale keyboard maps (not the DRUM grid, not an engine's own map) is kept as that
          * key, so TRN, ROOT, SCALE and QNT reach the notes the arp holds (arp_list); the octave stays the one it was
@@ -234,7 +248,9 @@ static int rec_on(const track_t *t) { return ((song.rec >> trk_index(t)) & 1u) &
  * C E C G (the bottom one); WALK a random step up or down the list (bouncing off its ends); CHORD all the held
  * notes together (the first 4), an octave higher each step through OCT */
 enum { AM_OFF, AM_UP, AM_DN, AM_UPDN, AM_RND, AM_ORD, AM_REPEAT, AM_DNUP, AM_UP8, AM_CONV, AM_DIVG, AM_PINKY,
-       AM_THUMB, AM_WALK, AM_CHORD };
+       AM_THUMB, AM_WALK, AM_CHORD,
+       AM_PTRN, AM_ASPL, AM_HOLW, AM_JEOP, AM_BRKN, AM_ALT };   /* (NANO's: nano_ctl.c; any engine may use them) */
+#define ARP_REST 0xFFFFFFFFu
 
 static void arp_forget(track_t *t)               /* (its notes ended otherwise: trk_all_off) */
 {
@@ -250,18 +266,19 @@ static __attribute__((noinline)) void arp_chord_off(track_t *t, int rec)   /* th
         if (t->arp_ch[i]) {
             if (rec)
                 rec_release(t, t->arp_ch[i]);
-            trk_note_off(t, t->arp_ch[i]);
+            so_off(t, t->arp_ch[i]);
             t->arp_ch[i] = 0;
         }
 }
 
-static __attribute__((noinline)) void arp_chord(track_t *t, const uint32_t *list, uint32_t n)
+static __attribute__((noinline)) void arp_chord(track_t *t, const uint32_t *list, uint32_t n, uint32_t o, uint32_t vel,
+                                                int32_t shift)
 {
-    uint32_t i, nt, top = 0, o = t->arp_idx % (uint32_t)(t->p[P_AOCT] > 0 ? t->p[P_AOCT] : 1);
+    uint32_t i, nt, top = 0;
     if (n > 4u)
         n = 4u;
     for (i = 0; i < n; i++) {                       /* the held notes (sorted or as played), o octaves up */
-        nt = (uint32_t)clamp((int32_t)list[i] + 12 * (int32_t)o, 0, 127);
+        nt = (uint32_t)clamp((int32_t)list[i] + 12 * (int32_t)o + shift, 0, 127);
         if (nt == 127u && top++)
             continue;                               /* (notes clamped onto the top one: once) */
         if (!t->arp_note)
@@ -269,8 +286,8 @@ static __attribute__((noinline)) void arp_chord(track_t *t, const uint32_t *list
         else
             t->arp_ch[i - 1u] = (uint8_t)nt;
         if (rec_on(t))
-            rec_note(t, nt, 100);
-        trk_note_on(t, nt, 100);
+            rec_note(t, nt, vel);
+        so_on(t, nt, vel);
     }
 }
 
@@ -278,7 +295,7 @@ static void arp_silence(track_t *t)              /* the sounding arp note(s) end
 {
     if (t->arp_ch[0] | t->arp_ch[1] | t->arp_ch[2])
         arp_chord_off(t, 0);
-    trk_note_off(t, t->arp_note);
+    so_off(t, t->arp_note);
     t->arp_note = 0;
 }
 
@@ -286,7 +303,7 @@ static void arp_off(track_t *t)                  /* the sounding arp note(s) end
 {
     if (t->arp_ch[0] | t->arp_ch[1] | t->arp_ch[2])
         arp_chord_off(t, rec_on(t));
-    trk_note_off(t, t->arp_note);
+    so_off(t, t->arp_note);
     if (rec_on(t))
         rec_release(t, t->arp_note);
     t->arp_note = 0;
@@ -296,6 +313,49 @@ static void arp_off(track_t *t)                  /* the sounding arp note(s) end
 static __attribute__((noinline)) uint32_t arp_pick(track_t *t, uint32_t *list, uint32_t len)
 {
     uint32_t i = t->arp_idx, m = (uint32_t)t->p[P_AMODE], cyc, k, w;
+    const int nn = NANO_T(t);
+    if (nn)
+        i %= nano_alen(t);                          /* NANO: LENGTH is the loop of the pattern */
+    if (nn && m >= AM_PTRN) {                       /* NANO's patterns (the test bed's nf_arp.c build_seq; len notes) */
+        switch (m) {
+        case AM_HOLW:                               /* lowest, highest */
+            return len > 1u && (i & 1u) ? len - 1u : 0u;
+        case AM_JEOP:                               /* i, i+1, i */
+            if (len < 2u)
+                return 0u;
+            k = i % (3u * (len - 1u));
+            return k / 3u + (k % 3u == 1u);
+        case AM_BRKN:                               /* s, s+2, s+1, s+2 */
+            if (len < 3u)
+                return len < 2u ? 0u : (i & 1u);
+            k = i % (4u * (len - 2u));
+            w = k % 4u;
+            return k / 4u + (w == 1u || w == 3u ? 2u : w == 2u ? 1u : 0u);
+        case AM_ALT:                                /* the lowest, then each of the others */
+            if (len < 2u)
+                return 0u;
+            k = i % (2u * (len - 1u));
+            return (k & 1u) ? 1u + k / 2u : 0u;
+        case AM_PTRN:                               /* eight steps of dice: a rest or a place */
+            k = t->arp_patt[i & 7u];
+            return (k & 7u) == 0u ? ARP_REST : (k >> 3) % len;
+        default:                                    /* AM_ASPL: the list is the keys as played */
+            return i % len;
+        }
+    }
+    if (nn && m == AM_DIVG) {                       /* NANO's DIVERGE: from the middle outward, above then below */
+        uint32_t mid = (len - 1u) / 2u, d, c = 0;
+        k = i % len;
+        if (!k)
+            return mid;
+        for (d = 1; d < len; d++) {
+            if (mid + d < len && c++ == k - 1u)
+                return mid + d;
+            if (mid >= d && c++ == k - 1u)
+                return mid - d;
+        }
+        return 0u;
+    }
     if (m == AM_UP8 && len < 64u)                   /* UP+8: the first note again over the top */
         list[len++] = (uint32_t)clamp((int32_t)list[0] + 12 * t->p[P_AOCT], 0, 127);
     cyc = len > 1u ? 2u * len - 2u : 1u;
@@ -387,14 +447,26 @@ static uint32_t arp_list(const track_t *t, uint32_t *list, uint32_t *cnt)
         if (j == n)
             list[n++] = x;
     }
+    if (NANO_T(t) && t->p[P_AMODE] == AM_ASPL && t->arp_np) {   /* AS PLAYED: the keys in the order they were pressed */
+        n = 0;
+        for (i = 0; i < t->arp_np && i < 16u; i++)
+            list[n++] = t->arp_played[i];
+    }
     *cnt = n;
-    if (!t->p[P_AORDER] && t->p[P_AMODE] != AM_ORD)   /* (ORD: as pressed, held[] keeps that order) */
+    if (!t->p[P_AORDER] && t->p[P_AMODE] != AM_ORD && !(NANO_T(t) && t->p[P_AMODE] == AM_ASPL))   /* (ORD: as pressed, held[] keeps that order) */
         for (i = 1; i < n; i++)
             for (j = i; j > 0 && list[j - 1] > list[j]; j--) {
                 x = list[j];
                 list[j] = list[j - 1];
                 list[j - 1] = x;
             }
+    if (NANO_T(t) && n == 1u && nano_achord(t) && !nano_atype(t)) {   /* ARP CHORD: one key, the pattern runs over a chord on it */
+        uint32_t root = list[0];
+        for (i = 0; i < 4u; i++)
+            list[i] = (uint32_t)clamp((int32_t)root + NANO_RC[nano_achord(t) - 1u][i], 0, 127);
+        n = 4u;
+        *cnt = 4u;
+    }
     for (o = 0; o < (uint32_t)t->p[P_AOCT]; o++)
         for (i = 0; i < n && len < 64u; i++)
             list[len++] = clamp((int32_t)list[i] + 12 * (int32_t)o, 0, 127);
@@ -406,26 +478,51 @@ static uint32_t arp_list(const track_t *t, uint32_t *list, uint32_t *cnt)
  * ISR's loop over the tracks (tests/target_budget.py) */
 static __attribute__((noinline)) void arp_fire(track_t *t, uint32_t period)
 {
-    uint32_t cnt, list[64], len, j;
+    uint32_t cnt, list[64], len, j, vel = 100, vi = 0, gate = (uint32_t)t->p[P_AGATE];
+    int32_t shift = 0;
+    const int nn = NANO_T(t);
     if (!(len = arp_list(t, list, &cnt))) {        /* (every key silent now: QNT WHITE's black keys) */
         if (t->arp_note)
             arp_off(t);
         return;
     }
     t->arp_idx++;
+    if (nn) {                                       /* NANO: the key's velocity, the loop's step, Impress / Chance */
+        int32_t g;
+        vel = t->arp_vel ? t->arp_vel : 100u;
+        vi = t->arp_idx % nano_alen(t);
+        g = nv_gate(t, vi, (int32_t)gate);
+        if (g < 5) {
+            if (t->arp_note)
+                arp_off(t);
+            return;                                 /* a gate that came out at nothing: the step is left out */
+        }
+        gate = (uint32_t)g;
+        vel = nv_vel(t, vi, vel);
+        shift = nv_oct(t, vi);
+    }
     j = t->p[P_AMODE] == AM_CHORD ? 0u : arp_pick(t, list, len);
     if (t->arp_note)
         arp_off(t);
+    if (j == ARP_REST)
+        return;
     if ((uint32_t)(rng() & 127u) <= (uint32_t)t->p[P_APROB]) {
-        t->arp_off = period * (uint32_t)t->p[P_AGATE] / 128u;
+        t->arp_off = period * gate / 128u;
         if (t->p[P_AMODE] == AM_CHORD) {            /* CHORD: the first 4 notes, an octave up each step */
-            arp_chord(t, list, cnt);
+            arp_chord(t, list, cnt, (nn ? vi : t->arp_idx) % (uint32_t)(t->p[P_AOCT] > 0 ? t->p[P_AOCT] : 1), vel, shift);
             return;
         }
-        t->arp_note = (uint8_t)list[j];
+        if (nn && nano_atype(t) && nano_achord(t)) {   /* ARP TYPE chord: the step's note is the root of a chord */
+            uint32_t ch[4], i;
+            for (i = 0; i < 4u; i++)
+                ch[i] = (uint32_t)clamp((int32_t)list[j] + NANO_RC[nano_achord(t) - 1u][i], 0, 127);
+            arp_chord(t, ch, 4u, 0u, vel, shift);
+            return;
+        }
+        t->arp_note = (uint8_t)clamp((int32_t)list[j] + shift, 0, 127);
         if (rec_on(t))
-            rec_note(t, t->arp_note, 100);           /* recording: what the arp plays */
-        trk_note_on(t, t->arp_note, 100);
+            rec_note(t, t->arp_note, vel);
+        so_on(t, t->arp_note, vel);
     }
 }
 
@@ -637,6 +734,7 @@ static void input_on(track_t *t, uint32_t note, uint32_t vel)
         cin_keep(t, note, vel);
     if (rec_on(t) && !t->p[P_AMODE])               /* (ARP on: arp_tick records its notes) */
         rec_note(t, note, vel);
+    t->arp_vel = (uint8_t)vel;                      /* (NANO's arp plays at the last key's velocity) */
     if (t->p[P_AMODE])
         arp_add(t, note);
     else
@@ -834,6 +932,7 @@ static void keyboard_block(void)
 {
     uint32_t cur = fm1_in.notes, ch, k;
     uint32_t lay, fx, mute;
+    nano_cc_flush();                                /* NANO's CCs the controls changed (nano_ctl.c) */
 #if BOARD_SMK37
     ext_keys_block();
 #endif
@@ -924,7 +1023,7 @@ static void seq_release(track_t *t)
 {
     uint32_t i;
     for (i = 0; i < t->seq_n; i++)
-        trk_note_off(t, t->seq_notes[i]);
+        so_off(t, t->seq_notes[i]);
     t->seq_n = 0;
     t->seq_hold = 0;
     t->slide_glide = 0;                             /* live MONO / LEG keys must not glide after it */
@@ -1001,6 +1100,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     uint32_t hits = step_ratchet(s);
     uint8_t nn[4 + NLANE], vv[4 + NLANE];           /* the notes it plays: its notes, then its hits */
     uint32_t m = 0, sk = 0;
+    int32_t oshift = 0;
     /* QNT SEQ: the step's notes (not the lane hits) snap to the scale as they play; never on a drum kit, the slices
      * or another engine that maps the keys itself. SEQ+T (#218): moved by TRN first, as the keys are. seq_notes keeps
      * the notes that sound: their note-offs match */
@@ -1025,13 +1125,23 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         seq_release(t);
         return;
     }
+    if (nv_imp(t)) {                                /* NANO's Impress: this step's gate, velocity and octave (a gate at nothing: left out) */
+        int32_t g = nv_gate(t, idx, (int32_t)t->p[P_SGATE]);
+        if (g < 5) {
+            seq_release(t);
+            return;
+        }
+        gate = period * (uint32_t)g / 128u;
+        vel = nv_vel(t, idx, vel);
+        oshift = nv_oct(t, idx);
+    }
     if (hits > 1u) {                                /* RATCH: the gate of a part, no slide or tie out */
         gate = step_samples(t, period, idx) / hits * (uint32_t)t->p[P_SGATE] / 128u;
         if (!(skip & SEQ_REP))
             t->rat_left = (uint8_t)(hits - 1u);
     }
     for (i = 0; i < s->n && i < 4u; i++) {
-        uint32_t x = s->note[i];
+        uint32_t x = (uint32_t)clamp((int32_t)s->note[i] + oshift, 0, 127);
         if (qseq) {                                 /* QNT SEQ: onto the scale now; two notes snapping */
             x = (uint32_t)clamp(scale_snap(t, (int32_t)x + qtrn), 0, 127);   /* together play once */
             for (j = 0; j < m && nn[j] != x; j++)
@@ -1056,13 +1166,13 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         seq_release(t);
     for (i = 0; i < m; i++)
         if (!((sk >> i) & 1u))
-            trk_note_on(t, nn[i], vv[i]);
+            so_on(t, nn[i], vv[i]);
     if (slide_in)                                   /* release what is not held over */
         for (i = 0; i < t->seq_n; i++) {
             for (j = 0; j < m && nn[j] != t->seq_notes[i]; j++)
                 ;
             if (j == m)
-                trk_note_off(t, t->seq_notes[i]);
+                so_off(t, t->seq_notes[i]);
         }
     t->seq_n = 0;
     for (i = 0; i < m; i++)
