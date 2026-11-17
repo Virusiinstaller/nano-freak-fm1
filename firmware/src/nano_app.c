@@ -540,12 +540,19 @@ static void na_leds(void)
         for (k = 0; k < 27u; k++)
             led_put(nl, LED_KEY0 + k, (int)((c >> k) & 1u));
     }
+#if BOARD_SMK37
+    {
+        static const uint8_t Z[LED_BUF];                      /* (no DRUM-grid lanes, no SCALE LEDS) */
+        smk_leds(nl, nb, nm, Z, Z);                           /* the 19 button LEDs (ui_input.c) */
+    }
+#else
     for (k = 0; k < FM1_NCOL; k++) {
         fm1_led_dim[k] = nd[k];
         fm1_led_breath[k] = nb[k];
         fm1_led_mid[k] = nm[k];
         fm1_led[k] = nl[k];
     }
+#endif
 }
 
 /* -------------------------------------------------------------- draw --- */
