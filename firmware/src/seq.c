@@ -547,6 +547,8 @@ static void arp_tick(track_t *t, uint32_t n) { arp_step(t, n, n); }
  * and the odd ones shorter, so every odd step starts late */
 static uint32_t step_samples(const track_t *t, uint32_t period, uint32_t idx)
 {
+    if (NANO_T(t))
+        return nano_sq_len(t, period, idx);  /* nano_ctl.c: a step has its own length */
     return swing_step_len(t, period, idx);   /* core.h: own + global, at most 100 */
 }
 
@@ -1115,6 +1117,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         seq_release(t);
         return;
     }
+    if (NANO_T(t))
+        period *= nano_sq_ticks(s), gate = period * (uint32_t)t->p[P_SGATE] / 128u;   /* (the gate is of the step's own length) */
     if (nv_imp(t)) {                                /* NANO's Impress: this step's gate, velocity and octave (a gate at nothing: left out) */
         int32_t g = nv_gate(t, idx, (int32_t)t->p[P_SGATE]);
         if (g < 5) {

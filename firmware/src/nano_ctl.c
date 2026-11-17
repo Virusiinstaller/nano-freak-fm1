@@ -246,3 +246,183 @@ static void nano_cc_flush(void)                         /* the audio ISR, once a
         nco_r++;
     }
 }
+
+/* ---- the NANO sequencer (the test bed's nf_seq): up to 64 steps, each a pitch or a rest and a length (a semiquaver, quaver, crotchet
+ * or minim). A step is a step_t: note[0] its pitch, n 1 (a rest: n 0, time ST_REST), acc bits 0..1 its length code. The Random and
+ * Mutate generators keep the pattern they replaced in the step's own spare bytes (note[1] / note[2] the pitch, acc bits 2..3 and 4..5
+ * the length), so a position of 0 puts it back and no RAM is spent. Their positions and settings are P_FM2_DEC (RANDOM), P_FM2_SUS
+ * (MUTATE), P_FM2_REL (scale), P_FM2_LEVEL (octaves - 1), P_FM3_ATK (rests, steps of 5 %), P_FM3_DEC (the length a recorded note gets). */
+#define NS_REST 255u
+static uint32_t nano_sq_ticks(const step_t *s) { return 1u << (s->acc & 3u); }
+static uint32_t nano_sq_rest(const step_t *s) { return s->time == ST_REST || !s->n; }
+static uint32_t nano_sq_pos(const track_t *t, uint32_t idx)             /* the semiquavers before step idx */
+{
+    uint32_t k, p = 0;
+    for (k = 0; k < idx && k < NSTEP; k++)
+        p += nano_sq_ticks(&t->step[k]);
+    return p;
+}
+/* the length of step idx in samples: its semiquavers; a one-semiquaver step is swung as the grid's off-beats are */
+static uint32_t nano_sq_len(const track_t *t, uint32_t period, uint32_t idx)
+{
+    uint32_t n = nano_sq_ticks(&t->step[idx % NSTEP]);
+    return n == 1u ? swing_step_len(t, period, nano_sq_pos(t, idx)) : period * n;
+}
+static void nano_sq_put(step_t *s, uint32_t note, uint32_t dur)         /* note 255: a rest */
+{
+    s->acc = (uint8_t)((s->acc & ~3u) | (dur & 3u));
+    s->hit = 0;
+    s->flags = 0;
+    s->probability = 0;
+    s->vel = 100;
+    if (note == NS_REST) {
+        s->n = 0;
+        s->time = ST_REST;
+        s->note[0] = 0;
+    } else {
+        s->n = 1;
+        s->time = ST_NOTE;
+        s->note[0] = (uint8_t)note;
+    }
+}
+static uint32_t nano_sq_note(const step_t *s) { return nano_sq_rest(s) ? NS_REST : s->note[0]; }
+
+static const uint8_t NS_SC[7][12] = {{0, 3, 5, 7, 10}, {0, 2, 4, 7, 9}, {0, 2, 4, 5, 7, 9, 11}, {0, 2, 3, 5, 7, 8, 10}, {0, 2, 3, 5, 7, 9, 10}, {0, 3, 5, 6, 7, 10},
+                                     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}};
+static const uint8_t NS_SCN[7] = {5, 5, 7, 7, 7, 6, 12};
+static uint32_t nano_sq_a;
+static uint32_t nano_sq_rnd(void)                                       /* the test bed's mulberry32 */
+{
+    uint32_t x;
+    nano_sq_a += 0x6D2B79F5u;
+    x = nano_sq_a;
+    x = (x ^ (x >> 15)) * (x | 1u);
+    x ^= x + (x ^ (x >> 7)) * (x | 61u);
+    return x ^ (x >> 14);
+}
+static uint32_t nano_sq_lt(uint32_t r, uint32_t num, uint32_t den)      /* r / 2^32 < num / den */
+{
+    return (uint64_t)r * den < ((uint64_t)num << 32);
+}
+static uint32_t nano_sq_below(uint32_t r, uint32_t n) { return (uint32_t)(((uint64_t)r * n) >> 32); }   /* floor(r / 2^32 * n) */
+static int32_t nano_sq_abs(int32_t x) { return x < 0 ? -x : x; }
+static uint32_t nano_sq_root(uint32_t last) { return last < 24u ? 24u : last > 84u ? 84u : last; }
+#define NS_RND_POS(t) ((t)->p[P_FM2_DEC])
+#define NS_MUT_POS(t) ((t)->p[P_FM2_SUS])
+#define NS_RANGE(t) ((uint32_t)(t)->p[P_FM2_LEVEL] % 3u + 1u)
+#define NS_SCALE(t) ((uint32_t)(t)->p[P_FM2_REL] % 7u)
+#define NS_RESTS(t) ((uint32_t)(t)->p[P_FM3_ATK] % 11u)
+#define NS_ENT(t) ((uint32_t)(t)->p[P_FM3_DEC] & 3u)
+static void nano_sq_keep_r(track_t *t)                                  /* the pattern that is there, kept for Random's Off */
+{
+    uint32_t k;
+    for (k = 0; k < NSTEP; k++) {
+        step_t *s = &t->step[k];
+        s->note[1] = (uint8_t)nano_sq_note(s);
+        s->acc = (uint8_t)((s->acc & ~(3u << 2)) | ((s->acc & 3u) << 2));
+    }
+}
+static void nano_sq_keep_m(track_t *t)
+{
+    uint32_t k;
+    for (k = 0; k < NSTEP; k++) {
+        step_t *s = &t->step[k];
+        s->note[2] = (uint8_t)nano_sq_note(s);
+        s->acc = (uint8_t)((s->acc & ~(3u << 4)) | ((s->acc & 3u) << 4));
+    }
+}
+static void nano_sq_back(track_t *t, uint32_t m)                        /* m 0: Random's pattern back, 1: Mutate's base */
+{
+    uint32_t k;
+    for (k = 0; k < NSTEP; k++) {
+        step_t *s = &t->step[k];
+        nano_sq_put(s, m ? s->note[2] : s->note[1], (s->acc >> (m ? 4 : 2)) & 3u);
+    }
+}
+/* Random: position i (1..99) is a seed; the same position gives the same pattern. 0 puts the pattern back */
+static void nano_sq_random(track_t *t, uint32_t i, uint32_t last)
+{
+    uint32_t k, pool[36], np = 0, o, q, root = nano_sq_root(last), sc = NS_SCALE(t), len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP);
+    if (!i) {
+        if (NS_RND_POS(t))
+            nano_sq_back(t, 0);
+        NS_RND_POS(t) = 0;
+        NS_MUT_POS(t) = 0;
+        return;
+    }
+    if (!NS_RND_POS(t))
+        nano_sq_keep_r(t);
+    NS_RND_POS(t) = (int16_t)i;
+    NS_MUT_POS(t) = 0;
+    nano_sq_a = i * 2654435761u + 1013904223u;
+    for (o = 0; o < NS_RANGE(t); o++)
+        for (q = 0; q < NS_SCN[sc]; q++)
+            pool[np++] = NS_SC[sc][q] + 12u * o;
+    for (k = 0; k < len; k++) {
+        uint32_t r = nano_sq_rnd(), d = nano_sq_lt(r, 3, 10) ? 0u : nano_sq_lt(r, 65, 100) ? 1u : nano_sq_lt(r, 9, 10) ? 2u : 3u, n = NS_REST;
+        if (k == 0u) {
+            nano_sq_rnd();                                              /* (the pitch is drawn, then the root replaces it) */
+            n = root;
+        } else if (!nano_sq_lt(nano_sq_rnd(), NS_RESTS(t), 20)) {
+            n = root + pool[nano_sq_below(nano_sq_rnd(), np)];
+            n = n > 127u ? 127u : n;
+        }
+        nano_sq_put(&t->step[k], n, d);
+    }
+}
+/* Mutate: position i (1..99) is a seed that reworks about a quarter of the steps of the pattern that was there (its base, kept
+ * while the position is not 0): a note moves one or two degrees along the scale, jumps an octave, becomes a rest, or changes length;
+ * a rest gets a note. 0 puts the base back */
+static void nano_sq_mutate(track_t *t, uint32_t i, uint32_t last)
+{
+    uint32_t k, root = nano_sq_root(last), sc = NS_SCALE(t), len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), nt = 0, o, q;
+    int32_t tones[7 * 12];
+    if (!i) {
+        if (NS_MUT_POS(t))
+            nano_sq_back(t, 1);
+        NS_MUT_POS(t) = 0;
+        return;
+    }
+    if (!NS_MUT_POS(t))
+        nano_sq_keep_m(t);
+    NS_MUT_POS(t) = (int16_t)i;
+    nano_sq_a = i * 2246822519u + 374761393u;
+    for (o = 0; o < 7u; o++)
+        for (q = 0; q < NS_SCN[sc]; q++)
+            tones[nt++] = (int32_t)root + NS_SC[sc][q] + 12 * ((int32_t)o - 2);
+    nano_sq_back(t, 1);
+    for (k = 0; k < len; k++) {
+        step_t *s = &t->step[k];
+        uint32_t m, base = s->note[2], dur = (s->acc >> 4) & 3u;
+        int32_t b, j;
+        if (!nano_sq_lt(nano_sq_rnd(), 28, 100))
+            continue;
+        m = nano_sq_rnd();
+        if (base == NS_REST) {                                      /* a rest gets a note */
+            int32_t at = 0, x;
+            for (j = 0, b = 0; j < (int32_t)nt; j++)
+                if (nano_sq_abs(tones[j] - (int32_t)root) < nano_sq_abs(tones[b] - (int32_t)root))
+                    b = j;
+            at = b + (int32_t)nano_sq_below(nano_sq_rnd(), NS_SCN[sc] * 2u);
+            x = tones[at < (int32_t)nt ? at : (int32_t)nt - 1];
+            nano_sq_put(s, (uint32_t)clamp(x, 0, 127), dur);
+            continue;
+        }
+        if (nano_sq_lt(m, 4, 10)) {                                 /* along the scale */
+            int32_t dir = nano_sq_lt(nano_sq_rnd(), 1, 2) ? -1 : 1, st;
+            for (j = 0, b = 0; j < (int32_t)nt; j++)
+                if (nano_sq_abs(tones[j] - (int32_t)base) < nano_sq_abs(tones[b] - (int32_t)base))
+                    b = j;
+            st = (int32_t)(1u + nano_sq_below(nano_sq_rnd(), 2u));
+            b = clamp(b + dir * st, 0, (int32_t)nt - 1);
+            nano_sq_put(s, (uint32_t)clamp(tones[b], 0, 127), dur);
+        } else if (nano_sq_lt(m, 6, 10)) {                          /* an octave */
+            int32_t x = (int32_t)base + (nano_sq_lt(nano_sq_rnd(), 1, 2) ? -12 : 12);
+            nano_sq_put(s, (uint32_t)clamp(x, 0, 127), dur);
+        } else if (nano_sq_lt(m, 8, 10)) {
+            nano_sq_put(s, NS_REST, dur);
+        } else {
+            nano_sq_put(s, base, (dur + 1u + nano_sq_below(nano_sq_rnd(), 3u)) & 3u);
+        }
+    }
+}

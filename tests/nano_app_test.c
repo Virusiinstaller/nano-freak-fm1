@@ -9,6 +9,7 @@
 #include "../firmware/src/fmini_bank.c"
 #include "../firmware/src/nano_app.c"
 #include <stdio.h>
+#include "nano_seq_table.h"
 static void dump(const char *dir, int n)
 {
     char p[256];
@@ -40,6 +41,7 @@ static void nturn(uint32_t role, int32_t d)
     host_ticks += 200000u;
 }
 static int fails;
+static uint32_t stephash(void) { uint32_t h = na_cur, k; const uint8_t *b = (const uint8_t *)trk[0].step; for (k = 0; k < sizeof trk[0].step; k++) h = h * 31u + b[k]; return h; }
 #define CHECK(c, ...) do { if (!(c)) { printf("FAIL: " __VA_ARGS__); printf("\n"); fails++; } } while (0)
 static void draw(void) { na_dirty = 1; ui.force = 1; na_draw(); }
 int main(int argc, char **argv)
@@ -56,8 +58,8 @@ int main(int argc, char **argv)
     dump(dir, n++);
     /* every page of every group draws, with its four knobs moving something */
     {
-        static const uint8_t BTN[8] = {B_FX, B_ENV, B_LFO, B_SCL, B_ARP};
-        for (g = 0; g < 5; g++) {
+        static const uint8_t BTN[8] = {B_FX, B_ENV, B_LFO, B_SCL, B_ARP, B_EDIT, B_SEQ};
+        for (g = 0; g < 7; g++) {
             npress(BTN[g]);
             for (sb = 0; sb < 8; sb++) {
                 uint32_t k;
@@ -67,17 +69,17 @@ int main(int argc, char **argv)
                     const nsub_t *sp = &NGR[na_grp].sub[na_cursub()];
                     int32_t id = sp->k[k];
                     uint32_t before = 0, after = 0;
-                    if (id == NI_NONE) continue;
-                    before = na_pat;
+                    if (id == NI_NONE || id == NI_MXON || id == NI_SQPAT) continue;       /* (MXON: a route is needed, tested below) */
+                    before = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3];
                     for (i = 0; i < P_COUNT; i++) before = before * 31u + (uint32_t)TSEL->p[i];
                     for (i = 0; i < G_COUNT; i++) before = before * 31u + (uint32_t)song.g[i];
                     nturn(EN_K1 + k, 3);
-                    after = na_pat;
+                    after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3];
                     for (i = 0; i < P_COUNT; i++) after = after * 31u + (uint32_t)TSEL->p[i];
                     for (i = 0; i < G_COUNT; i++) after = after * 31u + (uint32_t)song.g[i];
                     if (before == after) {                       /* (at its top: the other way) */
                         nturn(EN_K1 + k, -3);
-                        after = na_pat;
+                        after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3];
                         for (i = 0; i < P_COUNT; i++) after = after * 31u + (uint32_t)TSEL->p[i];
                         for (i = 0; i < G_COUNT; i++) after = after * 31u + (uint32_t)song.g[i];
                     }
@@ -87,6 +89,97 @@ int main(int argc, char **argv)
             }
             npress(B_HOME);
         }
+    }
+    /* SEQ: Random and Mutate give the test bed's patterns */
+    {
+        track_t *t = &trk[0];
+        uint32_t c, k, j;
+        int bad = 0;
+        for (c = 0; c < sizeof NANO_SQ_REF / sizeof NANO_SQ_REF[0]; c++) {
+            const nano_sq_ref_t *r = &NANO_SQ_REF[c];
+            for (k = 0; k < 64u; k++) nano_sq_put(&t->step[k], NS_REST, 0);
+            t->p[P_SLEN] = (int16_t)r->len; t->p[P_FM2_REL] = (int16_t)r->scale; t->p[P_FM2_LEVEL] = (int16_t)(r->oct - 1); t->p[P_FM3_ATK] = (int16_t)r->rest;
+            t->p[P_FM2_DEC] = t->p[P_FM2_SUS] = 0;
+            nano_sq_random(t, (uint32_t)r->seed, (uint32_t)r->root);
+            for (k = 0; k < (uint32_t)r->len; k++)
+                if (nano_sq_note(&t->step[k]) != r->n[k] || (t->step[k].acc & 3u) != r->d[k]) { bad++; if (bad < 4) printf("random case %u step %u: %u/%u, test bed %u/%u\n", (unsigned)c, (unsigned)k, (unsigned)nano_sq_note(&t->step[k]), (unsigned)(t->step[k].acc & 3u), r->n[k], r->d[k]); }
+            for (j = 0; j < 5u; j++) {
+                t->p[P_FM2_REL] = (int16_t)r->m[j].scale;
+                nano_sq_mutate(t, (uint32_t)r->m[j].seed, (uint32_t)r->root);
+                for (k = 0; k < 64u; k++)
+                    if (nano_sq_note(&t->step[k]) != r->m[j].n[k] || (t->step[k].acc & 3u) != r->m[j].d[k]) { bad++; if (bad < 4) printf("mutate case %u/%u step %u: %u/%u, test bed %u/%u\n", (unsigned)c, (unsigned)j, (unsigned)k, (unsigned)nano_sq_note(&t->step[k]), (unsigned)(t->step[k].acc & 3u), r->m[j].n[k], r->m[j].d[k]); }
+                nano_sq_mutate(t, 0, (uint32_t)r->root);                      /* the base back */
+            }
+            nano_sq_random(t, 0, (uint32_t)r->root);                           /* and Random off: the empty pattern back */
+            for (k = 0; k < 64u; k++)
+                if (!nano_sq_rest(&t->step[k])) { bad++; if (bad < 4) printf("random off case %u step %u not back\n", (unsigned)c, (unsigned)k); }
+        }
+        CHECK(!bad, "Random / Mutate differ from the test bed in %d places", bad);
+        /* step lengths: a quaver is two semiquavers of the clock; the steps before it move the swing's off-beat */
+        for (k = 0; k < 64u; k++) nano_sq_put(&t->step[k], 60, 0);
+        t->p[P_SSWING] = 0; song.g[G_SWING] = 0;
+        nano_sq_put(&t->step[1], 62, 1);
+        CHECK(nano_sq_len(t, 1000, 1) == 2000 && nano_sq_len(t, 1000, 0) == 1000 && nano_sq_ticks(&t->step[1]) == 2, "a quaver step lasts two semiquavers");
+        nano_sq_put(&t->step[1], 62, 3);
+        CHECK(nano_sq_len(t, 1000, 1) == 8000 && nano_sq_pos(t, 2) == 9, "a minim step lasts eight");
+        t->p[P_SLEN] = 16;
+    }
+    /* SEQ keys: REC armed, stopped, the keys go into the steps from the cursor; the root of Random is the last key */
+    {
+        track_t *t = &trk[0];
+        npress(B_HOME);
+        npress(B_SEQ);
+        CHECK(na_seqmode == 1 && na_grp == NG_SEQ && !na_arp_on(), "SEQ is a group and a mode, the arp is off");
+        song.playing = 0; na_cur = 0; t->p[P_SLEN] = 16; t->p[P_FM3_DEC] = 1;
+        npress(B_REC);
+        CHECK(na_rec == 1, "REC arms");
+        fa_seq_note(t, 64); fa_seq_note(t, 67);
+        CHECK(t->step[0].note[0] == 64 && t->step[1].note[0] == 67 && na_cur == 2 && (t->step[0].acc & 3) == 1, "two keys, two steps of the REC LENGTH (%d %d)", t->step[0].note[0], t->step[1].note[0]);
+        CHECK(na_root == 67, "the last key is Random's root");
+        npress(B_REC);
+        fa_seq_note(t, 70);
+        CHECK(t->step[2].note[0] != 70 || na_cur != 3, "REC off: a key records nothing");
+        npress(B_PLAY);
+        CHECK(transport_req == 1, "PLAY starts the sequencer in SEQ");
+        transport_req = 0;
+        npress(B_ARP);
+        npress(B_HOME);
+    }
+    /* MATRIX: a route is a slot of the firmware's matrix */
+    {
+        track_t *t = TSEL;
+        uint32_t k;
+        for (k = 0; k < 4u; k++) t->p[P_M1SRC + 3u * k] = t->p[P_M1DST + 3u * k] = t->p[P_M1AMT + 3u * k] = 0;
+        npress(B_EDIT);
+        na_sub[NG_MATRIX] = 0;
+        na_as[0] = 2; na_as[1] = 4; na_as[2] = 5; na_as[3] = 0;
+        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 3);                  /* LFO > CUTOFF */
+        na_set(NI_MXAMT, 50);
+        CHECK(t->p[P_M1SRC] == MS_LFO && t->p[P_M1DST] == MD_CUT && t->p[P_M1AMT] == 32, "LFO > CUTOFF 50%% is slot 1 (src %d dst %d amt %d)", t->p[P_M1SRC], t->p[P_M1DST], t->p[P_M1AMT]);
+        CHECK(na_get(NI_MXAMT) == 50, "the amount reads back");
+        na_set(NI_MXON, 0);
+        CHECK(t->p[P_M1AMT] == 0 && na_get(NI_MXAMT) == 50, "off: the slot is silent, the amount is kept");
+        na_set(NI_MXON, 1);
+        CHECK(t->p[P_M1AMT] == 32, "on again: 50%%");
+        na_set(NI_MXROW, 1); na_set(NI_MXCOL, 0); na_set(NI_MXAMT, -30);
+        CHECK(t->p[P_M1SRC + 3] == MS_ENV && t->p[P_M1DST + 3] == MD_PITCH && t->p[P_M1AMT + 3] == -19, "ENV > PITCH -30%% is slot 2");
+        na_set(NI_MXROW, 0); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 20);
+        na_set(NI_MXROW, 4); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
+        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 40);
+        CHECK(na_get(NI_MXAMT) == 0, "the fifth route is refused");
+        na_set(NI_MXROW, 4); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 0);
+        CHECK(t->p[P_M1SRC + 9] == 0, "an amount of 0 frees the slot");
+        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, 25);   /* LFO > ASSIGN 1 (RESONANCE) */
+        CHECK(t->p[P_M1DST + 9] == MD_E1 + 6, "ASSIGN 1 is RESONANCE by default");
+        na_set(NI_AS1, 4);                                                 /* LFO RATE */
+        CHECK(t->p[P_M1DST + 9] == MD_RATE && na_get(NI_MXAMT) == 25, "ASSIGN 1 changed: the route follows");
+        nturn(EN_SELECT, 1);
+        draw();
+        dump(dir, n++);
+        na_sub[NG_MATRIX] = 0;
+        draw();
+        dump(dir, n++);
+        npress(B_HOME);
     }
     /* the oscillator list: ALGORITHM steps through the 15 types and back */
     {

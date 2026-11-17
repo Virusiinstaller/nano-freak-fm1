@@ -25,6 +25,8 @@ enum {
     NI_LSHAPE, NI_LRATE, NI_LMORPH, NI_UDETUNE,
     NI_ARPRATE, NI_ARPRANGE, NI_ARPPAT, NI_ARPLEN, NI_SWING, NI_ARPLATCH, NI_ARPTYPE, NI_ARPCHORD,
     NI_PBANK, NI_PSLOT,
+    NI_SQPAT, NI_SQRND, NI_SQMUT, NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING, NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST, NI_SQENT, NI_SQRESTS, NI_SQGATE,
+    NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT, NI_AS1, NI_AS2, NI_AS3, NI_AS4,
     NI_COUNT
 };
 static const char *const NT_FTYPE[] = {"LPF", "BPF", "HPF"};
@@ -36,7 +38,15 @@ static const char *const NT_PAT[] = {"UP", "DOWN", "UP/DOWN", "ORDER", "RANDOM",
 static const char *const NT_CHORD[] = {"OFF", "MAJ", "MIN", "7", "MIN7", "MAJ7", "SUS4", "DIM7", "POWER"};
 static const char *const NT_ONOFF[] = {"OFF", "ON"};
 static const char *const NT_TYPE[] = {"MONO", "CHORD"};
+static const char *const NT_SQSCALE[] = {"MIN PENT", "MAJ PENT", "MAJOR", "MINOR", "DORIAN", "BLUES", "CHROMATIC"};
+static const char *const NT_SQDUR[] = {"1/16", "1/8", "1/4", "1/2"};
+static const char *const NT_SQTYPE[] = {"NOTE", "REST"};
+static const char *const NT_SQPAT[] = {"A"};
 static const char *const NT_BANK[] = {"FACTORY"};
+static const char *const NT_MXCOL[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "ASSIGN 1", "ASSIGN 2", "ASSIGN 3", "ASSIGN 4"};
+static const char *const NT_MXROW[] = {"CYC ENV", "ENV", "LFO", "PRESSURE", "KEY"};
+/* the destinations an ASSIGN column can take: the firmware's modulation destinations that are not a column already */
+static const char *const NT_ASG[] = {"OSC K1", "OSC K4", "RESONANCE", "KEY TRACK", "LFO RATE", "AMP", "PAN", "DISTORTION", "CHORUS", "DELAY", "REVERB", "VIBRATO"};
 typedef struct { const char *lb; uint8_t n; const char *const *tx; } nk_t;   /* n 0: continuous 0..100 */
 static const nk_t NK[NI_COUNT] = {
     [NI_WAVE] = {"WAVE", 0, 0}, [NI_TIMBRE] = {"TIMBRE", 0, 0}, [NI_SHAPE] = {"SHAPE", 0, 0}, [NI_FOLD] = {"FOLD", 0, 0}, [NI_POS] = {"POSITION", 0, 0},
@@ -51,6 +61,12 @@ static const nk_t NK[NI_COUNT] = {
     [NI_ARPRATE] = {"RATE", 0, 0}, [NI_ARPRANGE] = {"RANGE", 4, 0}, [NI_ARPPAT] = {"PATTERN", 14, NT_PAT}, [NI_ARPLEN] = {"LENGTH", 16, 0},
     [NI_SWING] = {"SWING", 0, 0}, [NI_ARPLATCH] = {"LATCH", 2, NT_ONOFF}, [NI_ARPTYPE] = {"TYPE", 2, NT_TYPE}, [NI_ARPCHORD] = {"CHORD", 9, NT_CHORD},
     [NI_PBANK] = {"BANK", 1, NT_BANK}, [NI_PSLOT] = {"PRESET", 0, 0},
+    [NI_SQPAT] = {"PATTERN", 1, NT_SQPAT}, [NI_SQRND] = {"RANDOM", 100, 0}, [NI_SQMUT] = {"MUTATE", 100, 0}, [NI_SQLEN] = {"LENGTH", 64, 0},
+    [NI_SQSCALE] = {"SCALE", 7, NT_SQSCALE}, [NI_SQOCT] = {"OCTAVES", 3, 0}, [NI_SQSWING] = {"SWING", 0, 0}, [NI_SQSTEP] = {"STEP", 64, 0},
+    [NI_SQNOTE] = {"NOTE", 128, 0}, [NI_SQDUR] = {"LENGTH", 4, NT_SQDUR}, [NI_SQREST] = {"TYPE", 2, NT_SQTYPE}, [NI_SQENT] = {"REC LENGTH", 4, NT_SQDUR},
+    [NI_SQRESTS] = {"RESTS", 11, 0}, [NI_SQGATE] = {"GATE", 10, 0},
+    [NI_MXCOL] = {"COLUMN", 8, NT_MXCOL}, [NI_MXROW] = {"ROW", 5, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
+    [NI_AS1] = {"A1", 12, NT_ASG}, [NI_AS2] = {"A2", 12, NT_ASG}, [NI_AS3] = {"A3", 12, NT_ASG}, [NI_AS4] = {"A4", 12, NT_ASG},
 };
 
 /* the oscillator list as the page has it: name, the labels of KNOB 1..3, the NANO engine's TYPE (P_E0) */
@@ -78,16 +94,21 @@ static const nsub_t NS_VOICE[] = {{"MONO", 0, {NI_NONE, NI_NONE, NI_NONE, NI_NON
                                   {"PARAPHONIC", 2, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}, {"POLY", 3, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_ARP[] = {{"ARPEGGIO", 0, {NI_ARPRATE, NI_ARPRANGE, NI_ARPPAT, NI_ARPLEN}}, {"ARP TIMING", 1, {NI_SWING, NI_ARPLATCH, NI_NONE, NI_NONE}},
                                 {"ARP TYPE", 2, {NI_ARPTYPE, NI_ARPCHORD, NI_NONE, NI_NONE}}};
+static const nsub_t NS_MX[] = {{"MATRIX", 0, {NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT}}, {"ASSIGN", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};
+static const nsub_t NS_SEQ[] = {{"SEQUENCE", 0, {NI_ARPRATE, NI_SQPAT, NI_SQRND, NI_SQMUT}}, {"SEQ LENGTH", 1, {NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING}},
+                                {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}}};
 static const nsub_t NS_PRE[] = {{"BROWSE", 0, {NI_PBANK, NI_PSLOT, NI_NONE, NI_NONE}}};
 #define NGRP(t, u, a) {t, u, (uint8_t)(sizeof(a) / sizeof((a)[0])), a}
 static const ngrp_t NGR[NG_COUNT] = {
     [NG_OSC] = NGRP("OSCILLATOR", 0, NS_OSC), [NG_ENV] = NGRP("ENV", 1, NS_ENV), [NG_FX] = NGRP("FX", 2, NS_FX), [NG_LFO] = NGRP("LFO", 3, NS_LFO),
-    [NG_ARP] = NGRP("ARP", 5, NS_ARP), [NG_VOICE] = NGRP("VOICE", 7, NS_VOICE), [NG_PRESET] = NGRP("PRESETS", 9, NS_PRE),
+    [NG_MATRIX] = NGRP("MATRIX", 4, NS_MX), [NG_ARP] = NGRP("ARP", 5, NS_ARP), [NG_SEQ] = NGRP("SEQ", 6, NS_SEQ), [NG_VOICE] = NGRP("VOICE", 7, NS_VOICE), [NG_PRESET] = NGRP("PRESETS", 9, NS_PRE),
 };
 
-static uint8_t na_grp, na_sub[NG_COUNT], na_pat, na_slot, na_dirty = 1;
+static uint8_t na_cur, na_root = 48, na_rec, na_seqmode, na_grp, na_sub[NG_COUNT], na_pat, na_slot, na_dirty = 1;
 static int8_t na_ost = -1;
 static char na_hint[44];
+static void na_str(char *d, const char *s);
+static void na_say(const char *s) { na_str(na_hint, s); }
 
 /* the keys of the notes that sound (the arpeggio, the sequence, MIDI): lit like the keys held */
 static uint32_t nano_sound_keys(void)
@@ -101,7 +122,7 @@ static uint32_t nano_sound_keys(void)
                     m |= 1u << k;
     return m;
 }
-static void fa_seq_note(track_t *t, uint32_t note) { (void)t; (void)note; }   /* (ui.c / seq.c hooks of the FMini-1 screen) */
+static void fa_seq_note(track_t *t, uint32_t note);                      /* (seq.c's hook of every key: the root of Random, REC) */
 static void fa_factory_extras(track_t *t, uint32_t n) { (void)t; (void)n; }
 
 static int32_t na_cl(int32_t v, int32_t lo, int32_t hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -140,6 +161,97 @@ static void na_arp_pat_sync(void)                                               
     for (i = 0; i < 14u; i++)
         if (NANO_APAT[i] == TSEL->p[P_AMODE])
             na_pat = (uint8_t)i;
+}
+
+/* ---- MATRIX: the test bed's 5 x 8 grid on the firmware's four routing slots (mod.c). A route is one slot: its source is the grid's
+ * row, its destination the column; with the four slots taken a new route is refused. An ASSIGN column is a destination of the list. */
+static const uint8_t NA_MXSRC[5] = {MS_CYC, MS_ENV, MS_LFO, MS_AT, MS_KEY};
+static const uint8_t NA_MXDST[4] = {MD_PITCH, MD_E1 + 2, MD_E1 + 3, MD_CUT};   /* (MD_E1 + n is P_En) */
+static const uint8_t NA_ASGD[12] = {MD_E1 + 1, MD_E1 + 4, MD_E1 + 6, MD_E1 + 7, MD_RATE, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_VIB};
+static uint8_t na_as[4] = {2, 4, 5, 0}, na_mxr, na_mxc;               /* the ASSIGN columns' destinations, the selected point */
+static int8_t na_mxkeep[5][8];                                       /* a route switched off keeps its amount here */
+static uint8_t na_mxoff[5];                                          /* bit c: the route is off */
+static uint32_t na_mxdst(uint32_t c) { return c < 4u ? NA_MXDST[c] : NA_ASGD[na_as[c - 4u] % 12u]; }
+static int32_t na_mxslot(uint32_t r, uint32_t c)                     /* the slot of the route, or -1 */
+{
+    uint32_t k;
+    for (k = 0; k < 4u; k++)
+        if (TSEL->p[P_M1SRC + 3u * k] == NA_MXSRC[r] && TSEL->p[P_M1DST + 3u * k] == (int16_t)na_mxdst(c))
+            return (int32_t)k;
+    return -1;
+}
+static int32_t na_mxamt(uint32_t r, uint32_t c)                       /* percent, -100..100 */
+{
+    int32_t k = na_mxslot(r, c);
+    if (k < 0)
+        return 0;
+    if ((na_mxoff[r] >> c) & 1u)
+        return na_mxkeep[r][c];
+    return na_cl(TSEL->p[P_M1AMT + 3 * k] * 100 / 64, -100, 100);
+}
+static void na_mxset(uint32_t r, uint32_t c, int32_t pct, int32_t on)  /* 0 for the amount drops the route */
+{
+    track_t *t = TSEL;
+    int32_t k = na_mxslot(r, c);
+    pct = na_cl(pct, -100, 100);
+    if (k < 0) {
+        if (!pct)
+            return;
+        for (k = 0; k < 4; k++)
+            if (!t->p[P_M1SRC + 3 * k] || !t->p[P_M1DST + 3 * k] || !t->p[P_M1AMT + 3 * k])
+                break;
+        if (k == 4) {
+            na_say("MATRIX FULL: 4 ROUTES");
+            return;
+        }
+        na_put(P_M1SRC + 3u * (uint32_t)k, NA_MXSRC[r]);
+        na_put(P_M1DST + 3u * (uint32_t)k, (int32_t)na_mxdst(c));
+    }
+    na_mxoff[r] = (uint8_t)(on ? na_mxoff[r] & ~(1u << c) : na_mxoff[r] | (1u << c));
+    na_mxkeep[r][c] = (int8_t)pct;
+    if (!pct) {                                                      /* a route of nothing is a free slot */
+        na_put(P_M1SRC + 3u * (uint32_t)k, 0);
+        na_put(P_M1DST + 3u * (uint32_t)k, 0);
+        na_mxoff[r] &= (uint8_t)~(1u << c);
+    }
+    na_put(P_M1AMT + 3u * (uint32_t)k, on ? pct * 64 / 100 : 0);
+}
+
+/* ---- SEQ: the steps are the track's (nano_ctl.c); the cursor and the record flag are the screen's */
+static void na_sq_reroll(void)                           /* the scale, the rests and the octaves redo a Random that is on */
+{
+    track_t *t = TSEL;
+    if (t->p[P_FM2_DEC])
+        nano_sq_random(t, (uint32_t)t->p[P_FM2_DEC], na_root);
+}
+static void na_sq_new(void)                              /* a step written by hand or recorded is a new base for Random and Mutate */
+{
+    TSEL->p[P_FM2_DEC] = 0;
+    TSEL->p[P_FM2_SUS] = 0;
+}
+static const step_t *na_sq_step(void) { return &TSEL->step[na_cur % NSTEP]; }
+/* a key: it is the root Random and Mutate build on; with REC armed in SEQ it is recorded: stopped, into the step under the cursor (which moves on),
+ * playing, over the pitch of the step that sounds */
+static void fa_seq_note(track_t *t, uint32_t note)
+{
+    if (note > 127u)
+        return;
+    na_root = (uint8_t)note;
+    if (na_rec && na_seqmode && t == &trk[0]) {
+        uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), i;
+        if (song.playing) {
+            step_t *s;
+            i = t->seq_idx % len;
+            s = &t->step[i];
+            nano_sq_put(s, note, nano_sq_rest(s) ? NS_ENT(t) : (uint32_t)(s->acc & 3u));
+        } else {
+            i = na_cur % len;
+            nano_sq_put(&t->step[i], note, NS_ENT(t));
+            na_cur = (uint8_t)((i + 1u) % len);
+        }
+        na_sq_new();
+        na_dirty = 1;
+    }
 }
 
 /* the value of control id: 0..100, or the step */
@@ -191,6 +303,25 @@ static int32_t na_get(int32_t id)
     case NI_ARPTYPE: return nano_atype(t);
     case NI_ARPCHORD: return (int32_t)nano_achord(t);
     case NI_PSLOT: return na_slot;
+    case NI_SQPAT: return 0;
+    case NI_SQRND: return na_cl(p[P_FM2_DEC], 0, 99);
+    case NI_SQMUT: return na_cl(p[P_FM2_SUS], 0, 99);
+    case NI_SQLEN: return na_cl(p[P_SLEN], 1, 64) - 1;
+    case NI_SQSCALE: return NS_SCALE(t);
+    case NI_SQOCT: return (int32_t)NS_RANGE(t) - 1;
+    case NI_SQSWING: return na_cl(p[P_SSWING], 0, 100);
+    case NI_SQSTEP: return na_cur;
+    case NI_SQNOTE: return nano_sq_rest(na_sq_step()) ? 60 : na_sq_step()->note[0];
+    case NI_SQDUR: return na_sq_step()->acc & 3;
+    case NI_SQREST: return nano_sq_rest(na_sq_step());
+    case NI_SQENT: return NS_ENT(t);
+    case NI_SQRESTS: return NS_RESTS(t);
+    case NI_SQGATE: return na_cl((p[P_SGATE] * 100 + 63) / 127 / 10 - 1, 0, 9);
+    case NI_MXCOL: return na_mxc;
+    case NI_MXROW: return na_mxr;
+    case NI_MXON: return !((na_mxoff[na_mxr] >> na_mxc) & 1u);
+    case NI_MXAMT: return na_mxamt(na_mxr, na_mxc);
+    case NI_AS1: case NI_AS2: case NI_AS3: case NI_AS4: return na_as[id - NI_AS1];
     default: return 0;
     }
 }
@@ -199,7 +330,7 @@ static void na_set(int32_t id, int32_t v)
 {
     track_t *t = TSEL;
     const nk_t *k = &NK[id];
-    v = na_cl(v, 0, k->n ? (int32_t)k->n - 1 : 100);
+    v = id == NI_MXAMT ? na_cl(v, -100, 100) : na_cl(v, 0, k->n ? (int32_t)k->n - 1 : 100);
     switch (id) {
     case NI_WAVE: na_put(P_E1, na_f127(v)); break;
     case NI_TIMBRE: na_put(P_E2, na_f127(v)); break;
@@ -247,6 +378,53 @@ static void na_set(int32_t id, int32_t v)
     case NI_ARPLATCH: na_put(P_AHOLD, v); break;
     case NI_ARPTYPE: na_put(P_LN2, v); break;
     case NI_ARPCHORD: na_put(P_LN1, v); break;
+    case NI_SQPAT: break;
+    case NI_SQRND: nano_sq_random(t, (uint32_t)v, na_root); break;
+    case NI_SQMUT: nano_sq_mutate(t, (uint32_t)v, na_root); break;
+    case NI_SQLEN: na_put(P_SLEN, v + 1); break;
+    case NI_SQSCALE: na_put(P_FM2_REL, v); na_sq_reroll(); break;
+    case NI_SQOCT: na_put(P_FM2_LEVEL, v); na_sq_reroll(); break;
+    case NI_SQSWING: na_put(P_SSWING, v); break;
+    case NI_SQSTEP: na_cur = (uint8_t)v; break;
+    case NI_SQNOTE: {
+        step_t *s = &t->step[na_cur % NSTEP];
+        nano_sq_put(s, (uint32_t)v, s->acc & 3u);
+        na_sq_new();
+        break;
+    }
+    case NI_SQDUR: {
+        step_t *s = &t->step[na_cur % NSTEP];
+        s->acc = (uint8_t)((s->acc & ~3u) | (uint32_t)v);
+        na_sq_new();
+        break;
+    }
+    case NI_SQREST: {
+        step_t *s = &t->step[na_cur % NSTEP];
+        nano_sq_put(s, v ? NS_REST : 60u, s->acc & 3u);
+        na_sq_new();
+        break;
+    }
+    case NI_SQENT: na_put(P_FM3_DEC, v); break;
+    case NI_SQRESTS: na_put(P_FM3_ATK, v); na_sq_reroll(); break;
+    case NI_SQGATE: na_put(P_SGATE, (v + 1) * 127 / 10); break;
+    case NI_MXCOL: na_mxc = (uint8_t)v; break;
+    case NI_MXROW: na_mxr = (uint8_t)v; break;
+    case NI_MXON: na_mxset(na_mxr, na_mxc, na_mxamt(na_mxr, na_mxc), v); break;
+    case NI_MXAMT: na_mxset(na_mxr, na_mxc, v, !((na_mxoff[na_mxr] >> na_mxc) & 1u)); break;
+    case NI_AS1: case NI_AS2: case NI_AS3: case NI_AS4: {          /* the routes of that column follow */
+        uint32_t c = (uint32_t)(id - NI_AS1) + 4u, r;
+        int32_t amt[5], on[5];
+        for (r = 0; r < 5u; r++) {
+            amt[r] = na_mxamt(r, c);
+            on[r] = !((na_mxoff[r] >> c) & 1u);
+            na_mxset(r, c, 0, 0);
+        }
+        na_as[c - 4u] = (uint8_t)v;
+        for (r = 0; r < 5u; r++)
+            if (amt[r])
+                na_mxset(r, c, amt[r], on[r]);
+        break;
+    }
     default: break;
     }
 }
@@ -266,7 +444,6 @@ static void na_cat(char *d, const char *s)
 {
     na_str(d + str_len(d), s);
 }
-static void na_say(const char *s) { na_str(na_hint, s); }
 
 /* the text of control id's value */
 static void na_text(int32_t id, char *out)
@@ -287,6 +464,42 @@ static void na_text(int32_t id, char *out)
     } else if (id == NI_SWING) {
         fmt_int(out, 50 + v / 4);
         na_cat(out, "%");
+    } else if (id == NI_MXAMT) {
+        fmt_int(out, v < 0 ? -v : v);
+        na_str(out + str_len(out), "%");
+        if (v >= 0)
+            na_cat(out, "");
+        else {
+            uint32_t n = str_len(out), i;
+            for (i = n + 1u; i > 0u; i--)
+                out[i] = out[i - 1u];
+            out[0] = '-';
+        }
+    } else if (id == NI_SQRND || id == NI_SQMUT) {
+        if (!v)
+            na_str(out, "OFF");
+        else {
+            na_str(out, id == NI_SQRND ? "ROLL " : "MUT ");
+            fmt_int(out + str_len(out), v);
+        }
+    } else if (id == NI_SQLEN || id == NI_SQSTEP) {
+        fmt_int(out, v + 1);
+    } else if (id == NI_SQOCT) {
+        fmt_int(out, v + 1);
+        na_cat(out, " OCT");
+    } else if (id == NI_SQSWING) {
+        fmt_int(out, 50 + v / 4);
+        na_cat(out, "%");
+    } else if (id == NI_SQRESTS) {
+        fmt_int(out, v * 5);
+        na_cat(out, "%");
+    } else if (id == NI_SQGATE) {
+        fmt_int(out, (v + 1) * 10);
+        na_cat(out, "%");
+    } else if (id == NI_SQNOTE) {
+        static const char *const NN[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        na_str(out, NN[v % 12]);
+        fmt_int(out + str_len(out), v / 12 - 1);
     } else if (id == NI_PSLOT) {
         fmt_int(out, v + 1);
     } else {
@@ -338,7 +551,7 @@ static void na_sync(void)
     na_str(nf_ui_str(UIS_PRESET), ENGINES[ENGI_NANO]->presets[na_slot % na_npre()].name);
     nf_ui_set(UI_OCT, song.octave);
     nf_ui_set(UI_POLY, t->p[P_VOICE] == V_MONO ? 0 : t->p[P_VOICE] == V_UNISON ? 1 : t->p[P_VOICE] == V_POLY ? 3 : 0);
-    nf_ui_set(UI_PLAY, na_arp_on());
+    nf_ui_set(UI_PLAY, na_seqmode ? song.playing != 0u : na_arp_on());
     nf_ui_set(UI_TYPE, (int)ty);
     nf_ui_set(UI_NTYPES, 15);
     nf_ui_set(UI_STEP, -1);
@@ -374,6 +587,38 @@ static void na_sync(void)
         nf_ui_set(UI_P, na_pat), nf_ui_set(UI_P + 1, na_get(NI_ARPRANGE) + 1), nf_ui_set(UI_P + 2, 0), nf_ui_set(UI_P + 3, na_get(NI_ARPLEN) + 1);
         nf_ui_set(UI_P + 4, na_get(NI_SWING)), nf_ui_set(UI_P + 5, na_get(NI_ARPLATCH)), nf_ui_set(UI_P + 6, na_get(NI_ARPTYPE)), nf_ui_set(UI_P + 7, na_get(NI_ARPCHORD));
         break;
+    case NG_SEQ: {
+        uint32_t k;
+        nf_ui_set(UI_P, 0), nf_ui_set(UI_P + 1, na_get(NI_SQRND)), nf_ui_set(UI_P + 2, na_get(NI_SQLEN) + 1), nf_ui_set(UI_P + 3, na_get(NI_SQENT));
+        nf_ui_set(UI_P + 8, (na_get(NI_SQGATE) + 1) * 10), nf_ui_set(UI_P + 10, na_get(NI_SQSCALE)), nf_ui_set(UI_P + 11, na_get(NI_SQRESTS) * 5);
+        nf_ui_set(UI_P + 12, na_get(NI_SQOCT) + 1), nf_ui_set(UI_P + 13, na_get(NI_SQMUT));
+        for (k = 0; k < NSTEP; k++)
+            nf_ui_set(UI_SEQ + (int)k, (int)(nano_sq_note(&t->step[k]) | (uint32_t)(t->step[k].acc & 3u) << 8));
+        nf_ui_set(UI_SEQCUR, na_cur), nf_ui_set(UI_SEQREC, na_rec);
+        nf_ui_set(UI_STEP, song.playing && na_seqmode ? (int)(t->seq_idx % (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP)) : -1);
+        break;
+    }
+    case NG_MATRIX: {
+        uint32_t r, c;
+        for (r = 0; r < 5u; r++)
+            for (c = 0; c < 8u; c++) {
+                int32_t m = na_mxamt(r, c);
+                nf_ui_set(UI_MX + (int)(r * 8u + c), (na_mxoff[r] >> c) & 1u ? (m >= 0 ? m + 1000 : m - 1000) : m);
+            }
+        nf_ui_set(UI_SEL_ROW, na_mxr), nf_ui_set(UI_SEL_COL, na_mxc);
+        if (sp->ui == 0u) {
+            char *h = nf_ui_str(UIS_L0);
+            na_str(h, NT_MXROW[na_mxr]);
+            na_cat(h, " > ");
+            na_cat(h, NT_MXCOL[na_mxc]);
+            na_cat(h, " ");
+            na_text(NI_MXAMT, b);
+            na_cat(h, b);
+            if ((na_mxoff[na_mxr] >> na_mxc) & 1u)
+                na_cat(h, " OFF");
+        }
+        break;
+    }
     case NG_PRESET: {                                    /* the list: six rows round the preset shown */
         uint32_t n = na_npre(), first = na_slot < 3u ? 0u : na_slot + 3u >= n ? (n > 6u ? n - 6u : 0u) : na_slot - 3u, rows = n < 6u ? n : 6u;
         for (i = 0; i < rows; i++) {
@@ -416,7 +661,7 @@ static void na_knob(uint32_t k, int32_t s)
     if (id == NI_NONE || na_grp == NG_PRESET)
         return;
     fmg_force_page = 0;
-    v = na_get(id) + (NK[id].n ? (s > 0 ? 1 : -1) : id == NI_FDRIVE || id == NI_FCLIP ? (s > 0 ? 15 : -15) : fmg_acc(EN_K1 + k, s, 100));   /* (DRIVE, CLIP: seven steps) */
+    v = na_get(id) + (id == NI_MXAMT ? fmg_acc(EN_K1 + k, s, 100) : (NK[id].n ? (NK[id].n > 16 ? fmg_acc(EN_K1 + k, s, NK[id].n - 1) : s > 0 ? 1 : -1) : id == NI_FDRIVE || id == NI_FCLIP ? (s > 0 ? 15 : -15) : fmg_acc(EN_K1 + k, s, 100)));   /* (DRIVE, CLIP: seven steps) */
     fmg_force_page = -1;
     na_set(id, v);
     na_say(NK[id].lb);
@@ -448,9 +693,33 @@ static void na_buttons(uint32_t pressed)
         na_grp = NG_OSC;
         na_dirty = 1;
     }
+    if ((pressed >> panel.btn[B_ARP]) & 1u) {                 /* ARP and SEQ are the two ways the keys play a pattern: one at a time */
+        na_seqmode = 0;
+        if (song.playing)
+            transport_req = 2;
+    }
+    if ((pressed >> panel.btn[B_SEQ]) & 1u) {
+        na_seqmode = 1;
+        na_put(P_AMODE, 0);
+    }
+    if ((pressed >> panel.btn[B_REC]) & 1u) {
+        na_rec = !na_rec;
+        if (na_rec && !na_seqmode) {
+            na_seqmode = 1;
+            na_put(P_AMODE, 0);
+            na_grp = NG_SEQ;
+        }
+        na_say(na_rec ? "REC ON: PLAY KEYS" : "REC OFF");
+        na_dirty = 1;
+    }
     if ((pressed >> panel.btn[B_PLAY]) & 1u) {
-        na_put(P_AMODE, na_arp_on() ? 0 : NANO_APAT[na_pat]);
-        na_say(na_arp_on() ? "ARP ON" : "ARP OFF");
+        if (na_seqmode) {
+            transport_req = (song.playing || transport_req == 1u) ? 2u : 1u;
+            na_say(transport_req == 1u ? "SEQ PLAY" : "SEQ STOP");
+        } else {
+            na_put(P_AMODE, na_arp_on() ? 0 : NANO_APAT[na_pat]);
+            na_say(na_arp_on() ? "ARP ON" : "ARP OFF");
+        }
         na_dirty = 1;
     }
     if ((pressed >> panel.btn[B_OCTDN]) & 1u) {
@@ -532,7 +801,8 @@ static void na_leds(void)
         static const uint8_t GB[NG_COUNT] = {B_HOME, B_ENV, B_FX, B_LFO, B_EDIT, B_ARP, B_SEQ, B_SCL, B_GLO, B_SAVE};
         led_put(nl, panel.btn[GB[na_grp]], 1);
     }
-    led_put(nl, panel.btn[B_PLAY], na_arp_on());
+    led_put(nl, panel.btn[B_PLAY], na_seqmode ? song.playing != 0u : na_arp_on());
+    led_put(nl, panel.btn[B_REC], na_rec != 0u);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);
     led_put(nl, panel.btn[B_OCTUP], song.octave > 0);
     {
