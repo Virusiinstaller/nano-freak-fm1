@@ -229,12 +229,12 @@ int main(int argc, char **argv)
         pshow("LFO morph 0", on); pshow("LFO morph 100", on2);
         CHECK(fabs(on2.SP - on.SP) > 0.5 || fabs(on2.P - on.P) > 0.5, "the LFO MORPH changes nothing");
     }
-    /* every matrix route, row x column, at 100 %: it has to change the sound (the PRESSURE row needs a pressure the host has not) */
+    /* every matrix route, row x column, at 100 %: it has to change the sound */
     {
-        static const char *RN[5] = {"CYC ENV", "ENV", "LFO", "PRESSURE", "KEY"}, *CN[8] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "A1", "A2", "A3", "A4"};
+        static const char *RN[4] = {"CYC ENV", "ENV", "LFO", "KEY"}, *CN[8] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "A1", "A2", "A3", "A4"};
         uint32_t r, c; prof_t base;
         setup_bright(); base = take();
-        for (r = 0; r < 5u; r++)
+        for (r = 0; r < 4u; r++)
             for (c = 0; c < 8u; c++) {
                 prof_t p; char nm[64];
                 setup_bright(); trk[0].p[P_E5] = 40;
@@ -245,7 +245,7 @@ int main(int argc, char **argv)
                 snprintf(nm, sizeof nm, "route %s -> %s", RN[r], CN[c]);
                 if (fabs(p.L - base.L) > 0.02 * base.L || fabs(p.B - base.B) > 0.03 * base.B || fabs(p.P - base.P) > 1.0 || p.SP > base.SP + 1.0 || p.SB > base.SB + 0.01 || p.SL > base.SL + 0.01)
                     printf("ok   %s\n", nm);
-                else { if (r != 3u && !(r == 4u && c == 7u) && !(r == 0u && c == 6u) && !(r == 1u && c == 5u)) fails++; printf("NONE %s: level %.3f/%.3f bright %.3f/%.3f pitch %.1f/%.1f\n", nm, base.L, p.L, base.B, p.B, base.P, p.P); }
+                else { if (!(r == 3u && c == 7u) && !(r == 0u && c == 6u) && !(r == 1u && c == 5u)) fails++; printf("NONE %s: level %.3f/%.3f bright %.3f/%.3f pitch %.1f/%.1f\n", nm, base.L, p.L, base.B, p.B, base.P, p.P); }
             }
     }
     /* MIDI in (the emulator's keyboard): a note on channel 1 sounds, and three of them under the ARP play three pitches */

@@ -55,7 +55,7 @@ static const char *const NT_BACT[] = {"CONNECT", "SCAN", "DISCON.", "FORGET"};
 static const char *const NT_SUPAGE[] = {"OSC", "LAST"};
 static const char *const NT_SURAD[] = {"OFF", "LAST"};
 static const char *const NT_MXCOL[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "ASSIGN 1", "ASSIGN 2", "ASSIGN 3", "ASSIGN 4"};
-static const char *const NT_MXROW[] = {"CYC ENV", "ENV", "LFO", "PRESSURE", "KEY"};
+static const char *const NT_MXROW[] = {"CYC ENV", "ENV", "LFO", "KEY"};
 /* the destinations an ASSIGN column can take: the firmware's modulation destinations that are not a column already */
 static const char *const NT_ASG[] = {"OSC K1", "OSC K4", "RESONANCE", "KEY TRACK", "LFO RATE", "AMP", "PAN", "DISTORTION", "CHORUS", "DELAY", "REVERB", "VIBRATO"};
 typedef struct { const char *lb; uint8_t n; const char *const *tx; } nk_t;   /* n 0: continuous 0..100 */
@@ -76,7 +76,7 @@ static const nk_t NK[NI_COUNT] = {
     [NI_SQSCALE] = {"SCALE", 7, NT_SQSCALE}, [NI_SQOCT] = {"OCTAVES", 3, 0}, [NI_SQSWING] = {"SWING", 0, 0}, [NI_SQSTEP] = {"STEP", 64, 0},
     [NI_SQNOTE] = {"NOTE", 128, 0}, [NI_SQDUR] = {"LENGTH", 4, NT_SQDUR}, [NI_SQREST] = {"TYPE", 2, NT_SQTYPE}, [NI_SQENT] = {"REC LENGTH", 4, NT_SQDUR},
     [NI_SQRESTS] = {"RESTS", 11, 0}, [NI_SQGATE] = {"GATE", 10, 0},
-    [NI_MXCOL] = {"COLUMN", 8, NT_MXCOL}, [NI_MXROW] = {"ROW", 5, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
+    [NI_MXCOL] = {"COLUMN", 8, NT_MXCOL}, [NI_MXROW] = {"ROW", 4, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
     [NI_AS1] = {"A1", 12, NT_ASG}, [NI_AS2] = {"A2", 12, NT_ASG}, [NI_AS3] = {"A3", 12, NT_ASG}, [NI_AS4] = {"A4", 12, NT_ASG},
     [NI_GBT] = {"BLUETOOTH", 2, NT_ONOFF}, [NI_GBTA] = {"BT AUDIO", 2, NT_ONOFF}, [NI_GROLE] = {"BLE ROLE", 2, NT_ROLE}, [NI_GCLK] = {"CLOCK", 2, NT_CLK},
     [NI_MMODE] = {"ARP OUT", 3, NT_MMODE}, [NI_MCH] = {"OUT CH", 16, 0}, [NI_MPORT] = {"OUT PORT", 8, NT_PORT}, [NI_MKEY] = {"KEY OUT", 2, NT_ONOFF},
@@ -194,14 +194,14 @@ static void na_arp_pat_sync(void)                                               
             na_pat = (uint8_t)i;
 }
 
-/* ---- MATRIX: the test bed's 5 x 8 grid on the firmware's four routing slots (mod.c). A route is one slot: its source is the grid's
+/* ---- MATRIX: the 4 x 8 grid (the test bed's without its PRESSURE row: the FM-1 has no pressure) on the firmware's four routing slots (mod.c). A route is one slot: its source is the grid's
  * row, its destination the column; with the four slots taken a new route is refused. An ASSIGN column is a destination of the list. */
-static const uint8_t NA_MXSRC[5] = {MS_CYC, MS_ENV, MS_LFO, MS_AT, MS_KEY};
+static const uint8_t NA_MXSRC[4] = {MS_CYC, MS_ENV, MS_LFO, MS_KEY};
 static const uint8_t NA_MXDST[4] = {MD_PITCH, MD_E1 + 2, MD_E1 + 3, MD_CUT};   /* (MD_E1 + n is P_En) */
 static const uint8_t NA_ASGD[12] = {MD_E1 + 1, MD_E1 + 4, MD_E1 + 6, MD_E1 + 7, MD_RATE, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_VIB};
 static uint8_t na_as[4] = {2, 4, 5, 0}, na_mxr, na_mxc;               /* the ASSIGN columns' destinations, the selected point */
-static int8_t na_mxkeep[5][8];                                       /* a route switched off keeps its amount here */
-static uint8_t na_mxoff[5];                                          /* bit c: the route is off */
+static int8_t na_mxkeep[4][8];                                       /* a route switched off keeps its amount here */
+static uint8_t na_mxoff[4];                                          /* bit c: the route is off */
 static uint32_t na_mxdst(uint32_t c) { return c < 4u ? NA_MXDST[c] : NA_ASGD[na_as[c - 4u] % 12u]; }
 static int32_t na_mxslot(uint32_t r, uint32_t c)                     /* the slot of the route, or -1 */
 {
@@ -506,14 +506,14 @@ static void na_set(int32_t id, int32_t v)
     case NI_MXAMT: na_mxset(na_mxr, na_mxc, v, !((na_mxoff[na_mxr] >> na_mxc) & 1u)); break;
     case NI_AS1: case NI_AS2: case NI_AS3: case NI_AS4: {          /* the routes of that column follow */
         uint32_t c = (uint32_t)(id - NI_AS1) + 4u, r;
-        int32_t amt[5], on[5];
-        for (r = 0; r < 5u; r++) {
+        int32_t amt[4], on[4];
+        for (r = 0; r < 4u; r++) {
             amt[r] = na_mxamt(r, c);
             on[r] = !((na_mxoff[r] >> c) & 1u);
             na_mxset(r, c, 0, 0);
         }
         na_as[c - 4u] = (uint8_t)v;
-        for (r = 0; r < 5u; r++)
+        for (r = 0; r < 4u; r++)
             if (amt[r])
                 na_mxset(r, c, amt[r], on[r]);
         break;
@@ -800,7 +800,7 @@ static void na_sync(void)
     }
     case NG_MATRIX: {
         uint32_t r, c;
-        for (r = 0; r < 5u; r++)
+        for (r = 0; r < 4u; r++)
             for (c = 0; c < 8u; c++) {
                 int32_t m = na_mxamt(r, c);
                 nf_ui_set(UI_MX + (int)(r * 8u + c), (na_mxoff[r] >> c) & 1u ? (m >= 0 ? m + 1000 : m - 1000) : m);

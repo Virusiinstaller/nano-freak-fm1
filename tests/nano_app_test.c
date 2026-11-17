@@ -277,10 +277,10 @@ int main(int argc, char **argv)
         na_set(NI_MXROW, 1); na_set(NI_MXCOL, 0); na_set(NI_MXAMT, -30);
         CHECK(t->p[P_M1SRC + 3] == MS_ENV && t->p[P_M1DST + 3] == MD_PITCH && t->p[P_M1AMT + 3] == -19, "ENV > PITCH -30%% is slot 2");
         na_set(NI_MXROW, 0); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 20);
-        na_set(NI_MXROW, 4); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
-        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 40);
+        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
+        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 40);
         CHECK(na_get(NI_MXAMT) == 0, "the fifth route is refused");
-        na_set(NI_MXROW, 4); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 0);
+        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 0);
         CHECK(t->p[P_M1SRC + 9] == 0, "an amount of 0 frees the slot");
         na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, 25);   /* LFO > ASSIGN 1 (RESONANCE) */
         CHECK(t->p[P_M1DST + 9] == MD_E1 + 6, "ASSIGN 1 is RESONANCE by default");
