@@ -300,6 +300,8 @@ int main(int argc, char **argv)
         for (i = 0; i < 15u; i++) {
             nturn(EN_ALGO, 1);
             seen |= 1u << TSEL->p[P_E0];
+            draw();
+            dump(dir, 100 + (int)i);
         }
         CHECK(seen == 0x7FFFu, "ALGORITHM reaches all 15 NANO types (%x)", (unsigned)seen);
         CHECK(na_type() == 0, "15 steps come round");

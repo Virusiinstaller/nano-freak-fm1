@@ -626,6 +626,86 @@ static void na_text(int32_t id, char *out)
     }
 }
 
+
+/* ---------------------------------------------------------- the waveform preview --- */
+/* The oscillator page's picture: two cycles of the sound, drawn from the type and its three knobs. It is a sketch in integer
+ * maths (the shape each type makes), not the engine's output: the test bed's page renders the real engine into it; here
+ * the audio ISR owns the voices and a render from the screen thread would race it. WAVETABLE is the real table. */
+#define NW_LEN 120
+static int32_t nw_saw(uint32_t ph) { return (int32_t)ph >> 16; }
+static int32_t nw_tri(uint32_t ph) { int32_t x = (int32_t)(ph >> 16) - 32768; x = x < 0 ? -x : x; return (x - 16384) * 2; }
+static int32_t nw_sqr(uint32_t ph) { return ph < 0x80000000u ? 28000 : -28000; }
+static int32_t nw_fold(int32_t x)                          /* a triangle fold of x (the range 32768 is the fold point) */
+{
+    x = (x + 32768) & 0x3FFFF;
+    x = x > 0x1FFFF ? 0x3FFFF - x : x;
+    return x * 2 - 0x1FFFF + 0;                            /* (a fold back and forth) */
+}
+static int32_t na_wave_at(uint32_t ty, uint32_t ph, uint32_t i, const int16_t *p)
+{
+    int32_t a = p[P_E1], b = p[P_E2], c = p[P_E3], x, y, k;
+    switch (ty) {
+    case 0: {                                              /* BASICWAVES: MORPH sine > tri > saw > square, SYM skews, SUB a square an octave down */
+        uint32_t u = ph >> 16, d = (uint32_t)(32768 + (b - 64) * 240);
+        int32_t m = a * 3, f = m & 127, w0, w1;
+        u = u < d ? u * 32768u / d : 32768u + (u - d) * 32768u / (65536u - d);
+        ph = u << 16;
+        w0 = m < 128 ? nano_sin824(ph) : m < 256 ? nw_tri(ph) : nw_saw(ph);
+        w1 = m < 128 ? nw_tri(ph) : m < 256 ? nw_saw(ph) : nw_sqr(ph);
+        if (m >= 381) f = 127, w0 = w1;
+        y = w0 + (((w1 - w0) * f) >> 7);
+        return y + (nw_sqr(ph >> 1 | (i >= NW_LEN / 2u ? 0x80000000u : 0u)) * c >> 8);
+    }
+    case 7: case 13: case 11: case 10:                    /* SUPERWAVE, V.ANALOG, SAW, BASS: saws a little apart */
+        k = ty == 7 ? b / 6 : ty == 13 ? a / 6 : 4 + c / 20;
+        y = nw_saw(ph) + nw_saw(ph + (uint32_t)(ph / 1000u) * (uint32_t)k) + nw_saw(ph - (uint32_t)(ph / 1000u) * (uint32_t)k);
+        return ty == 13 ? y / 3 + (nw_sqr(ph) * c >> 8) : ty == 10 ? y / 3 + (nw_sqr(ph >> 1) >> 1) : y / 3;
+    case 12: {                                             /* WAVETABLE: the table E1 and the wave E2 of it, as the engine reads them */
+        const int8_t *w = NANO_WT + (uint32_t)(a * 16 / 128) * 16u * 129u + (uint32_t)(b * 15 / 127) * 129u;
+        return nano_wt_rd(w, ph) * 4;
+    }
+    case 1:                                                /* TWO OP FM: the ratio E1 (1..8), the amount E2 */
+        x = 1 + a * 7 / 127;
+        return nano_sin824(ph + (uint32_t)nano_sin824(ph * (uint32_t)x) * (uint32_t)(b * 20861 / 20) * 1u);
+    case 2:                                                /* WAVESHAPER: a wave pushed into a fold, AMOUNT E2, ASYM E3 */
+        x = a < 64 ? nano_sin824(ph) : nw_tri(ph);
+        return nw_fold(x * (1 + b / 24) + (c - 64) * 300);
+    case 3:                                                /* FORMANT: a sine of the formant's pitch under a window */
+        x = nw_saw(ph) + 32768;
+        y = (65535 - x) >> 1;
+        return (nano_sin824(ph * (uint32_t)(2 + b / 16)) >> 1) * (y >> 7) >> 8;
+    case 5: case 6: case 8:                                /* CHORDS, MODAL, HARMONIC: harmonics, the knob moving the weight up */
+        y = 0;
+        for (k = 1; k <= 8; k++) {
+            int32_t wgt = 1000 / k + (a - 64) * (k - 4) * 3 + (ty == 8 ? 0 : (k & 1) * (c - 64));
+            y += (nano_sin824(ph * (uint32_t)k) >> 4) * (wgt < 0 ? 0 : wgt) >> 7;
+        }
+        return y;
+    case 4: {                                              /* NOISE */
+        static uint32_t r;
+        r = r * 1664525u + 1013904223u + i;
+        return (int32_t)(r >> 16) - 32768;
+    }
+    default:                                               /* KARPLUS, STRINGS: a saw dying away */
+        return (nw_saw(ph) * (NW_LEN - (int32_t)i)) / NW_LEN;
+    }
+}
+static void na_wave_sketch(void)
+{
+    int8_t *w = nf_ui_wave();
+    int32_t v[NW_LEN], pk = 1, i;
+    const track_t *t = TSEL;
+    uint32_t ty = NOSC[na_type()].ty;
+    for (i = 0; i < NW_LEN; i++) {
+        v[i] = na_wave_at(ty == 14u ? 9u : ty, (uint32_t)i * (uint32_t)(0xFFFFFFFFu / (NW_LEN / 2)), (uint32_t)i, t->p);
+        if (ty != 14u && t->p[P_E4] > 0)                   /* FOLD */
+            v[i] = nw_fold(v[i] * (1 + t->p[P_E4] / 20)) >> 0;
+        pk = v[i] > pk ? v[i] : -v[i] > pk ? -v[i] : pk;
+    }
+    for (i = 0; i < NW_LEN; i++)
+        w[i] = (int8_t)(v[i] * 127 / pk);
+}
+
 /* everything the painter shows, for the page the cursor is on */
 static void na_sync(void)
 {
@@ -674,6 +754,8 @@ static void na_sync(void)
     nf_ui_set(UI_NTYPES, 15);
     nf_ui_set(UI_STEP, -1);
     nf_ui_set(UI_P, 0);
+    if (na_grp == NG_OSC)
+        na_wave_sketch();
     switch (na_grp) {
     case NG_ENV:
         nf_ui_set(UI_P, na_get(NI_ATTACK)), nf_ui_set(UI_P + 1, na_get(NI_DECAY)), nf_ui_set(UI_P + 2, na_get(NI_SUSTAIN));
