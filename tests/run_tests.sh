@@ -301,6 +301,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     mkdir -p "$OUT/fa" "$OUT/na"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_app_test" tests/nano_app_test.c -lm
     run "Nano Freak screen: every page of every group drawn by the test bed's painter, the knobs, SELECT, ALGORITHM, PRESETS, ARP and VOICE reach their parameters" "$OUT/nano_app_test" "$OUT/na"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_sound_test" tests/nano_sound_test.c -lm
+    run "Nano Freak controls reach the SOUND: keys, ARP, SEQ, filter, envelopes, LFO, every matrix route, MIDI keys" "$OUT/nano_sound_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/fmini_app_test" tests/fmini_app_test.c -lm
     run "FMini-1 app: the screen of every page, SAVE / PRESETS over 100 factory and the user patches, each patch its ARP, LFO, FX, LEVEL and octave, a new preset goes HOME" "$OUT/fmini_app_test" "$OUT/fa"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/nano_test" tests/nano_test.c -lm

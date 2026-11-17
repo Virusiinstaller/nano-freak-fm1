@@ -903,6 +903,17 @@ static void na_pat_from_amode(void)                       /* the arp pattern the
         if (na_arp_on() && NANO_APAT[i] == TSEL->p[P_AMODE])
             na_pat = (uint8_t)i;
 }
+/* the generators' own values (nano_ctl.c): a sound load must not leave Random / Mutate "on" with no copy of the pattern they replaced
+ * (the track defaults put 127 in P_FM2_SUS, so the first turn of MUTATE to 0 wrote an empty copy over the sequence). The test bed's defaults:
+ * SCALE 0, OCTAVES 2, RESTS 20 %, REC LENGTH a quaver */
+static void na_sq_defaults(track_t *t)
+{
+    t->p[P_FM2_DEC] = t->p[P_FM2_SUS] = 0;
+    t->p[P_FM2_REL] = 0;
+    t->p[P_FM2_LEVEL] = 1;
+    t->p[P_FM3_ATK] = 4;
+    t->p[P_FM3_DEC] = 2;
+}
 static void na_load(uint32_t n)                           /* factory preset n: the sound, the arp and the performance values it starts with */
 {
     track_t *t = TSEL;
@@ -910,6 +921,7 @@ static void na_load(uint32_t n)                           /* factory preset n: t
     na_slot = (uint8_t)n;
     na_bank = 1;
     apply_preset_to(t, n);
+    na_sq_defaults(t);
     na_str(na_name, ENGINES[ENGI_NANO]->presets[n].name);
     na_pat = 0;
     na_arp_pat_sync();
@@ -928,6 +940,7 @@ static void na_load_user(uint32_t k)                      /* user slot k (an emp
         return;
     }
     up_load(k);
+    TSEL->p[P_FM2_DEC] = TSEL->p[P_FM2_SUS] = 0;              /* (no copy of a pattern to put back) */
     up_name(k, na_name);
     na_pat_from_amode();
     na_g_apply(-1);
