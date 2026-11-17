@@ -96,7 +96,7 @@ static void smk_faders(void)
     static uint8_t last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
     uint32_t i;
 #if FELUCCA_FMINI_ONLY
-    fa_smk_faders();                                      /* FMini-1: the faders set the A.ENV / F.ENV / MIX knobs */
+    UI_FADERS();                                      /* FMini-1: the faders set the A.ENV / F.ENV / MIX knobs */
     return;
 #endif
     if (smk_fbank_new) {                                  /* a new bank: wait for each fader to move */
@@ -198,15 +198,7 @@ static void fm1_fault(const fm1_crash_t *c)
 }
 
 /* power-on: the parts with their default sounds (TRK_DEF); the sequencers empty */
-#if FELUCCA_FMINI_ONLY
-#define UI_INPUT fa_input
-#define UI_LEDS fa_leds
-#define UI_DRAW fa_draw
-#else
-#define UI_INPUT ui_input
-#define UI_LEDS ui_leds
-#define UI_DRAW ui_draw
-#endif
+/* UI_INPUT / UI_LEDS / UI_DRAW ... : felucca.c, after the screen's file */
 static void felucca_init(void)
 {
     uint32_t i;
@@ -275,7 +267,7 @@ static void fm1_main(void)
     usb_serial_apply();                                 /* (#67: the saved USB SERIAL before usb_start) */
     lcd_init();
 #if FELUCCA_FMINI_ONLY
-    fa_splash();
+    UI_SPLASH();
 #else
     draw_splash();                                      /* ui_draw.c (1.1.5) */
 #endif
@@ -332,7 +324,7 @@ static void fm1_main(void)
     }
     autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
 #if FELUCCA_FMINI_ONLY
-    fa_init();                                /* FMini-1: track 1 = the instrument, whatever the autosave held */
+    UI_INIT();                                /* FMini-1: track 1 = the instrument, whatever the autosave held */
 #endif
 #if FELUCCA_FMINI_ONLY
     for (ms = 0; ms < 3000u; ms += 10u) {     /* the splash: 3 s (since power-on's work above ran under it, the rest of it) */

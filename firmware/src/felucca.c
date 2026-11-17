@@ -146,5 +146,34 @@
 #include "console.c"
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
+#ifndef FELUCCA_NANO_APP
+#define FELUCCA_NANO_APP 1       /* the product's screen is the Nano Freak's (nano_app.c); 0 = the FMini-1 one (fmini_app.c, kept for its host tests) */
+#endif
+#if FELUCCA_NANO_APP
+#include "nano_app.c"
+#else
 #include "fmini_app.c"
+#endif
+#if FELUCCA_FMINI_ONLY && FELUCCA_NANO_APP
+#define UI_INPUT na_input
+#define UI_LEDS na_leds
+#define UI_DRAW na_draw
+#define UI_SPLASH na_splash
+#define UI_INIT na_init
+#define UI_FADERS na_smk_faders
+#elif FELUCCA_FMINI_ONLY
+#define UI_INPUT fa_input
+#define UI_LEDS fa_leds
+#define UI_DRAW fa_draw
+#define UI_SPLASH fa_splash
+#define UI_INIT fa_init
+#define UI_FADERS fa_smk_faders
+#else
+#define UI_INPUT ui_input
+#define UI_LEDS ui_leds
+#define UI_DRAW ui_draw
+#define UI_SPLASH draw_splash
+#define UI_INIT()
+#define UI_FADERS()
+#endif
 #include "main.c"
