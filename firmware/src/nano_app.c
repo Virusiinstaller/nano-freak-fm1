@@ -27,6 +27,9 @@ enum {
     NI_PBANK, NI_PSLOT,
     NI_SQPAT, NI_SQRND, NI_SQMUT, NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING, NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST, NI_SQENT, NI_SQRESTS, NI_SQGATE,
     NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT, NI_AS1, NI_AS2, NI_AS3, NI_AS4,
+    NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK, NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY, NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO, NI_MINCH,   /* GLOBAL: (these 19 are na_g[]) */
+    NI_BDEV, NI_BACT, NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO,
+    NI_SSLOT, NI_PCUR, NI_PCHR,
     NI_COUNT
 };
 static const char *const NT_FTYPE[] = {"LPF", "BPF", "HPF"};
@@ -42,7 +45,15 @@ static const char *const NT_SQSCALE[] = {"MIN PENT", "MAJ PENT", "MAJOR", "MINOR
 static const char *const NT_SQDUR[] = {"1/16", "1/8", "1/4", "1/2"};
 static const char *const NT_SQTYPE[] = {"NOTE", "REST"};
 static const char *const NT_SQPAT[] = {"A"};
-static const char *const NT_BANK[] = {"FACTORY"};
+static const char *const NT_BANK[] = {"USER", "FACTORY"};
+static const char *const NT_ROLE[] = {"DEVICE", "HOST"};
+static const char *const NT_CLK[] = {"INTERNAL", "MIDI"};
+static const char *const NT_MMODE[] = {"LOCAL", "BOTH", "MIDI"};
+static const char *const NT_PORT[] = {"OFF", "DIN", "USB", "DIN+USB", "BLE", "DIN+BLE", "USB+BLE", "ALL"};
+static const char *const NT_THRU[] = {"DIN", "USB", "BLE"};
+static const char *const NT_BACT[] = {"CONNECT", "SCAN", "DISCON.", "FORGET"};
+static const char *const NT_SUPAGE[] = {"OSC", "LAST"};
+static const char *const NT_SURAD[] = {"OFF", "LAST"};
 static const char *const NT_MXCOL[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "ASSIGN 1", "ASSIGN 2", "ASSIGN 3", "ASSIGN 4"};
 static const char *const NT_MXROW[] = {"CYC ENV", "ENV", "LFO", "PRESSURE", "KEY"};
 /* the destinations an ASSIGN column can take: the firmware's modulation destinations that are not a column already */
@@ -67,6 +78,12 @@ static const nk_t NK[NI_COUNT] = {
     [NI_SQRESTS] = {"RESTS", 11, 0}, [NI_SQGATE] = {"GATE", 10, 0},
     [NI_MXCOL] = {"COLUMN", 8, NT_MXCOL}, [NI_MXROW] = {"ROW", 5, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
     [NI_AS1] = {"A1", 12, NT_ASG}, [NI_AS2] = {"A2", 12, NT_ASG}, [NI_AS3] = {"A3", 12, NT_ASG}, [NI_AS4] = {"A4", 12, NT_ASG},
+    [NI_GBT] = {"BLUETOOTH", 2, NT_ONOFF}, [NI_GBTA] = {"BT AUDIO", 2, NT_ONOFF}, [NI_GROLE] = {"BLE ROLE", 2, NT_ROLE}, [NI_GCLK] = {"CLOCK", 2, NT_CLK},
+    [NI_MMODE] = {"ARP OUT", 3, NT_MMODE}, [NI_MCH] = {"OUT CH", 16, 0}, [NI_MPORT] = {"OUT PORT", 8, NT_PORT}, [NI_MKEY] = {"KEY OUT", 2, NT_ONOFF},
+    [NI_MLOCAL] = {"LOCAL", 2, NT_ONOFF}, [NI_MCLKO] = {"CLOCK OUT", 2, NT_ONOFF}, [NI_MTHI] = {"THRU IN", 3, NT_THRU}, [NI_MTHO] = {"THRU OUT", 8, NT_PORT},
+    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
+    [NI_SUBOOT] = {"BOOT SCR", 2, NT_ONOFF}, [NI_SUPAGE] = {"START PG", 2, NT_SUPAGE}, [NI_SURADIO] = {"RADIO", 2, NT_SURAD},
+    [NI_SSLOT] = {"SAVE TO", 16, 0}, [NI_PCUR] = {"CURSOR", 10, 0}, [NI_PCHR] = {"LETTER", 38, 0},
 };
 
 /* the oscillator list as the page has it: name, the labels of KNOB 1..3, the NANO engine's TYPE (P_E0) */
@@ -97,15 +114,29 @@ static const nsub_t NS_ARP[] = {{"ARPEGGIO", 0, {NI_ARPRATE, NI_ARPRANGE, NI_ARP
 static const nsub_t NS_MX[] = {{"MATRIX", 0, {NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT}}, {"ASSIGN", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};
 static const nsub_t NS_SEQ[] = {{"SEQUENCE", 0, {NI_ARPRATE, NI_SQPAT, NI_SQRND, NI_SQMUT}}, {"SEQ LENGTH", 1, {NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING}},
                                 {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}}};
-static const nsub_t NS_PRE[] = {{"BROWSE", 0, {NI_PBANK, NI_PSLOT, NI_NONE, NI_NONE}}};
+static const nsub_t NS_PRE[] = {{"BROWSE", 0, {NI_PBANK, NI_PSLOT, NI_NONE, NI_NONE}}, {"SAVE", 1, {NI_SSLOT, NI_PCUR, NI_PCHR, NI_NONE}}};
+static const nsub_t NS_GLO[] = {{"BLUETOOTH", 0, {NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK}}, {"MIDI OUT", 1, {NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY}},
+                                {"MIDI ROUTING", 2, {NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO}}, {"MIDI IN", 3, {NI_MINCH, NI_GCLK, NI_NONE, NI_NONE}},
+                                {"BLE DEVICES", 4, {NI_BDEV, NI_BACT, NI_NONE, NI_NONE}}, {"STARTUP", 5, {NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO}}};
 #define NGRP(t, u, a) {t, u, (uint8_t)(sizeof(a) / sizeof((a)[0])), a}
 static const ngrp_t NGR[NG_COUNT] = {
     [NG_OSC] = NGRP("OSCILLATOR", 0, NS_OSC), [NG_ENV] = NGRP("ENV", 1, NS_ENV), [NG_FX] = NGRP("FX", 2, NS_FX), [NG_LFO] = NGRP("LFO", 3, NS_LFO),
-    [NG_MATRIX] = NGRP("MATRIX", 4, NS_MX), [NG_ARP] = NGRP("ARP", 5, NS_ARP), [NG_SEQ] = NGRP("SEQ", 6, NS_SEQ), [NG_VOICE] = NGRP("VOICE", 7, NS_VOICE), [NG_PRESET] = NGRP("PRESETS", 9, NS_PRE),
+    [NG_MATRIX] = NGRP("MATRIX", 4, NS_MX), [NG_ARP] = NGRP("ARP", 5, NS_ARP), [NG_SEQ] = NGRP("SEQ", 6, NS_SEQ), [NG_VOICE] = NGRP("VOICE", 7, NS_VOICE), [NG_GLOBAL] = NGRP("GLOBAL", 8, NS_GLO), [NG_PRESET] = NGRP("PRESETS", 9, NS_PRE),
 };
 
 static uint8_t na_cur, na_root = 48, na_rec, na_seqmode, na_grp, na_sub[NG_COUNT], na_pat, na_slot, na_dirty = 1;
 static int8_t na_ost = -1;
+/* the GLOBAL settings (ids NI_GBT.. in order), saved in the flash settings record (favorites.factory[6]: no engine of this firmware
+ * uses that row), and the PRESETS state: the bank (0 USER, 1 FACTORY), the sound's name, the SAVE page's slot, name and cursor */
+#define NA_NG 19u
+#define GI(id) na_g[(id) - NI_GBT]
+static uint8_t na_g[NA_NG] = {0, 0, 0, 0, 1, 0, 3, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0};
+static uint8_t na_bank = 1, na_sslot, na_scur, na_conf, na_gsel;
+static char na_name[16], na_chr[11];
+static const char NA_CHARS[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
+#define NA_NCH 38u
+#define NA_USER 16u
+
 static char na_hint[44];
 static void na_str(char *d, const char *s);
 static void na_say(const char *s) { na_str(na_hint, s); }
@@ -255,6 +286,48 @@ static void fa_seq_note(track_t *t, uint32_t note)
 }
 
 /* the value of control id: 0..100, or the step */
+/* the settings take effect (the MIDI ones are the firmware's: seq.c, nano_ctl.c, usb.c); id: the one that changed, or -1 */
+static void na_g_save(void)
+{
+    uint8_t *f = favorites.factory[6];
+    uint32_t i;
+    f[0] = 0xB6;
+    f[1] = 1;
+    for (i = 0; i < NA_NG; i++)
+        f[2u + i] = na_g[i];
+    settings_later();                                      /* (written once the view is left or after a while: ui.c) */
+}
+static void na_g_apply(int32_t id)
+{
+    fm_seq_out = GI(NI_MMODE);
+    fm_out_mask = GI(NI_MPORT);
+    mch_set(0, GI(NI_MCH));                               /* the out channel: track 1's own (MIDI IN is the app's: fm_midi_ch) */
+    song.g[G_ROUTE] = ROUTE_TRACK;
+    fm_midi_ch = (uint8_t)(GI(NI_MINCH) + 1u);
+    fm_midi_src = 3;
+    fm_bt = GI(NI_GBT);                                   /* (no radio driver yet: nothing arrives from it) */
+    song.g[G_CLOCK] = GI(NI_GCLK) ? 1 : 0;                /* MIDI clock: the USB one */
+    fm_local = GI(NI_MLOCAL);
+    fm_key_out = GI(NI_MKEY);
+    fm_clk_out = GI(NI_MCLKO);
+    fm_thru_in = (uint8_t)(GI(NI_MTHI) == 0u ? 2u : GI(NI_MTHI) == 1u ? 1u : 3u);   /* sources: 1 USB, 2 DIN (TRS), 3 BLE */
+    fm_thru_out = GI(NI_MTHO);
+    if (id >= 0 && id != NI_BDEV && id != NI_BACT)
+        na_g_save();
+}
+static void na_g_load(void)
+{
+    const uint8_t *f = favorites.factory[6];
+    static const uint8_t MX[NA_NG] = {1, 1, 1, 1, 2, 15, 7, 1, 1, 1, 2, 7, 15, 7, 3, 17, 1, 1, 1};
+    uint32_t i;
+    if (f[0] == 0xB6 && f[1] == 1)
+        for (i = 0; i < NA_NG; i++)
+            na_g[i] = f[2u + i] <= MX[i] ? f[2u + i] : na_g[i];
+    if (!GI(NI_SURADIO))
+        GI(NI_GBT) = 0;                                    /* RADIO: OFF at power-on, or LAST */
+    na_g_apply(-1);
+}
+
 static int32_t na_get(int32_t id)
 {
     const track_t *t = TSEL;
@@ -302,7 +375,6 @@ static int32_t na_get(int32_t id)
     case NI_ARPLATCH: return p[P_AHOLD] != 0;
     case NI_ARPTYPE: return nano_atype(t);
     case NI_ARPCHORD: return (int32_t)nano_achord(t);
-    case NI_PSLOT: return na_slot;
     case NI_SQPAT: return 0;
     case NI_SQRND: return na_cl(p[P_FM2_DEC], 0, 99);
     case NI_SQMUT: return na_cl(p[P_FM2_SUS], 0, 99);
@@ -322,7 +394,19 @@ static int32_t na_get(int32_t id)
     case NI_MXON: return !((na_mxoff[na_mxr] >> na_mxc) & 1u);
     case NI_MXAMT: return na_mxamt(na_mxr, na_mxc);
     case NI_AS1: case NI_AS2: case NI_AS3: case NI_AS4: return na_as[id - NI_AS1];
-    default: return 0;
+    case NI_PBANK: return na_bank;
+    case NI_PSLOT: return na_slot;
+    case NI_SSLOT: return na_sslot;
+    case NI_PCUR: return na_scur;
+    case NI_PCHR: {
+        uint32_t c;
+        for (c = 0; c < NA_NCH; c++)
+            if (NA_CHARS[c] == na_chr[na_scur])
+                return (int32_t)c;
+        return 0;
+    }
+    default:
+        return id >= NI_GBT && id <= NI_SURADIO ? GI(id) : 0;
     }
 }
 /* set control id to v (0..100 or the step) */
@@ -407,6 +491,15 @@ static void na_set(int32_t id, int32_t v)
     case NI_SQENT: na_put(P_FM3_DEC, v); break;
     case NI_SQRESTS: na_put(P_FM3_ATK, v); na_sq_reroll(); break;
     case NI_SQGATE: na_put(P_SGATE, (v + 1) * 127 / 10); break;
+    case NI_SSLOT: na_sslot = (uint8_t)v; na_conf = 0; break;
+    case NI_PCUR: na_scur = (uint8_t)v; na_conf = 0; break;
+    case NI_PCHR: na_chr[na_scur] = NA_CHARS[v]; na_conf = 0; break;
+    case NI_GBT: case NI_GBTA: case NI_GROLE: case NI_GCLK: case NI_MMODE: case NI_MCH: case NI_MPORT: case NI_MKEY: case NI_MLOCAL: case NI_MCLKO:
+    case NI_MTHI: case NI_MTHO: case NI_MINCH: case NI_BDEV: case NI_BACT: case NI_SUPATCH: case NI_SUBOOT: case NI_SUPAGE: case NI_SURADIO:
+        GI(id) = (uint8_t)v;
+        na_gsel = (uint8_t)(id - NI_SUPATCH);
+        na_g_apply(id);
+        break;
     case NI_MXCOL: na_mxc = (uint8_t)v; break;
     case NI_MXROW: na_mxr = (uint8_t)v; break;
     case NI_MXON: na_mxset(na_mxr, na_mxc, na_mxamt(na_mxr, na_mxc), v); break;
@@ -429,6 +522,8 @@ static void na_set(int32_t id, int32_t v)
     }
 }
 static void na_load(uint32_t n);
+static void na_g_apply(int32_t id);
+static uint32_t na_pre_n(void);
 
 static uint32_t na_npre(void) { return ENGINES[ENGI_NANO]->npresets; }
 static void na_str(char *d, const char *s)
@@ -453,6 +548,29 @@ static void na_text(int32_t id, char *out)
     out[0] = 0;
     if (k->tx) {
         na_str(out, k->tx[v]);
+    } else if (id == NI_MCH || id == NI_MINCH) {
+        na_str(out, "CH ");
+        fmt_int(out + 3, v + 1);
+    } else if (id == NI_PSLOT || id == NI_SSLOT) {
+        if (v + 1 < 10)
+            na_str(out, "0");
+        fmt_int(out + str_len(out), v + 1);
+    } else if (id == NI_PCUR) {
+        fmt_int(out, v + 1);
+    } else if (id == NI_PCHR) {
+        out[0] = NA_CHARS[v] == ' ' ? '_' : NA_CHARS[v];
+        out[1] = 0;
+    } else if (id == NI_BDEV) {
+        na_str(out, "-");
+    } else if (id == NI_SUPATCH) {
+        if (v == 0)
+            na_str(out, "INIT");
+        else if (v == 1)
+            na_str(out, "LAST");
+        else {
+            na_str(out, "USER ");
+            fmt_int(out + 5, v - 1);
+        }
     } else if (id == NI_ARPRANGE) {
         fmt_int(out, v + 1);
         na_cat(out, " OCT");
@@ -548,7 +666,7 @@ static void na_sync(void)
         }
     }
     na_str(nf_ui_str(UIS_HINT), na_hint);
-    na_str(nf_ui_str(UIS_PRESET), ENGINES[ENGI_NANO]->presets[na_slot % na_npre()].name);
+    na_str(nf_ui_str(UIS_PRESET), na_name);
     nf_ui_set(UI_OCT, song.octave);
     nf_ui_set(UI_POLY, t->p[P_VOICE] == V_MONO ? 0 : t->p[P_VOICE] == V_UNISON ? 1 : t->p[P_VOICE] == V_POLY ? 3 : 0);
     nf_ui_set(UI_PLAY, na_seqmode ? song.playing != 0u : na_arp_on());
@@ -619,22 +737,74 @@ static void na_sync(void)
         }
         break;
     }
-    case NG_PRESET: {                                    /* the list: six rows round the preset shown */
-        uint32_t n = na_npre(), first = na_slot < 3u ? 0u : na_slot + 3u >= n ? (n > 6u ? n - 6u : 0u) : na_slot - 3u, rows = n < 6u ? n : 6u;
-        for (i = 0; i < rows; i++) {
-            char *r = nf_ui_str(UIS_ROW0 + (int)i);
-            fmt_int(b, (int32_t)(first + i + 1u));
-            r[0] = 0;
-            if (first + i + 1u < 10u)
-                na_cat(r, "0");
-            na_cat(r, b);
-            na_cat(r, " ");
-            na_cat(r, ENGINES[ENGI_NANO]->presets[first + i].name);
+    case NG_GLOBAL:
+        if (sp->ui == 0u)
+            nf_ui_set(UI_P, GI(NI_GBT)), nf_ui_set(UI_P + 1, GI(NI_GBTA)), nf_ui_set(UI_P + 2, GI(NI_GROLE)), nf_ui_set(UI_P + 3, GI(NI_GCLK));
+        else if (sp->ui == 1u)
+            nf_ui_set(UI_P, GI(NI_MMODE)), nf_ui_set(UI_P + 1, GI(NI_MCH)), nf_ui_set(UI_P + 2, GI(NI_MPORT)), nf_ui_set(UI_P + 3, GI(NI_MKEY));
+        else if (sp->ui == 2u)
+            nf_ui_set(UI_P, GI(NI_MLOCAL)), nf_ui_set(UI_P + 1, GI(NI_MCLKO)), nf_ui_set(UI_P + 2, GI(NI_MTHI)), nf_ui_set(UI_P + 3, GI(NI_MTHO));
+        else if (sp->ui == 3u)
+            nf_ui_set(UI_P, GI(NI_MINCH)), nf_ui_set(UI_P + 1, GI(NI_GCLK));
+        else if (sp->ui == 4u) {                            /* no radio driver in this firmware: the list says so */
+            na_str(nf_ui_str(UIS_ROW0), "*NO BLUETOOTH RADIO DRIVER");
+            na_str(nf_ui_str(UIS_ROW0 + 1), "*YET IN THIS FIRMWARE");
+            na_str(nf_ui_str(UIS_ROW0 + 2), NT_BACT[GI(NI_BACT)]);
+            nf_ui_set(UI_P, 2), nf_ui_set(UI_P + 1, 3);
+        } else {
+            char *r;
+            r = nf_ui_str(UIS_ROW0), na_str(r, "POWER-ON  "), na_text(NI_SUPATCH, r + 10);
+            r = nf_ui_str(UIS_ROW0 + 1), na_str(r, "BOOT SCREEN  "), na_cat(r, NT_ONOFF[GI(NI_SUBOOT)]);
+            r = nf_ui_str(UIS_ROW0 + 2), na_str(r, "START PAGE  "), na_cat(r, NT_SUPAGE[GI(NI_SUPAGE)]);
+            r = nf_ui_str(UIS_ROW0 + 3), na_str(r, "RADIO  "), na_cat(r, NT_SURAD[GI(NI_SURADIO)]);
+            na_str(nf_ui_str(UIS_ROW0 + 4), "*SAVED AUTOMATICALLY");
+            nf_ui_set(UI_P, na_gsel < 4u ? na_gsel : 0), nf_ui_set(UI_P + 1, 5);
         }
-        nf_ui_set(UI_P, (int)(na_slot - first));
-        nf_ui_set(UI_P + 1, (int)rows);
         break;
-    }
+    case NG_PRESET:
+        if (sp->ui == 1u) {                                  /* SAVE: the slot, the name, the cursor under it */
+            char *r = nf_ui_str(UIS_ROW0);
+            uint32_t c;
+            na_str(r, "SLOT "), na_text(NI_SSLOT, r + 5);
+            if (up_used(na_sslot)) {
+                char nm[16];
+                up_name(na_sslot, nm);
+                nm[8] = 0;
+                na_cat(r, "  REPLACES "), na_cat(r, nm);
+            } else
+                na_cat(r, "  EMPTY");
+            r = nf_ui_str(UIS_ROW0 + 1), na_str(r, "NAME "), na_cat(r, na_chr);
+            r = nf_ui_str(UIS_ROW0 + 2), na_str(r, "     ");
+            for (c = 0; c < na_scur; c++)
+                na_cat(r, " ");
+            na_cat(r, "^");
+            na_str(nf_ui_str(UIS_ROW0 + 3), na_conf ? "SAVE YES / HOME NO" : "SAVE TO CONFIRM");
+            nf_ui_set(UI_P, 1), nf_ui_set(UI_P + 1, 4);
+        } else {                                             /* BROWSE: six rows round the preset shown */
+            uint32_t n = na_pre_n(), first = na_slot < 3u ? 0u : na_slot + 3u >= n ? (n > 6u ? n - 6u : 0u) : na_slot - 3u, rows = n < 6u ? n : 6u;
+            for (i = 0; i < rows; i++) {
+                char *r = nf_ui_str(UIS_ROW0 + (int)i), nm[16];
+                uint32_t k = first + i;
+                if (na_bank)
+                    na_str(nm, ENGINES[ENGI_NANO]->presets[k].name);
+                else if (up_used(k))
+                    up_name(k, nm);
+                else
+                    na_str(nm, "EMPTY");
+                r[0] = 0;
+                if (!na_bank && !up_used(k))
+                    na_cat(r, "*");
+                if (k + 1u < 10u)
+                    na_cat(r, "0");
+                fmt_int(b, (int32_t)(k + 1u));
+                na_cat(r, b);
+                na_cat(r, " ");
+                na_cat(r, nm);
+            }
+            nf_ui_set(UI_P, (int)(na_slot - first));
+            nf_ui_set(UI_P + 1, (int)rows);
+        }
+        break;
     default:
         break;
     }
@@ -642,24 +812,143 @@ static void na_sync(void)
 }
 
 /* ------------------------------------------------------------- input --- */
-static void na_load(uint32_t n)                           /* preset n of the list: the sound, the arp and the performance values it starts with */
+static uint32_t na_pre_n(void) { return na_bank ? na_npre() : NA_USER; }
+static void na_pat_from_amode(void)                       /* the arp pattern the sound's P_AMODE says */
+{
+    uint32_t i;
+    na_pat = 0;
+    for (i = 0; i < 14u; i++)
+        if (na_arp_on() && NANO_APAT[i] == TSEL->p[P_AMODE])
+            na_pat = (uint8_t)i;
+}
+static void na_load(uint32_t n)                           /* factory preset n: the sound, the arp and the performance values it starts with */
 {
     track_t *t = TSEL;
     n %= na_npre();
     na_slot = (uint8_t)n;
+    na_bank = 1;
     apply_preset_to(t, n);
+    na_str(na_name, ENGINES[ENGI_NANO]->presets[n].name);
     na_pat = 0;
     na_arp_pat_sync();
+    na_g_apply(-1);
     na_ost = -1;
     na_dirty = 1;
     ui.force = 1;
+}
+static void na_load_user(uint32_t k)                      /* user slot k (an empty one is only said) */
+{
+    na_slot = (uint8_t)k;
+    na_bank = 0;
+    na_dirty = 1;
+    if (!up_used(k)) {
+        na_say("EMPTY SLOT");
+        return;
+    }
+    up_load(k);
+    up_name(k, na_name);
+    na_pat_from_amode();
+    na_g_apply(-1);
+    na_ost = -1;
+    ui.force = 1;
+}
+static void na_pre_go(uint32_t n)                         /* the preset n of the bank on show */
+{
+    if (na_bank)
+        na_load(n);
+    else
+        na_load_user(n % NA_USER);
+}
+static void na_pre_step(int32_t s)
+{
+    uint32_t n = na_pre_n();
+    na_pre_go((na_slot + n + (s > 0 ? 1u : n - 1u)) % n);
+}
+static void na_save_start(void)                           /* the SAVE page: this sound's name, the first free slot */
+{
+    uint32_t i, k;
+    for (i = 0; i < 10u; i++)
+        na_chr[i] = ' ';
+    na_chr[10] = 0;
+    for (i = 0; i < 10u && na_name[i]; i++) {
+        char c = na_name[i];
+        uint32_t j, ok = 0;
+        for (j = 0; j < NA_NCH; j++)
+            ok |= NA_CHARS[j] == c;
+        na_chr[i] = ok ? c : ' ';
+    }
+    na_scur = 0;
+    na_conf = 0;
+    na_sslot = na_bank ? 0 : na_slot;
+    for (k = 0; k < NA_USER; k++)
+        if (!up_used(k)) {
+            na_sslot = (uint8_t)k;
+            break;
+        }
+}
+static void na_do_save(void)
+{
+    char nm[16];
+    uint32_t i, n = 10;
+    int rc;
+    while (n && na_chr[n - 1u] == ' ')
+        n--;
+    for (i = 0; i < n; i++)
+        nm[i] = na_chr[i];
+    nm[n] = 0;
+    if (!n) {
+        na_str(nm, "USER ");
+        if (na_sslot + 1u < 10u)
+            na_cat(nm, "0");
+        fmt_int(nm + str_len(nm), na_sslot + 1);
+    }
+    na_conf = 0;
+    rc = up_store(na_sslot, nm);
+    if (rc == 0 || rc == 3) {
+        na_str(na_name, nm);
+        na_bank = 0;
+        na_slot = na_sslot;
+        na_sub[NG_PRESET] = 0;
+        na_say("SAVED ");
+        if (na_sslot + 1u < 10u)
+            na_cat(na_hint, "0");
+        fmt_int(na_hint + str_len(na_hint), na_sslot + 1);
+    } else
+        na_say(rc == 2 ? "STOP TO SAVE" : "NOT SAVED");
+    na_dirty = 1;
+}
+static void na_save_key(void)                             /* SAVE: open the page; on it, ask, then save */
+{
+    if (na_grp == NG_PRESET && na_cursub() == 1u) {
+        if (!na_conf) {
+            na_conf = 1;
+            na_say("SAVE YES / HOME NO");
+        } else
+            na_do_save();
+    } else {
+        na_grp = NG_PRESET;
+        na_sub[NG_PRESET] = 1;
+        na_save_start();
+        na_say("PICK A SLOT AND NAME, THEN SAVE");
+    }
+    na_dirty = 1;
 }
 static void na_knob(uint32_t k, int32_t s)
 {
     const nsub_t *sp = &NGR[na_grp].sub[na_cursub()];
     int32_t id = sp->k[k], v;
-    if (id == NI_NONE || na_grp == NG_PRESET)
+    if (id == NI_NONE)
         return;
+    if (na_grp == NG_PRESET && sp->ui == 0u) {                /* BROWSE: K1 the bank, K2 the preset (it loads) */
+        if (k == 0u) {
+            na_bank = (uint8_t)(s > 0 ? 1 : 0);
+            na_slot = na_slot < na_pre_n() ? na_slot : 0;
+            na_say(NT_BANK[na_bank]);
+            na_dirty = 1;
+        } else if (k == 1u)
+            na_pre_step(s);
+        return;
+    }
     fmg_force_page = 0;
     v = na_get(id) + (id == NI_MXAMT ? fmg_acc(EN_K1 + k, s, 100) : (NK[id].n ? (NK[id].n > 16 ? fmg_acc(EN_K1 + k, s, NK[id].n - 1) : s > 0 ? 1 : -1) : id == NI_FDRIVE || id == NI_FCLIP ? (s > 0 ? 15 : -15) : fmg_acc(EN_K1 + k, s, 100)));   /* (DRIVE, CLIP: seven steps) */
     fmg_force_page = -1;
@@ -672,6 +961,11 @@ static void na_knob(uint32_t k, int32_t s)
 static void na_group(uint32_t g)
 {
     na_grp = (uint8_t)(na_grp == g ? NG_OSC : g);
+    na_conf = 0;
+    if (GI(NI_SUPAGE) && na_grp < NG_GLOBAL && favorites.factory[6][24] != na_grp) {   /* START PAGE: LAST */
+        favorites.factory[6][24] = na_grp;
+        settings_later();
+    }
     if (na_grp == NG_VOICE)                                  /* the page is the track's mode */
         na_sub[NG_VOICE] = TSEL->p[P_VOICE] == V_MONO ? 0u : TSEL->p[P_VOICE] == V_UNISON ? 1u : 3u;
     na_dirty = 1;
@@ -683,16 +977,15 @@ static void na_buttons(uint32_t pressed)
     uint32_t i;
     for (i = 0; i < 8u; i++)
         if ((pressed >> panel.btn[BT[i]]) & 1u) {
-            if (NGR[TO[i]].n == 0u) {                          /* (not on the device yet) */
-                na_say("NOT YET ON THE FM-1");
-                na_dirty = 1;
-            } else
-                na_group(TO[i]);
+            na_group(TO[i]);
         }
     if ((pressed >> panel.btn[B_HOME]) & 1u) {
         na_grp = NG_OSC;
+        na_conf = 0;
         na_dirty = 1;
     }
+    if ((pressed >> panel.btn[B_SAVE]) & 1u)
+        na_save_key();
     if ((pressed >> panel.btn[B_ARP]) & 1u) {                 /* ARP and SEQ are the two ways the keys play a pattern: one at a time */
         na_seqmode = 0;
         if (song.playing)
@@ -757,8 +1050,8 @@ static void na_input(void)
     na_buttons(pressed);
     if ((s = panel_enc(EN_SELECT)) != 0) {                  /* the next / previous page of the group */
         uint32_t n = na_nsub();
-        if (na_grp == NG_PRESET)
-            na_load((na_slot + na_npre() + (s > 0 ? 1u : na_npre() - 1u)) % na_npre());
+        if (na_grp == NG_PRESET && na_cursub() == 0u)
+            na_pre_step(s);
         else
             na_sub[na_grp] = (uint8_t)((na_cursub() + (s > 0 ? 1u : n - 1u)) % n);
         na_voice_sync();
@@ -775,7 +1068,8 @@ static void na_input(void)
             na_grp = NG_PRESET;
             na_sub[NG_PRESET] = 0;
         }
-        na_load((na_slot + na_npre() + (s > 0 ? 1u : na_npre() - 1u)) % na_npre());
+        na_sub[NG_PRESET] = 0;
+        na_pre_step(s);
     }
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0)
@@ -859,6 +1153,9 @@ static void na_draw(void)
 static void na_splash(void)
 {
     uint32_t band;
+    na_g_load();                                            /* (the settings are in: persist_boot ran) */
+    if (!GI(NI_SUBOOT))
+        return;
     nf_ui_init();
     nf_ui_set(UI_GROUP, 10);
     na_str(nf_ui_str(UIS_HINT), FMINI_VERSION);
@@ -883,7 +1180,19 @@ static void na_init(void)
     na_pat = 0;
     na_arp_pat_sync();
     na_slot = 0;
+    na_bank = 1;
+    na_str(na_name, ENGINES[ENGI_NANO]->presets[0].name);
+    na_g_load();
+    {   /* POWER-ON: INIT (the first preset), LAST (as the autosave left it), or a user preset */
+        uint32_t pp = GI(NI_SUPATCH);
+        if (pp == 0u)
+            na_load(0);
+        else if (pp >= 2u && up_used(pp - 2u))
+            na_load_user(pp - 2u);
+    }
     na_grp = NG_OSC;
+    if (GI(NI_SUPAGE) && favorites.factory[6][24] < NG_GLOBAL && favorites.factory[6][0] == 0xB6)
+        na_grp = favorites.factory[6][24];
     na_dirty = 1;
     ui_idle |= 1u;
     ui.force = 1;

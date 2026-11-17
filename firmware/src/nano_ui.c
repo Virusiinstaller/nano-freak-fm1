@@ -586,7 +586,7 @@ static void g_radio(uint16_t acc) {
     nf_gfx_text(PX + 10, y, lab[i], 1, C_DIM);
     text_r(PX + PW - 10, y, val[i], 1, (i == 0 || on) ? acc : C_DIM);
   }
-  text_c(PX + PW / 2, PY + PH - 10, "RADIO AVAILABLE ON DEVICE", 1, C_DIM);
+  text_c(PX + PW / 2, PY + PH - 10, "NO RADIO DRIVER YET: SETTING ONLY", 1, C_DIM);
 }
 
 /* MIDI settings, three pages of four values as in the firmware: output, routing, input. The page number is v[UI_SUB] - 1. */

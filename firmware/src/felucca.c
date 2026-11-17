@@ -22,6 +22,9 @@
 #ifndef FELUCCA_CDC
 #define FELUCCA_CDC 0            /* USB CDC-ACM serial console: off (frees EP2 / EP3 for USB audio out) */
 #endif
+#ifndef FELUCCA_NANO_APP
+#define FELUCCA_NANO_APP 1       /* the product's screen is the Nano Freak's (nano_app.c); 0 = the FMini-1 one (fmini_app.c, kept for its host tests) */
+#endif
 #ifndef FELUCCA_UAC
 #define FELUCCA_UAC 1            /* USB audio input: the master output, 16-bit stereo 44.1 kHz (usb.c) */
 #endif
@@ -146,9 +149,6 @@
 #include "console.c"
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
-#ifndef FELUCCA_NANO_APP
-#define FELUCCA_NANO_APP 1       /* the product's screen is the Nano Freak's (nano_app.c); 0 = the FMini-1 one (fmini_app.c, kept for its host tests) */
-#endif
 #if FELUCCA_NANO_APP
 #include "nano_app.c"
 #else

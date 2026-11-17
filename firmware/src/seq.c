@@ -828,8 +828,14 @@ static void key_on(uint32_t k, track_t *t)
         uint32_t x = kb_chord[k][i];
         if (midi_local_held(t, x))
             continue;
-        input_on(t, x, vel);
-        midi_out_event(0x09u | (0x90u | mc) << 8 | x << 16 | vel << 24);
+#if FELUCCA_NANO_APP
+        if (fm_local)
+#endif
+            input_on(t, x, vel);
+#if FELUCCA_NANO_APP
+        if (fm_key_out)
+#endif
+            midi_out_event(0x09u | (0x90u | mc) << 8 | x << 16 | vel << 24);
     }
     in_key = 0;
     kb_chn[k] = (uint8_t)n;
@@ -846,7 +852,10 @@ static void key_off(uint32_t k, track_t *t)
         if (midi_local_held(t, x))
             continue;
         input_off(t, x);
-        midi_out_event(0x08u | (0x80u | mc) << 8 | x << 16);
+#if FELUCCA_NANO_APP
+        if (fm_key_out)
+#endif
+            midi_out_event(0x08u | (0x80u | mc) << 8 | x << 16);
     }
 }
 
@@ -1627,6 +1636,9 @@ static void events_block(uint32_t n)
         uint32_t d1 = (pkt >> 16) & 0x7Fu, d2 = (pkt >> 24) & 0x7Fu;
         uint32_t source = midi_in_source[at] ? midi_in_source[at] : 1u, ms = midi_in_ms[at];
         mi_r++;
+#if FELUCCA_FMINI_ONLY && FELUCCA_NANO_APP
+        nano_thru(pkt, source);
+#endif
         if (status >= 0xF8u) {
             if (clock_mode == source) {
                 if (status == 0xF8u)
@@ -1662,6 +1674,9 @@ static void events_block(uint32_t n)
         click_tick(seq_n);
     for (i = 0; i < NPART; i++)
         arp_step(&trk[i], clock_mode ? seq_n : n, clock_mode && song.playing ? seq_n : n);
+#if FELUCCA_FMINI_ONLY && FELUCCA_NANO_APP
+    nano_clock_out(n);
+#endif
     beat_pos += clock_mode ? seq_n : n;               /* the beat the ARP LED flashes on (ui_leds) */
     if (beat_pos >= beat_samples()) {
         beat_pos -= beat_samples();

@@ -145,6 +145,119 @@ int main(int argc, char **argv)
         npress(B_ARP);
         npress(B_HOME);
     }
+    /* GLOBAL: every page draws; the settings reach the firmware; START-UP and the BLE page are listed */
+    {
+        uint32_t pg;
+        npress(B_HOME);
+        npress(B_GLO);
+        CHECK(na_grp == NG_GLOBAL, "GLO opens GLOBAL");
+        for (pg = 0; pg < 6u; pg++) {
+            na_sub[NG_GLOBAL] = (uint8_t)pg;
+            draw();
+            dump(dir, n++);
+        }
+        na_sub[NG_GLOBAL] = 1;                             /* MIDI OUT */
+        nturn(EN_K1, 1);
+        CHECK(fm_seq_out == 2, "SEQ/ARP OUT: MIDI (%d)", fm_seq_out);
+        nturn(EN_K1, -1);
+        CHECK(fm_seq_out == 1, "SEQ/ARP OUT: BOTH");
+        nturn(EN_K2, 1); nturn(EN_K2, 1); nturn(EN_K2, 1);
+        CHECK(GI(NI_MCH) == 3 && trk_midi_ch(0) == 3 && song.g[G_ROUTE] == ROUTE_TRACK, "OUT CH 4 is track 1's channel (%d)", (int)trk_midi_ch(0));
+        nturn(EN_K3, -1);
+        CHECK(fm_out_mask == 2, "OUT PORT USB is the mask 2 (%d)", fm_out_mask);
+        nturn(EN_K4, -1);
+        CHECK(!fm_key_out, "KEY OUT off");
+        nturn(EN_K4, 1);
+        na_sub[NG_GLOBAL] = 2;                             /* ROUTING */
+        nturn(EN_K1, -1);
+        CHECK(!fm_local, "LOCAL off");
+        nturn(EN_K1, 1);
+        nturn(EN_K2, 1);
+        CHECK(fm_clk_out, "CLOCK OUT on");
+        nturn(EN_K3, 1);
+        CHECK(fm_thru_in == 1, "THRU IN USB is the source 1 (%d)", fm_thru_in);
+        for (i = 0; i < 5u; i++) nturn(EN_K4, 1);
+        CHECK(fm_thru_out == 5, "THRU OUT %d", fm_thru_out);
+        for (i = 0; i < 9u; i++) nturn(EN_K4, -1);
+        na_sub[NG_GLOBAL] = 3;                             /* MIDI IN */
+        for (i = 0; i < 4u; i++) nturn(EN_K1, 1);
+        CHECK(fm_midi_ch == 5, "IN CH 5 (%d)", fm_midi_ch);
+        nturn(EN_K2, 1);
+        CHECK(song.g[G_CLOCK] == 1, "CLOCK: MIDI");
+        nturn(EN_K2, -1);
+        CHECK(song.g[G_CLOCK] == 0, "CLOCK: internal");
+        for (i = 0; i < 9u; i++) nturn(EN_K1, -1);
+        /* thru sends what came in on the source to the ports, never a clock; CLOCK OUT sends 24 a beat */
+        {
+            uint32_t q0 = mo_w, k;
+            fm_thru_out = 2; fm_thru_in = 1;
+            usb.config = 1;
+            nano_thru(0x09u | 0x90u << 8 | 60u << 16 | 100u << 24, 1);
+            nano_thru(0x09u | 0x90u << 8 | 60u << 16 | 100u << 24, 2);
+            nano_thru(0x0Fu | 0xF8u << 8, 1);
+            CHECK(mo_w - q0 == 1, "thru: one note from the source, none from another, no clock (%u)", (unsigned)(mo_w - q0));
+            fm_thru_out = 0;
+            q0 = mo_w; fm_out_mask = 2; fm_clk_out = 1; song.g[G_CLOCK] = 0; song.playing = 1; song.g[G_BPM] = 120;
+            for (k = 0; k < 22050u / 64u; k++) nano_clock_out(64);          /* half a second: a beat at 120 */
+            CHECK(mo_w - q0 >= 24u && mo_w - q0 <= 26u, "CLOCK OUT: a START and 24 clocks in a beat (%u)", (unsigned)(mo_w - q0));
+            song.playing = 0; nano_clock_out(64);
+            fm_clk_out = 0; fm_out_mask = 7;
+        }
+        /* START-UP rows, BLE rows */
+        na_sub[NG_GLOBAL] = 5;
+        for (i = 0; i < 3u; i++) nturn(EN_K1, 1);
+        CHECK(GI(NI_SUPATCH) == 4 && favorites.factory[6][0] == 0xB6 && favorites.factory[6][2 + 15] == 4, "POWER-ON is saved in the settings row");
+        for (i = 0; i < 9u; i++) nturn(EN_K1, -1);
+        nturn(EN_K1, 1);
+        draw();
+        dump(dir, n++);
+        npress(B_HOME);
+    }
+    /* PRESETS: the bank, SAVE into the user bank, and back */
+    {
+        track_t *t = TSEL;
+        uint32_t k;
+        for (k = 0; k < UP_SLOTS; k++) up_put(k, 0);
+        na_load(5);
+        npress(B_HOME);
+        nturn(EN_PRESET, 1);
+        CHECK(na_grp == NG_PRESET && na_bank == 1 && na_slot == 6, "the preset knob opens the list and steps the factory bank");
+        npress(B_HOME);
+        npress(B_SAVE);
+        CHECK(na_grp == NG_PRESET && na_cursub() == 1 && !na_conf, "SAVE opens the save page");
+        CHECK(na_sslot == 0, "the first free slot");
+        nturn(EN_K2, 0);
+        na_scur = 0;
+        nturn(EN_K3, 1);                                   /* letter: ' ' -> the next of the list */
+        draw();
+        dump(dir, n++);
+        t->p[P_E1] = 77;
+        npress(B_SAVE);
+        CHECK(na_conf == 1, "the first SAVE asks");
+        draw();
+        dump(dir, n++);
+        song.playing = 0;
+        npress(B_SAVE);
+        CHECK(up_used(0) && na_bank == 0 && na_slot == 0, "the second SAVE stores the sound in slot 1");
+        { char nm[16]; up_name(0, nm); CHECK(nm[0] != 0, "named (%s)", nm); }
+        t->p[P_E1] = 10;
+        na_pre_go(0);
+        CHECK(t->p[P_E1] == 77, "the user preset loads back (%d)", t->p[P_E1]);
+        na_bank = 0;
+        na_load_user(3);
+        CHECK(na_slot == 3 && t->p[P_E1] == 77, "an empty slot changes nothing");
+        na_bank = 1;
+        npress(B_SAVE);
+        CHECK(na_sslot == 1, "SAVE again: the next free slot (%d)", na_sslot);
+        npress(B_HOME);
+        na_grp = NG_PRESET; na_sub[NG_PRESET] = 0;
+        draw();
+        dump(dir, n++);
+        npress(B_HOME);
+        na_bank = 1;
+        na_load(0);
+        GI(NI_SUPATCH) = 1;
+    }
     /* MATRIX: a route is a slot of the firmware's matrix */
     {
         track_t *t = TSEL;

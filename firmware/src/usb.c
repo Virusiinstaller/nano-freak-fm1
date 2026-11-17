@@ -229,19 +229,42 @@ static int midi_enqueue(uint32_t pkt, uint32_t source)
     return 1;
 }
 
-static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
+#if FELUCCA_FMINI_ONLY
+/* the NANO app's MIDI OUT PORT (GLO > MIDI OUT): bit 0 DIN (the TRS jack of the SMK-37; the FM-1 has none to send on), bit 1 USB,
+ * bit 2 BLE (no radio driver yet). 0xFF: not set (the FMini-1 app: smk_out_mode below decides) */
+volatile uint8_t fm_out_mask = 0xFFu;
+#endif
+static void midi_out_raw(uint32_t pkt, uint32_t mask)   /* from the audio ISR: pkt to the ports of mask (0xFF: the old rule) */
 {
 #if BOARD_SMK37 && !defined(FELUCCA_LOADER)
-    if (smk_out_mode != 1u)                         /* SMK-37 MIDI OUT ALL / TRS: the jack too (smk_midi_out.c) */
-        smk_trs_put(pkt);
-    if (smk_out_mode == 2u)
-        return;                                     /* TRS only */
+    if (mask == 0xFFu) {
+        if (smk_out_mode != 1u)                     /* SMK-37 MIDI OUT ALL / TRS: the jack too (smk_midi_out.c) */
+            smk_trs_put(pkt);
+        if (smk_out_mode == 2u)
+            return;                                 /* TRS only */
+    } else {
+        if (mask & 1u)
+            smk_trs_put(pkt);
+        if (!(mask & 2u))
+            return;
+    }
+#else
+    if (mask != 0xFFu && !(mask & 2u))
+        return;
 #endif
     if (usb.config && mo_w - mo_r < MQ) {
         midi_out_q[mo_w % MQ] = pkt;
         RING_PUBLISH();
         mo_w++;
     }
+}
+static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
+{
+#if FELUCCA_FMINI_ONLY
+    midi_out_raw(pkt, fm_out_mask);
+#else
+    midi_out_raw(pkt, 0xFFu);
+#endif
 }
 
 /* ------------------------------------------------------- descriptors --- */

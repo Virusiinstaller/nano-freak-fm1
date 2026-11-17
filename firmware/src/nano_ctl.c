@@ -18,6 +18,12 @@
 #define NANO_T(t) (ENGINES[eng_idx((t)->eng_req)] == &ENG_NANO)
 static volatile uint8_t fm_seq_out;                     /* 0 LOCAL, 1 BOTH, 2 MIDI */
 static volatile uint8_t fm_cc_out;                      /* 0 off, 1 on */
+/* GLO > MIDI (the app's pages): LOCAL off = the keys do not sound the engine (they go out only), KEY OUT = the keys' notes go
+ * out, CLOCK OUT = 24 clocks a beat and START / STOP while the internal clock runs, THRU = what comes in on fm_thru_in goes out
+ * on the ports of fm_thru_out (fm_out_mask's bits) except real-time */
+static volatile uint8_t fm_local = 1, fm_key_out = 1, fm_clk_out, fm_thru_in = 2, fm_thru_out;
+static uint32_t nco_clk_acc;
+static uint8_t nco_clk_run;
 
 static uint32_t nano_alen(const track_t *t) { return 1u + ((uint32_t)t->p[P_LN0] & 127u) * 15u / 127u; }
 static uint32_t nano_achord(const track_t *t) { return (uint32_t)t->p[P_LN1] <= 8u ? (uint32_t)t->p[P_LN1] : 0u; }
@@ -88,6 +94,34 @@ static void nano_track_loaded(track_t *t)
     t->p[P_LN0] = 127;
     t->p[P_LN1] = t->p[P_LN2] = t->p[P_LN3] = t->p[P_LN4] = 0;
     t->nano_ch = 0;
+}
+
+/* the main audio block (seq.c): n samples went by */
+static void nano_clock_out(uint32_t n)
+{
+    uint32_t per;
+    if (!fm_clk_out || song.g[G_CLOCK]) {
+        nco_clk_run = 0;
+        return;
+    }
+    if (song.playing != nco_clk_run) {
+        nco_clk_run = (uint8_t)(song.playing != 0u);
+        midi_out_event(0x0Fu | (nco_clk_run ? 0xFAu : 0xFCu) << 8);
+        nco_clk_acc = 0;
+    }
+    per = beat_samples() / 24u;
+    per = per ? per : 1u;
+    nco_clk_acc += n;
+    while (nco_clk_acc >= per) {
+        nco_clk_acc -= per;
+        midi_out_event(0x0Fu | 0xF8u << 8);
+    }
+}
+/* a message that came in: thru it (the channel messages and system exclusive's first packet; real-time never) */
+static void nano_thru(uint32_t pkt, uint32_t source)
+{
+    if (fm_thru_out && source == (uint32_t)fm_thru_in && ((pkt >> 8) & 0xFFu) < 0xF8u)
+        midi_out_raw(pkt, fm_thru_out);
 }
 
 /* ---------------------------------------------- the arp / sequencer to MIDI OUT --- */
