@@ -1,12 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * The Nano Freak screen and controls (nano_app.c): draws every page with the real painter to PPMs (OUT/na_<n>.ppm), and checks
  * that SELECT / ALGORITHM / PRESETS / KNOB 1..4 reach the parameters the test bed's pages are for. */
-#define UI_TEST_NO_MAIN 1
 #define FELUCCA_FMINI_ONLY 1
-#define FELUCCA_NANO_APP 1
-#include "ui_test.c"
-#include "../firmware/src/fmini_rec.c"
-#include "../firmware/src/fmini_bank.c"
+#include "nano_host.h"
 #include "../firmware/src/nano_app.c"
 #include <stdio.h>
 #include "nano_seq_table.h"

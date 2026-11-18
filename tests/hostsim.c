@@ -32,16 +32,6 @@ static struct { volatile uint32_t notes, buttons; } fm1_in;
 #endif
 #include "../firmware/src/core.h"
 #include "../firmware/src/engines.c"
-#include "../firmware/src/fmini_rec.c"
-#if !FELUCCA_FLASH                           /* (the flash build, the emulator: fmini_bank.c after storage.c, felucca_web.c) */
-#include "../firmware/src/fmini_bank.c"
-#endif
-#if !FELUCCA_FLASH
-/* every host test: the FMini RAM presets exist before main (the power-on fmini_init, fb_boot, in the device) */
-#undef __attribute__                          /* (this file drops the sources' section attributes: keep this one) */
-__attribute__((constructor)) static void hostsim_fmini_presets(void) { fb_names_init(); }
-#define __attribute__(x)
-#endif
 #include "../firmware/src/params.c"
 #include "../firmware/src/mod.c"
 #include "../firmware/src/voice.c"
@@ -115,10 +105,7 @@ static void host_preset_values(track_t *t, uint32_t e, uint32_t pi, const preset
     t->p[P_VOICE] = p->mono ? V_LEGATO : V_POLY;
     for (i = 0; i < 4u; i++)
         t->p[P_DIST + i] = (int16_t)(p->fx[i] ? p->fx[i] - 1 : FX_DEF[i]);
-    if (t->eng_req == ENGI_FMINI)                 /* FMINI: a preset is its slot (0..199), as ui.c apply_preset_to: e[7] is int8 */
-        t->p[P_E7] = (int16_t)pi;
     fm6_track_loaded(t);                          /* FM6: the preset's patch (ui.c apply_preset_to) */
-    fmini_track_loaded(t);
     nano_track_loaded(t);
 }
 static void host_preset_req(track_t *t, uint32_t e, uint32_t pi)
@@ -869,7 +856,6 @@ int main(int argc, char **argv)
         inst.p[P_SUS] = p->env[2]; inst.p[P_REL] = p->env[3]; inst.p[P_ED_FLT] = p->fenv;
     }
     fm6_track_loaded(&inst);                            /* FM6: the preset's patch */
-    fmini_track_loaded(&inst);
     inst.p[P_VOICE] = (int16_t)mono;
     inst.p[P_CHOR] = argc > 5 ? atoi(argv[5]) : 24;      /* as felucca_init */
     inst.p[P_DLY] = argc > 5 ? atoi(argv[5]) : 28;
@@ -890,21 +876,6 @@ int main(int argc, char **argv)
             if (*s == ',')
                 s++;
         }
-    }
-    if (getenv("FMINI")) {                               /* FMINI=idx:value,...: the FMINI patch's bytes (FG_*), then SLOT OWN */
-        const char *s = getenv("FMINI");
-        uint8_t v[FG_SIZE];
-        int id, val, k;
-        memcpy(v, fmini_patch[0], FG_SIZE);
-        while (sscanf(s, "%d:%d%n", &id, &val, &k) == 2) {
-            if (id >= 0 && id < (int)FG_SIZE)
-                v[id] = (uint8_t)val;
-            s += k;
-            if (*s == ',')
-                s++;
-        }
-        fmini_set_patch(0, v);
-        fmini_adopt(0);
     }
     if (getenv("STEPS")) {                              /* STEPS=n,n,...: a pattern (0 = rest) played by the sequencer */
         const char *s = getenv("STEPS");

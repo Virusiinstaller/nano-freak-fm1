@@ -85,7 +85,7 @@ static void hexs(char *b, uint32_t v)
 static void smk_grid(void)
 {
     uint32_t l = ui.layer ? ui.layer : ui.ly;
-    smk_pad_grid = (uint8_t)(grid_on() || (name_on() && !ui.menu) || (l && l != LAYER_SCL));
+    smk_pad_grid = (uint8_t)0;
 }
 
 /* the SMK-37 Pro's 4 faders, tracks 1..4, by FADER BANK (ui_input.c smk_fbank), as the MIXER page: A LEVEL,
@@ -207,7 +207,6 @@ static void felucca_init(void)
         song.g[i] = GP[i].def;
     undo_depth++;                             /* (no undo copy of the power-on loads) */
     fm6_init();                               /* every track's FM6 patch: the init voice */
-    fmini_init();                              /* every track's FMINI patch: F1 */
     for (i = 0; i < NTRK; i++) {
         track_t *t = &trk[i];
         track_defaults(t);

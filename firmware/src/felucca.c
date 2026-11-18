@@ -8,7 +8,7 @@
  * (core.h: the SLICE engine, the DIGITAL engine), FELUCCA_ICONS (icons.c, the parameter icons; on by default),
  * FELUCCA_OTA_RAMONLY (ota.c). */
 #ifndef FELUCCA_FMINI_ONLY
-#define FELUCCA_FMINI_ONLY 1     /* FMini-1: only the synth's own screen and controls (fmini_app.c); 0 = Felucca's whole UI */
+#define FELUCCA_FMINI_ONLY 1     /* the Nano Freak: only the synth's own screen and controls (nano_app.c); 0 = Felucca's whole UI (kept for its host tests) */
 #endif
 #ifndef FELUCCA_FLASH
 #define FELUCCA_FLASH 1          /* flash driver + storage.c: settings, projects, user presets */
@@ -21,9 +21,6 @@
 #endif
 #ifndef FELUCCA_CDC
 #define FELUCCA_CDC 0            /* USB CDC-ACM serial console: off (frees EP2 / EP3 for USB audio out) */
-#endif
-#ifndef FELUCCA_NANO_APP
-#define FELUCCA_NANO_APP 1       /* the product's screen is the Nano Freak's (nano_app.c); 0 = the FMini-1 one (fmini_app.c, kept for its host tests) */
 #endif
 #ifndef FELUCCA_UAC
 #define FELUCCA_UAC 1            /* USB audio input: the master output, 16-bit stereo 44.1 kHz (usb.c) */
@@ -122,13 +119,8 @@
 /* -------------------------------------------------------------- UI --- */
 #include "panel.c"
 #include "ui.c"
-#include "menu_items.c"          /* MENU's rows and settings (ui_menu.c, editor_menu.c) */
-#include "icons.c"               /* parameter icons (FELUCCA_ICONS), used by ui_draw.c */
-#include "ui_graph.c"
-#include "ui_draw.c"
-#include "ui_menu.c"
-#include "ui_input.c"
-#include "ui_layer.c"              /* the quick layers (FX GLO SCL EDIT REC held; SEQ TOOLS: ui_tools.c) */
+#include "panel_setup.c"         /* HARDWARE CALIBRATION (OCT- + OCT+ at power-on) */
+#include "menu_items.c"          /* the MENU settings' table (editor_menu.c: the web editor's MENU_DESC / MENU_SET) */
 
 /* --------------------------------------------- storage, update, editor --- */
 #if FELUCCA_FLASH
@@ -137,8 +129,6 @@
 #include "storage.c"
 #endif
 #include "upreset.c"             /* user presets (RAM mirror; flash with FELUCCA_FLASH) */
-#include "fmini_rec.c"           /* FMini-1 preset records: tagged blocks (1.14.0) */
-#include "fmini_bank.c"          /* FMini-1 256-slot preset bank: factory / INIT records, the RAM name list (1.14.0) */
 #include "project.c"
 #if FELUCCA_OTA
 #include "ota.c"
@@ -149,31 +139,11 @@
 #include "console.c"
 #endif
 #include "master.c"              /* the MASTER pot (#137: read before the audio starts) */
-#if FELUCCA_NANO_APP
 #include "nano_app.c"
-#else
-#include "fmini_app.c"
-#endif
-#if FELUCCA_FMINI_ONLY && FELUCCA_NANO_APP
 #define UI_INPUT na_input
 #define UI_LEDS na_leds
 #define UI_DRAW na_draw
 #define UI_SPLASH na_splash
 #define UI_INIT na_init
 #define UI_FADERS na_smk_faders
-#elif FELUCCA_FMINI_ONLY
-#define UI_INPUT fa_input
-#define UI_LEDS fa_leds
-#define UI_DRAW fa_draw
-#define UI_SPLASH fa_splash
-#define UI_INIT fa_init
-#define UI_FADERS fa_smk_faders
-#else
-#define UI_INPUT ui_input
-#define UI_LEDS ui_leds
-#define UI_DRAW ui_draw
-#define UI_SPLASH draw_splash
-#define UI_INIT()
-#define UI_FADERS()
-#endif
 #include "main.c"

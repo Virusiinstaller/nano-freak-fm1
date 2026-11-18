@@ -44,8 +44,6 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 #include "../firmware/src/menu_items.c"
 static void panel_setup(void) {}
 #include "../firmware/src/upreset.c"
-#include "../firmware/src/fmini_rec.c"
-#include "../firmware/src/fmini_bank.c"
 #include "../firmware/src/project.c"
 
 static uint32_t flash_ok = 1;
@@ -171,7 +169,7 @@ static int preferences(void)
     uint8_t a[4] = {0, 7, 0, 0};
     reset();
     uint32_t n = request(ED_INFO, a, 0);
-    uint32_t e = n - 17u;                                  /* (1.5.5: 4B 01 NCOND, 1.6: 45 01 5, FMini-1: 47 01 32 last, below) */
+    uint32_t e = n - 11u;                                  /* (1.5.5: 4B 01 NCOND, 1.6: 45 01 5, FMini-1: 47 01 32 last, below) */
     bad += check("INFO explicitly tags display capabilities after SONG without changing command 33",
         ED_SONG == 33 && ED_UI_STATE == 34 && ED_FAV_SET == 38 &&
         host_wire[e - 47] == CHAIN_ROWS && host_wire[e - 46] == 0x55 &&
@@ -192,15 +190,12 @@ static int preferences(void)
         host_wire[e - 7] == 0x56 && host_wire[e - 6] == 1 && host_wire[e - 5] == 32 &&   /* 1.4.1: FM6 voice bank */
         host_wire[e - 4] == 0x43 && host_wire[e - 3] == 1 && host_wire[e - 2] == ML_N);   /* 1.5: MIDI LEARN */
     bad += check("INFO 1.5.5: 4B 01 11, a step's condition after its nudge",
-        host_wire[n - 18] == 0x4B && host_wire[n - 17] == 1 && host_wire[n - 16] == NCOND);
+        host_wire[n - 12] == 0x4B && host_wire[n - 11] == 1 && host_wire[n - 10] == NCOND);
     bad += check("INFO 1.6: 45 01 5, CUSTOM's colours",
-        host_wire[n - 15] == 0x45 && host_wire[n - 14] == 1 && host_wire[n - 13] == 5);
-    bad += check("INFO FMini-1: 47 01 32 (the FMINI patch's size), then 48 01 01 (octave, cmd 84), last",
-        host_wire[n - 7] == 0x47 && host_wire[n - 6] == 1 && host_wire[n - 5] == FG_SIZE &&
-        host_wire[n - 4] == 0x48 && host_wire[n - 3] == 1 && host_wire[n - 2] == 1);
-    bad += check("INFO 1.14.2: 49 01 major minor patch = FMINI_VERSION, 5 bytes before the 47 block (the test counts n = length + 1)",
-        host_wire[n - 12] == 0x49 && host_wire[n - 11] == 1 && host_wire[n - 10] == FMINI_VER_MAJ &&
-        host_wire[n - 9] == FMINI_VER_MIN && host_wire[n - 8] == FMINI_VER_PATCH);
+        host_wire[n - 9] == 0x45 && host_wire[n - 8] == 1 && host_wire[n - 7] == 5);
+    bad += check("INFO 1.14.2: 49 01 major minor patch = FMINI_VERSION, last",
+        host_wire[n - 6] == 0x49 && host_wire[n - 5] == 1 && host_wire[n - 4] == FMINI_VER_MAJ &&
+        host_wire[n - 3] == FMINI_VER_MIN && host_wire[n - 2] == FMINI_VER_PATCH);
     request(ED_UI_SET, a, 2);
     bad += check("UI_SET updates the actual palette and reports RAM-only saving",
         host_wire[5] == 3 && settings.palette == 7 && T_BG == UI_PALETTES[7].bg);
@@ -469,106 +464,6 @@ static int malformed_saves(void)
     TSEL->p[P_LEVEL] = 21; song.playing = 1; host_progress = 0;
     bad += check("PROJECT never confirms an old used slot when STOP timed out",
                  !request(ED_PROJECT, save, sizeof save) && !memcmp(&old, &proj_slot[0], sizeof old));
-    return bad;
-}
-
-/* FMINI patches (FMini-1, cmds 82, 83): a track's own patch, a factory patch, malformed frames */
-static int fmini_patches(void)
-{
-    int bad = 0;
-    uint8_t a[3 + FG_SIZE];
-    uint32_t n, i;
-    reset();
-    a[0] = ED_FMINI_FACTORY; a[1] = 3;
-    n = request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET factory 4: the 32 bytes", n == 5u + 3u + FG_SIZE + 1u && host_wire[7] == 0 &&
-                 !memcmp(host_wire + 8, FMINI_FACTORY[3], FG_SIZE));
-    trk[1].eng_req = ENGI_FMINI;
-    trk[1].p[P_E7] = 3;
-    memcpy(a + 2, FMINI_FACTORY[3], FG_SIZE);
-    a[0] = ED_FMINI_TRACK; a[1] = 1; a[2 + FG_L1] = 77; a[2 + FG_W2] = 4; a[2 + FG_W3] = 5; a[2 + FG_SW1] = 127;
-    n = request(ED_FMINI_PUT, a, sizeof a);
-    bad += check("FMINI_PUT track 2: rc 0, the patch (clamped into its ranges), SLOT OWN",
-                 host_wire[7] == 0 && fmini_patch[1][FG_L1] == 77 && fmini_patch[1][FG_W2] == 4 &&
-                 fmini_patch[1][FG_W3] == 5 && trk[1].p[P_E7] == FMINI_OWN && fmini_slot[1] == FMINI_OWN);
-    fmini_poll();
-    bad += check("  .. the main loop keeps it", fmini_patch[1][FG_L1] == 77);
-    n = request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET track 2: as put, then SLOT (two 7-bit bytes) and the octave", n == 5u + 3u + FG_SIZE + 4u && host_wire[7] == 0 &&
-                 host_wire[8 + FG_L1] == 77 && host_wire[8 + FG_SIZE] == (FMINI_OWN & 0x7Fu) && host_wire[9 + FG_SIZE] == (FMINI_OWN >> 7));
-    memcpy(a + 2, FMINI_FACTORY[5], FG_SIZE);
-    request(ED_FMINI_PUT, a, sizeof a);
-    bad += check("FMINI_PUT of a factory patch unchanged: SLOT shows it (F6)", trk[1].p[P_E7] == 5 && fmini_slot[1] == 5u);
-    trk[2].eng_req = 0;
-    a[1] = 2;
-    request(ED_FMINI_PUT, a, sizeof a);
-    bad += check("FMINI_PUT to a track that is not FMINI: rc 2", host_wire[7] == 2u);
-    a[0] = ED_FMINI_FACTORY; a[1] = 1;
-    request(ED_FMINI_PUT, a, sizeof a);
-    bad += check("FMINI_PUT to a factory patch: rc 1", host_wire[7] == 1u);
-    a[0] = ED_FMINI_TRACK; a[1] = NTRK;
-    request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET of track 5: rc 1", host_wire[7] == 1u);
-    a[0] = 1; a[1] = 0;
-    request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET of an unknown target: rc 1", host_wire[7] == 1u);
-    a[0] = ED_FMINI_FACTORY; a[1] = FMINI_NFACTORY & 127; a[2] = FMINI_NFACTORY >> 7;     /* 1.14.1: the index in two bytes */
-    request(ED_FMINI_GET, a, 3);
-    bad += check("FMINI_GET of factory patch 200: rc 1", host_wire[8] == 1u);
-    a[1] = 150 & 127; a[2] = 150 >> 7;
-    request(ED_FMINI_GET, a, 3);
-    bad += check("FMINI_GET factory 150 (two bytes): the 32 bytes after lo, hi, rc", host_wire[8] == 0 &&
-                 host_wire[5] == ED_FMINI_FACTORY && host_wire[6] == (150 & 127) && host_wire[7] == 1 && !memcmp(host_wire + 9, FMINI_FACTORY[150], FG_SIZE));
-    /* a user preset: stored from an FMINI track, read without loading it */
-    reset();
-    trk[0].eng_req = ENGI_FMINI; trk[0].engine = ENGI_FMINI;
-    memcpy(a + 2, FMINI_FACTORY[9], FG_SIZE); a[2 + FG_L2] = 33;
-    a[0] = ED_FMINI_TRACK; a[1] = 0;
-    request(ED_FMINI_PUT, a, sizeof a);
-    song.sel = 0;
-    up_store(5, "MY PAT");                               /* track 1 (the patch just put) -> slot 6 */
-    a[0] = ED_FMINI_USER; a[1] = 5;
-    n = request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET user 6: the patch stored with the preset", n == 5u + 3u + FG_SIZE + 1u && host_wire[7] == 0 &&
-                 host_wire[8 + FG_L2] == 33 && !memcmp(host_wire + 8, fmini_patch[0], FG_SIZE));
-    a[1] = 6;
-    request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET of an empty user slot: rc 2", host_wire[7] == 2u);
-    a[1] = UP_SLOTS;
-    request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET of user slot 33: rc 1", host_wire[7] == 1u);
-    /* the extras: the octave on GET / PUT, and what the preset kept (cmd 84) */
-    reset();
-    trk[0].eng_req = ENGI_FMINI; trk[0].engine = ENGI_FMINI;
-    memcpy(a + 2, FMINI_FACTORY[2], FG_SIZE);
-    a[0] = ED_FMINI_TRACK; a[1] = 0; a[2 + FG_SIZE] = 3;            /* octave 3 - 4 = -1 */
-    n = request(ED_FMINI_PUT, a, 3u + FG_SIZE);
-    bad += check("FMINI_PUT with the octave byte: rc 0, song.octave -1", host_wire[7] == 0 && song.octave == -1);
-    n = request(ED_FMINI_GET, a, 2);
-    bad += check("FMINI_GET track 1 ends with the octave + 4", n == 5u + 3u + FG_SIZE + 4u && host_wire[8 + FG_SIZE + 2] == 3);
-    song.octave = 2; song.g[G_BPM] = 99; song.g[G_RSIZE] = 50; song.g[G_RTYPE] = 3;
-    up_store(9, "KEPT");
-    {   /* (the host build is not FMINI-only: its records keep no tempo / octave / FX, so put them in as the FMini-1 stores them) */
-        up_rec_t *rr = (up_rec_t *)up_rec(9);
-        rr->packed[UP_BPM_AT] = 99; rr->packed[UP_OCT_AT] = 6; rr->packed[UP_FX_AT] = 51; rr->packed[UP_FX2_AT + 0] = 4;
-    }
-    a[0] = 9;
-    n = request(ED_FMINI_PRESET, a, 1);
-    {
-        uint32_t v[14], k;
-        for (k = 0; k < 14u; k++) v[k] = (uint32_t)((host_wire[7 + 2 * k] | host_wire[8 + 2 * k] << 7) - 8192);
-        bad += check("FMINI_PRESET 10: BPM, octave + 4, the FX globals + 1 as stored", n == 5u + 2u + 28u + 1u && host_wire[6] == 0 &&
-                     v[0] == 99 && v[1] == 6 && v[2] == 51 && v[6] == 4 && v[13] == 0);
-    }
-    a[0] = 11;
-    request(ED_FMINI_PRESET, a, 1);
-    bad += check("FMINI_PRESET of an empty slot: rc 2", host_wire[6] == 2u);
-    a[0] = UP_SLOTS;
-    request(ED_FMINI_PRESET, a, 1);
-    bad += check("FMINI_PRESET of slot 33: rc 1", host_wire[6] == 1u);
-    for (i = 0; i < 3u; i++)
-        a[i] = 0;
-    bad += check("FMINI_GET with a wrong length: rc 1", request(ED_FMINI_GET, a, 3) > 0 && host_wire[7] == 1u);
     return bad;
 }
 
@@ -1398,7 +1293,6 @@ static int names_complete(void)
     int bad = 0, all = 1;
     uint32_t e, k, worst = 0;
     reset();
-    fb_names_init();                                       /* the RAM presets (FMINI: the 200 names) */
     for (e = 0; e < NENGINES; e++) {
         uint8_t a = (uint8_t)e;
         uint32_t n = request(ED_NAMES, &a, 1), j = 8, np = ENGINES[e]->npresets, ok = n > 9u && host_wire[5] == e && host_wire[6] == (np & 0x7Fu) && host_wire[7] == (np >> 7);
@@ -1424,126 +1318,17 @@ static int names_complete(void)
         if (n > worst) worst = n;
     }
     bad += check("NAMES: every engine's reply has all its preset names and both titles, whole", all);
-    bad += check("  .. FMINI lists its 200 slots", ENGINES[ENGI_FMINI]->npresets == 200u);
     bad += check("  .. and the largest reply fits the reply buffer with room to spare", worst + 16u < sizeof ed_out);
     return bad;
 }
 
-/* the backup and restore (protocol 4, cmds 85..87): a record reads back whole, nothing is written before the device has said
- * YES, a written record is the one sent, a bad one is refused, NO and a silent device (60 s) refuse */
-static uint32_t rec_get(uint32_t k, uint8_t *rec)
-{
-    uint32_t n = request(ED_FMINI_REC, (const uint8_t[]){(uint8_t)(k & 127u), (uint8_t)(k >> 7)}, 2), len, i;
-    if (n < 11u || host_wire[7] != 0)
-        return 0;
-    len = host_wire[8] | host_wire[9] << 7;
-    if (len > FB_SLOT || n != 11u + 2u * len)
-        return 0;
-    for (i = 0; i < len; i++)
-        rec[i] = (uint8_t)(host_wire[10u + 2u * i] | host_wire[11u + 2u * i] << 4);
-    return len;
-}
-static uint32_t rec_put(uint32_t k, const uint8_t *rec, uint32_t len)
-{
-    uint8_t a[4 + 2 * FB_SLOT];
-    uint32_t i;
-    a[0] = (uint8_t)(k & 127u); a[1] = (uint8_t)(k >> 7); a[2] = (uint8_t)(len & 127u); a[3] = (uint8_t)(len >> 7);
-    for (i = 0; i < len; i++) {
-        a[4u + 2u * i] = rec[i] & 15u;
-        a[5u + 2u * i] = rec[i] >> 4;
-    }
-    request(ED_FMINI_RPUT, a, 4u + 2u * len);
-    return host_wire[7];                                 /* rc (payload: slot, slot, rc) */
-}
-static uint32_t restore_op(uint32_t op)                  /* -> the state; rc in host_wire[6] */
-{
-    uint8_t a = (uint8_t)op;
-    request(ED_FMINI_RESTORE, &a, 1);
-    return host_wire[7];
-}
-static int restore_protocol(void)
-{
-    int bad = 0;
-    uint8_t rec[FB_SLOT], mod[FB_SLOT], back[FB_SLOT];
-    uint32_t len, n2, k = 7, st;
-    reset();
-    fb_names_init();
-    len = rec_get(k, rec);
-    bad += check("BACKUP: a slot's record reads back whole (the factory's when never saved)", len > 0u && fr_valid(rec, len));
-    n2 = rec_get(200u, back);
-    bad += check("  .. and a slot past the 200 is refused", n2 == 0u);
-    bad += check("RESTORE: idle at first", restore_op(1) == 0u);
-    bad += check("  .. nothing is written before the question (rc 2)", rec_put(k, rec, len) == 2u);
-    bad += check("  .. the question goes up (state 1)", restore_op(0) == 1u);
-    bad += check("  .. and still nothing is written while it is up", rec_put(k, rec, len) == 2u);
-    fb_rs = FB_RS_NO;                                    /* the device: NO (or a page button) */
-    bad += check("  .. NO: state 3, and nothing is written", restore_op(1) == 3u && rec_put(k, rec, len) == 2u);
-    bad += check("  .. the question can come up again (state 1)", restore_op(0) == 1u);
-    fb_rs = FB_RS_OK;                                    /* the device: YES */
-    st = restore_op(1);
-    bad += check("  .. YES: state 2 (write now)", st == 2u);
-    memcpy(mod, rec, len);
-    mod[2] = 'Z';                                        /* the name block's first letter: tag 1, length, the text */
-    bad += check("  .. a record written back is the one sent", rec_put(k, mod, len) == 0u);
-    n2 = rec_get(k, back);
-    bad += check("  .. and reads back as sent (the name starts with Z)", n2 == len && back[2] == 'Z' && ENGINES[ENGI_FMINI]->presets[k].name[0] == 'Z');
-    mod[1] = 250;                                        /* a block longer than the record: not a preset */
-    bad += check("  .. a damaged record is refused (rc 3)", rec_put(k, mod, len) == 3u);
-    bad += check("  .. and the other slots are untouched", rec_get(8u, back) > 0u);
-    bad += check("  .. END: idle (state 0), and writes stop again (rc 2)", restore_op(2) == 0u && rec_put(k, rec, len) == 2u);
-    restore_op(0);
-    fb_rs_t = fm1_ms - FB_RS_TIMEOUT - 1u;               /* the device says nothing for 60 s */
-    bad += check("  .. no answer for 60 s: NO (state 3)", restore_op(1) == 3u);
-    restore_op(2);
-    bad += check("RESTORE: arguments checked (rc 1)", (request(ED_FMINI_RESTORE, (const uint8_t[]){5}, 1), host_wire[6] == 1u));
-    {   /* 1.14.1: every slot resets, the factory ones too: 150 back to its factory record, the name read back from it */
-        uint8_t kk[2] = {150 & 127, 150 >> 7}, rec[FB_SLOT];
-        const uint8_t *d = 0;
-        uint32_t l = 0, nn;
-        request(ED_FMINI_RESET, kk, 2);
-        bad += check("FACTORY RESET 150: rc 0", host_wire[7] == 0u);
-        nn = fb_read(150, rec);
-        bad += check("  .. the record is the factory's name", nn > 0u && fr_find(rec, nn, FR_NAME, &d, &l) &&
-                     l == strlen(FMINI_PRESETS[150].name) && !memcmp(d, FMINI_PRESETS[150].name, l));
-    }
-    {   /* 1.14.1: the reset is asked on the device: RESTORE 0 with a slot, RESTORE 3 with every factory preset, then 2 ends */
-        uint8_t q1[3] = {0, 150 & 127, 150 >> 7}, q3[1] = {3}, bad1[3] = {0, 200 & 127, 200 >> 7};
-        request(ED_FMINI_RESTORE, q1, 3);
-        bad += check("RESTORE 0 + a slot: asked (rc 0, state 1)", host_wire[6] == 0u && host_wire[7] == 1u);
-        request(ED_FMINI_RESTORE, (const uint8_t[]){2}, 1);
-        request(ED_FMINI_RESTORE, bad1, 3);
-        bad += check("RESTORE 0 + a slot past 199: rc 1", host_wire[6] == 1u);
-        request(ED_FMINI_RESTORE, q3, 1);
-        bad += check("RESTORE 3: every factory preset asked (rc 0, state 1)", host_wire[6] == 0u && host_wire[7] == 1u);
-        request(ED_FMINI_RESTORE, (const uint8_t[]){2}, 1);
-        bad += check("RESTORE 2: ended (state 0)", host_wire[7] == 0u);
-    }
-    {   /* FACTORY RESET: slot 7 is its factory preset again (the name Z gone), an out-of-range slot is refused */
-        uint8_t kk[2] = {7, 0};
-        request(ED_FMINI_RESET, kk, 2);
-        bad += check("FACTORY RESET: slot 7 is its factory preset again", host_wire[7] == 0u && strcmp(ENGINES[ENGI_FMINI]->presets[7].name, "Z") != 0 && fb_read(7, back) > 0u && back[2] != 'Z');
-        kk[0] = 200 & 127; kk[1] = 200 >> 7;             /* 200 as two 7-bit bytes */
-        request(ED_FMINI_RESET, kk, 2);
-        bad += check("  .. a slot past 199 is refused (rc 1)", host_wire[7] == 1u);
-    }
-    {   /* USBDIAG (89): version 1, alt, playing, then 11 counters of 5 bytes; nothing played yet, so all 0 */
-        uint32_t nw = request(ED_FMINI_USBDIAG, 0, 0), k, j, zero = 1;
-        bad += check("USBDIAG: the reply is command 89, version 1, 3 + 45 payload bytes",
-                     nw == 5u + 3u + 55u + 1u && host_wire[4] == ED_FMINI_USBDIAG && host_wire[5] == 1u);
-        for (k = 0; k < 9u; k++)
-            for (j = 0; j < 5u; j++)
-                zero &= host_wire[8u + 5u * k + j] == 0u;
-        bad += check("  .. the counters are 0 before any playback (alt 0, not playing)", zero && host_wire[6] == 0u && host_wire[7] == 0u);
-    }
-    return bad;
-}
 
 #ifndef EDITOR_TEST_NO_MAIN                              /* (robust_test.c, fuzz_*.c: this file is their base) */
 int main(void)
 {
     int bad = preferences() + motion_locks() + framing() + uart_recovery() + steps() + song_protocol() + malformed_saves() +
-              fm6_patches() + fmini_patches() + user_preset_roundtrip() + live_sync() + usb_burst() + menu_protocol() + drum_kit_retired() +
-              learn_protocol() + custom_palette() + names_complete() + restore_protocol();
+              fm6_patches() + user_preset_roundtrip() + live_sync() + usb_burst() + menu_protocol() + drum_kit_retired() +
+              learn_protocol() + custom_palette() + names_complete();
     printf("%s\n", bad ? "EDITOR TEST FAILED" : "editor test passed");
     return bad != 0;
 }

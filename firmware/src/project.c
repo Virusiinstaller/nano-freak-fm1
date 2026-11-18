@@ -874,18 +874,7 @@ static void project_capture(project_t *p)
         p->t[i].engine = trk[i].eng_req;
         p->t[i].preset = trk[i].preset;
         memcpy(p->t[i].step, trk[i].step, sizeof trk[i].step);
-        if (trk[i].eng_req == ENGI_FMINI) {               /* FMINI: its patch in the slot of the FM6 one (the track plays one */
-            memset(p->fm6[i], 0, FM6_PACKED);           /* engine at a time); FM6's own is the init voice then */
-            memcpy(p->fm6[i], fmini_patch[i], FG_SIZE);
-            {   /* FMINI's SLOT (0..OWN, 1.14.0: 200) is 8 bits: the low 7 in the parameter byte, the high bit in the patch's
-                 * spare byte, marked 0x40 (a 1.13 project has 0 there: its SLOT 100 was OWN, see the load) */
-                int32_t sl = clamp(trk[i].p[P_E7], 0, FMINI_OWN);
-                p->t[i].p[P_E7] = (int16_t)(sl & 0x7F);
-                p->fm6[i][FG_SIZE] = (uint8_t)(0x40u | ((uint32_t)sl >> 7 & 1u));
-            }
-        } else {
-            fm6_pack(fm6_patch[i], p->fm6[i]);
-        }
+        fm6_pack(fm6_patch[i], p->fm6[i]);
     }
     p->motion = motion;
     memcpy(p->mch, song.mch, sizeof p->mch);
@@ -1100,24 +1089,12 @@ static int project_restore_runtime(const project_t *input)
             const param_desc_t *d = param_desc_of(e, i);
             t->p[i] = (int16_t)param_fit(d, s->p[i]);
         }
-        if (e == ENGI_FMINI) {                          /* SLOT: the save's two parts (project_capture); a 1.13 project: OWN was 100 */
-            uint8_t mk = p->fm6[k][FG_SIZE];
-            int32_t lo = s->p[P_E7] & 0x7F;
-            int32_t sl = (mk & 0x40u) ? (lo | (int32_t)(mk & 1u) << 7) : (lo == 100 ? (int32_t)FMINI_OWN : lo);
-            t->p[P_E7] = (int16_t)param_fit(param_desc_of(e, P_E7), sl);
-        }
         t->preset = (uint8_t)(ENGINES[e]->npresets ? (s->preset >= PROJ_DEF_KEEP ? 0u : s->preset) % ENGINES[e]->npresets : 0u);
         memcpy(t->step, s->step, sizeof t->step);
         proj_steps(t->step);
         {   /* the project's own FM6 patch, never reloaded from SLOT: F n if it is that factory patch, else OWN */
             uint8_t v[FP_SIZE + 1u];
-            if (e == ENGI_FMINI) {                       /* an FMINI track: the slot holds its patch, FM6's is the init voice */
-                fmini_set_patch(k, p->fm6[k]);
-                fmini_adopt(k);
-                fm6_unpack(FM6_INIT, v);
-            } else {
-                fm6_unpack(p->fm6[k], v);
-            }
+            fm6_unpack(p->fm6[k], v);
             fm6_set_patch(k, v);
             fm6_adopt(k);
         }
@@ -1198,7 +1175,6 @@ static void persist_boot(void)                    /* before settings_init / pane
     }
     up_boot();                                     /* user presets */
 #if FELUCCA_FLASH
-    fb_boot();                                     /* FMini-1 preset bank: stamp, names (fmini_bank.c) */
 #endif
 #endif
 }
@@ -1335,7 +1311,6 @@ static uint32_t autosave_sig(void)
         h = as_mix(h, &t->preset, 1);
         h = as_mix(h, t->step, sizeof t->step);
         h = as_mix(h, fm6_patch[i], sizeof fm6_patch[i]);
-        h = as_mix(h, fmini_patch[i], FG_SIZE);
     }
     for (i = 0; i < G_COUNT; i++)
         if (i != G_SLOT && i != G_NAME && i != G_LOAD && i != G_SAVE)

@@ -1,12 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * The Nano Freak controls reach the SOUND: renders audio through the block the audio ISR runs (events_block + mix_block) and
  * measures it. Keys, envelope, filter, LFO, mod matrix, ARP and SEQ each have to change what comes out. */
-#define UI_TEST_NO_MAIN 1
 #define FELUCCA_FMINI_ONLY 1
-#define FELUCCA_NANO_APP 1
-#include "ui_test.c"
-#include "../firmware/src/fmini_rec.c"
-#include "../firmware/src/fmini_bank.c"
+#include "nano_host.h"
 #include "../firmware/src/nano_app.c"
 #include <stdio.h>
 #include <math.h>

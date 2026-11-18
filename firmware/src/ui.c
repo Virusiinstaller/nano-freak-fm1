@@ -431,8 +431,6 @@ static int page_visible(uint32_t i)
         return ENGINES[TSEL->eng_req % NENGINES] == &ENG_ANALOG;
     if (PAGES[i].graph >= GR_FMOP && PAGES[i].graph <= GR_FMENV)
         return TSEL->eng_req % NENGINES == ENGI_FM6;
-    if (PAGES[i].graph >= GR_FMG0 && PAGES[i].graph <= GR_FMG7)      /* FMINI's panel (ui_fmini.c) */
-        return TSEL->eng_req % NENGINES == ENGI_FMINI;
     return !(PAGES[i].fam == FAM_EDIT && PAGES[i].id[0] >= P_FM1_ATK &&
              PAGES[i].id[0] <= P_FM4_LEVEL) || (FELUCCA_FM4 && TSEL->eng_req % NENGINES == ENGI_DIGITAL);
 }
@@ -506,7 +504,6 @@ static uint32_t lock_id(uint32_t k)
     return id < P_COUNT && motion_param(id) ? id : 0xFFu;
 }
 
-static void ev_enter(void);
 /* 1.5 (Discussion #156): MENU > HELP ON: a page entered (here, go_home) shows its hint in the footer for ~2 s
  * (ui_help.c, ui_draw.c draw_foot) */
 #define HELP_FRAMES 120u                       /* (~2 s at the UI's ~60 frames a second) */
@@ -520,8 +517,6 @@ static void help_start(void) { ui.help_t = (uint8_t)(help_on() ? HELP_FRAMES : 0
 static void page_entered(void)
 {
     const page_t *pg = cur_page();
-    if (!ui.home && pg->graph == GR_EVENTS)      /* AUTOMATION: + ADD on the SEQ cursor's step */
-        ev_enter();
     if (!ui.home && lock_page_ok(ui.page))
         ui.plk_src = (uint8_t)(ui.page + 1u);
     song.seq_mode = !ui.home && pg->fam == FAM_SEQ;
@@ -859,8 +854,6 @@ static struct {
     uint8_t what;                /* UNDO_SOUND | UNDO_PAT: what the loads since the copy changed (undo_swap) */
     uint8_t eng, preset, user, patn;
     uint8_t fm6_slot;            /* the track's FM6 patch and its SLOT (eng_fm6.c): an edited or a project's */
-    uint8_t fmini[FG_SIZE];
-    uint16_t fmini_slot;                  /* the same for FMINI (eng_fmini.c) */
     uint8_t fm6[FP_SIZE + 1u];   /* patch is the track's own, not a factory one */
     int16_t p[P_COUNT];
     step_t step[NSTEP];
@@ -989,8 +982,6 @@ static void load_begin(track_t *t, uint32_t what)
     memcpy(undo.step, t->step, sizeof undo.step);
     memcpy(undo.fm6, fm6_patch[i], FP_SIZE);
     undo.fm6_slot = fm6_slot[i];
-    memcpy(undo.fmini, fmini_patch[i], FG_SIZE);
-    undo.fmini_slot = fmini_slot[i];
     undo.pat = pat_sig[i];
     undo.from = pat_from[i];
     undo.from_h = pat_from_h[i];
@@ -1049,8 +1040,6 @@ static void edit_undo_take(track_t *t, uint32_t tag, uint32_t what)
     memcpy(undo.step, t->step, sizeof undo.step);
     memcpy(undo.fm6, fm6_patch[i], FP_SIZE);
     undo.fm6_slot = fm6_slot[i];
-    memcpy(undo.fmini, fmini_patch[i], FG_SIZE);
-    undo.fmini_slot = fmini_slot[i];
     undo.pat = pat_sig[i];
     undo.from = pat_from[i];
     undo.from_h = pat_from_h[i];
@@ -1144,15 +1133,6 @@ static void undo_swap(void)
         fm6_own_ok &= (uint8_t)~(1u << tr);
         memcpy(undo.fm6, v, FP_SIZE);
         undo.fm6_slot = sl;
-        {                                         /* FMINI: the same */
-            uint8_t w[FG_SIZE], fs = fmini_slot[tr];
-            memcpy(w, fmini_patch[tr], FG_SIZE);
-            fmini_set_patch(tr, undo.fmini);
-            fmini_slot[tr] = undo.fmini_slot;
-            fmini_own_ok &= (uint8_t)~(1u << tr);
-            memcpy(undo.fmini, w, FG_SIZE);
-            undo.fmini_slot = fs;
-        }
     }
     undo.keep = 0;                                /* the next load copies the track as it is now */
     if (t == TSEL)
@@ -1383,10 +1363,7 @@ static void apply_preset_to(track_t *t, uint32_t pi)
         for (i = 0; i < 4u; i++)
             t->p[P_DIST + i] = (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
     }
-    if (t->eng_req == ENGI_FMINI)                     /* FMINI: a preset is its slot (0..199), the same way for every one */
-        t->p[P_E7] = (int16_t)pi;
     fm6_track_loaded(t);                              /* FM6: the preset's patch (its SLOT) */
-    fmini_track_loaded(t);                             /* FMINI: the same */
     nano_track_loaded(t);                              /* NANO: ARP LENGTH 16, IMPRESS / CHANCE 0 */
     load_end(t);
 }
@@ -1458,10 +1435,6 @@ static void clean_engine_of(track_t *t)
         fm6_set_patch(trk_index(t), v);
         fm6_adopt(trk_index(t));
     }
-    if (ei == ENGI_FMINI) {                            /* the first factory patch as the track's own (SLOT: F1) */
-        fmini_load_slot(trk_index(t), 0u);
-        fmini_adopt(trk_index(t));
-    }
     load_end(t);
 }
 static void clean_engine(void) { clean_engine_of(TSEL); }
@@ -1495,10 +1468,6 @@ static void midi_pc_load(track_t *t, uint32_t n)
     for (k = 0; preset_orig(ENGINES[e], k) != k || n--; k++)   /* the n-th shown preset */
         ;
     apply_preset_to(t, k);
-#if FELUCCA_FMINI_ONLY
-    if (e == ENGI_FMINI)
-        fa_factory_extras(t, k);                     /* FMini-1: the patch's arpeggiator, LFO, FX settings and octave (fmini_app.c) */
-#endif
 }
 static void midi_pc_poll(void)                       /* main loop (ui_input) */
 {
@@ -1776,7 +1745,6 @@ static void track_select(uint32_t i)
     ui.force = 1;
 }
 
-#include "ui_events.c"                            /* SEQ > AUTOMATION: locks, events, CHANCE, RATCH as a list (an action page) */
 #include "midi_learn.c"                           /* MIDI LEARN (1.5): GLO + D4, a knob, a CC */
 
 /* ---------------------------------------------------- action pages --- */
@@ -1820,7 +1788,6 @@ static const char *act_name(uint32_t c)          /* column c's action (the foote
 {
     static const char *const UP_GO[3] = {"LOAD", "ERASE", "SAVE"};
     uint32_t id = cur_page()->id[c & 3u];
-    if (cur_page()->graph == GR_EVENTS) return ev_act_name();
     if (cur_page()->graph == GR_TOOLS) {
         static const char *const actions[] = {"CLEAR", "INIT", "DELETE", "CLEAR"};
         return (c & 3u) == 1u && ui.tl_clean ? "CLEAN" : actions[c & 3u];   /* (1.5.5: KNOB 2 on: CLEAN INIT) */
@@ -1843,7 +1810,6 @@ static int act_ready(void)
     uint32_t c = act_col(), s = song.sel, id;
     if (!c--)
         return 0;
-    if (cur_page()->graph == GR_EVENTS) return ev_act_ready();
     if (cur_page()->graph == GR_TOOLS)                  /* one case per column: CLEAR PAT, INIT, DELETE ROW, CLEAR SONG */
         return !chain_busy() && (c == 0u ? !seq_is_empty(TSEL) || motion_count(TSEL) : c == 1u ? 1 :
                                  c == 2u ? ui.song_row < chain_config.count : chain_config.count != 0u);

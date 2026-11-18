@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Nano Freak: the whole user interface of the product firmware (FELUCCA_FMINI_ONLY=1, FELUCCA_NANO_APP=1). It is the test bed's
+/* Nano Freak: the whole user interface of the product firmware (FELUCCA_FMINI_ONLY=1). It is the test bed's
  * screen and controls (github.com/Virusiinstaller/nano-freak: dsp/nf_ui.c is the painter, index.html the pages), on the FM-1's
  * panel: the group buttons FX ENV LFO SCL (VOICE) ARP SEQ EDIT (MATRIX) GLO SAVE, HOME for OSC, SELECT steps through the pages of a
  * group, KNOB 1..4 edit its four controls, ALGORITHM the oscillator type, PRESETS the preset list, OCT- / OCT+ the keys' octave,
@@ -8,7 +8,7 @@
  * The controls are a table (NI_*: a label, how many steps or 0..100, the track parameter they are): the painter reads the
  * values through nf_ui_set / nf_ui_str, as the test bed's page does, one band of 120 rows at a time.
  * Included by felucca.c before main.c. */
-#if FELUCCA_FMINI_ONLY && FELUCCA_NANO_APP
+#if FELUCCA_FMINI_ONLY
 #include "nano_gfx.c"
 #include "nano_ui.c"
 
@@ -1028,6 +1028,24 @@ static void na_save_key(void)                             /* SAVE: open the page
     }
     na_dirty = 1;
 }
+/* a knob's speed-dependent steps: a slow turn is 2 values a detent (a 0..127 knob crosses its range in ~64 detents), a faster one
+ * 3, 5, 8, 12, 18 by the time per detent, always in the turn's direction; a reversal or a pause starts again slow */
+static uint32_t na_tl[16];
+static int32_t na_acc(uint32_t role, int32_t s, int32_t range)
+{
+    uint32_t now = fm1_ms, dt, a = (uint32_t)(s < 0 ? -s : s), last = na_tl[role & 15u];
+    int32_t m;
+    if (range <= 32 || !s)
+        return s;
+    dt = (now - (last & 0x7FFFFFFFu)) & 0x7FFFFFFFu;
+    na_tl[role & 15u] = (now & 0x7FFFFFFFu) | (s > 0 ? 0x80000000u : 0u);
+    if (!last || ((last >> 31) != (s > 0 ? 1u : 0u)) || dt > 150u)
+        return s * 2;
+    dt /= a;
+    m = dt >= 80u ? 2 : dt >= 50u ? 3 : dt >= 30u ? 5 : dt >= 18u ? 8 : dt >= 9u ? 12 : 18;
+    return s * m;
+}
+
 static void na_knob(uint32_t k, int32_t s)
 {
     const nsub_t *sp = &NGR[na_grp].sub[na_cursub()];
@@ -1044,9 +1062,7 @@ static void na_knob(uint32_t k, int32_t s)
             na_pre_step(s);
         return;
     }
-    fmg_force_page = 0;
-    v = na_get(id) + (id == NI_MXAMT ? fmg_acc(EN_K1 + k, s, 100) : (NK[id].n ? (NK[id].n > 16 ? fmg_acc(EN_K1 + k, s, NK[id].n - 1) : s > 0 ? 1 : -1) : id == NI_FDRIVE || id == NI_FCLIP ? (s > 0 ? 15 : -15) : fmg_acc(EN_K1 + k, s, 100)));   /* (DRIVE, CLIP: seven steps) */
-    fmg_force_page = -1;
+    v = na_get(id) + (id == NI_MXAMT ? na_acc(EN_K1 + k, s, 100) : (NK[id].n ? (NK[id].n > 16 ? na_acc(EN_K1 + k, s, NK[id].n - 1) : s > 0 ? 1 : -1) : id == NI_FDRIVE || id == NI_FCLIP ? (s > 0 ? 15 : -15) : na_acc(EN_K1 + k, s, 100)));   /* (DRIVE, CLIP: seven steps) */
     na_set(id, v);
     na_say(NK[id].lb);
     na_cat(na_hint, " ");
@@ -1138,7 +1154,9 @@ static void na_input(void)
     (void)fm1_input_note_edges();
     if (panel_took_moved() | pressed | fm1_in.notes | fm1_in.buttons)
         scrn.idle = fm1_ms;
-    midi_take();                                            /* MIDI IN notes */
+    fm1_irq_off();                                          /* (the MIDI IN notes' flags: nothing here shows them) */
+    midi_seen = 0;
+    fm1_irq_on();
     midi_pc_poll();                                         /* Program Change: a preset */
     settings_later_poll();
     song.sel = 0;
@@ -1171,12 +1189,98 @@ static void na_input(void)
             na_knob(k, s);
 }
 
+/* The LED picture is built off-line and copied one byte per column: clearing and relighting would let the 10 kHz scan catch the dark
+ * gap and flicker. */
+#if BOARD_SMK37
+/* SMK-37 Pro: one flag per id. Ids 0..18 are the button LEDs (smk_input.h); the note keys (no LEDs of their own)
+ * take LED_KEY0 + k: ui_leds shows the white keys F3..G5 on the 16 RGB pads (smk_input.h SMK_WHITE_NOTE) */
+#define LED_BUF 64u
+#define LED_KEY0 32u
+static uint8_t smk_fbank, smk_fbank_new;           /* (main.c smk_faders: the SMK faders of Felucca's MIXER; unused by the Nano Freak) */
+static void led_pos_init(void) {}
+static void led_put(uint8_t *nl, uint32_t id, int on)
+{
+    if (id < LED_BUF && on)
+        nl[id] = 1;
+}
+static void led_clear(uint8_t *nl, uint32_t id)
+{
+    if (id < LED_BUF)
+        nl[id] = 0;
+}
+#else
+#define LED_BUF FM1_NCOL
+#define LED_KEY0 14u                               /* the note keys' ids: 14..40 */
+static uint8_t led_pos[41];                        /* (col << 3) | row bit, 0xFF = none */
+
+static void led_pos_init(void)
+{
+    uint32_t id, p, r;
+    for (id = 0; id < 41u; id++) {
+        led_pos[id] = 0xFF;
+        for (p = 0; p < FM1_NCOL; p++)
+            for (r = 1; r < 5u; r++)
+                if (FM1_KEYMAP[r][p] == (int8_t)id)
+                    led_pos[id] = (uint8_t)((p << 3) | r);
+    }
+}
+
+static void led_put(uint8_t *nl, uint32_t id, int on)
+{
+    uint8_t q = led_pos[id];
+    if (q != 0xFF && on)
+        nl[q >> 3] |= (uint8_t)(1u << (q & 7u));
+}
+
+/* PLAY's second, green LED: not in the key matrix (no key there), found on the hardware at column 8, row PA9 (bit 1) */
+#define LED_PLAY_GREEN ((8u << 3) | 1u)
+static void led_clear(uint8_t *nl, uint32_t id)
+{
+    uint8_t q = led_pos[id];
+    if (q != 0xFF)
+        nl[q >> 3] &= (uint8_t)~(1u << (q & 7u));
+}
+#endif
+#if BOARD_SMK37
+static int smk_btn_free(uint32_t id)
+{
+    uint32_t b;
+    for (b = 0; b < NB; b++)
+        if (panel.btn[b] == id)
+            return 0;
+    return 1;
+}
+
+/* SMK-37 Pro: the picture of ui_leds on the panel. The 19 button LEDs are on / off: lit (nl) and breathing (nb) show
+ * lit, the glow layers have no LED level here. The 16 RGB pads are the white keys F3..G5 (smk_input.h SMK_WHITE_NOTE)
+ * in the theme's colour: lit full, breathing dark .. full and back (~1.1 s, as fm1_input.h), the mid level (nm: the
+ * grid's beats, the scale's root) a quarter, the glow of a key that does something (og: the DRUM grid's lanes, sg:
+ * SCALE LEDS) a sixteenth; the other keys' idle glow is off: off is off on the pads */
+static void smk_leds(const uint8_t *nl, const uint8_t *nb, const uint8_t *nm, const uint8_t *og, const uint8_t *sg)
+{
+    uint32_t c, th = T_THEME, br = (fm1_ms >> 2) & 0xFFu;
+    uint32_t r = (th >> 11) << 3 | (th >> 13), g = ((th >> 5) & 0x3Fu) << 2 | ((th >> 9) & 3u), b = (th & 0x1Fu) << 3 | ((th >> 2) & 7u);
+    br = br < 128u ? br * 2u : (255u - br) * 2u;        /* the breath: 0..254 over ~1 s */
+    for (c = 0; c < SMK_NLED; c++)
+        fm1_led[c] = (uint8_t)(nl[c] | nb[c]);
+    if (smk_btn_free(SMK_BTN_KNOB_BANK))
+        fm1_led[SMK_BTN_KNOB_BANK] = ui.menu != 0;      /* KNOB BANK lit while the menu is up */
+    if ((int32_t)(fm1_ms - padled_hold_until) < 0)      /* (console padtest has them) */
+        return;
+    for (c = 0; c < SMK_NPAD; c++) {                    /* white key c on its pad (the top row first) */
+        uint32_t id = LED_KEY0 + SMK_WHITE_NOTE[c];
+        uint32_t lv = nl[id] ? 256u : nb[id] ? br + 2u : nm[id] ? 64u : og[id] | sg[id] ? 16u : 0u;
+        padled_set(SMK_PAD_OF_WHITE(c), (uint8_t)(r * lv >> 8), (uint8_t)(g * lv >> 8), (uint8_t)(b * lv >> 8));
+    }
+}
+#endif
+
 static void na_leds(void)
 {
     uint8_t nl[LED_BUF] = {0}, nd[LED_BUF] = {0}, nb[LED_BUF] = {0}, nm[LED_BUF] = {0};
     uint32_t k;
     static uint8_t ready;
-    if (idle_leds() || fm1_led_anim_on())
+    if (fm1_led_anim_on())
         return;
     if (!ready) {
         led_pos_init();
@@ -1293,4 +1397,4 @@ static void na_init(void)
     ui.force = 1;
 }
 static void na_smk_faders(void) {}
-#endif /* FELUCCA_FMINI_ONLY && FELUCCA_NANO_APP */
+#endif /* FELUCCA_FMINI_ONLY */

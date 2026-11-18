@@ -41,6 +41,19 @@ A single host test is one `cc` line (they are in `tests/run_tests.sh`); `tests/f
 are the FMINI ones. The sandbox is ephemeral: the toolchain and the SDK may have to be fetched again (`tools/get_toolchain.sh`;
 BUILDING.md has the SDK clone). If a download is refused by the network allowlist, say so and ask for the files.
 
+## State after the strip (2.5.48)
+
+The product is the Nano Freak (`nano_app.c`, `nano_ui.c`, `eng_nano.c`). Removed in 2.5.48: FMini-1's engine, UI, bank, editor commands (82..87)
+and its tests, plus Felucca's UI layer (`ui_*.c`, icons) and every host test that could only drive it. Kept on purpose:
+- `firmware/src/ladder.c` (+ `ladder_tables.h`, `tools/ladder_filter.py`, `tests/ladder_test.c`): the FMini-1 Minimoog ladder filter as a
+  stand-alone block for the Nano Freak; not wired into `eng_nano.c` yet.
+- `ui.c` (shared state: settings, undo, favourites, the page table), `menu_items.c` (the editor's MENU table), `panel_setup.c`
+  (HARDWARE CALIBRATION): still Felucca code, trimmed in a later pass together with the engines the Nano Freak does not use.
+- Engine number 14 (FMINI) stays as `ENG_RETIRED`: numbers are append-only.
+Without a toolchain, a quick check that the product still compiles: `cc -fsyntax-only -w -DFELUCCA_FMINI_ONLY=1 -DFELUCCA_FLASH=1
+-DFELUCCA_OTA=1 -DFELUCCA_CDC=1 -DFELUCCA_UART=1 -DFELUCCA_UAC=1 -DFELUCCA_ID='"x"' -Ifirmware/hal -Ifirmware/src -Ibuild/gen firmware/src/felucca.c`
+(for the SMK-37 add `-DBOARD_SMK37=1` and `-DFELUCCA_UART=0`); add `-Wall` and look for "never defined" / "implicit declaration".
+
 ## Rules that are easy to break
 
 - The firmware is integer-only and one compilation unit (`firmware/src/felucca.c` includes the rest; **the order matters**).

@@ -32,7 +32,6 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #include "../engines/src/eng_noise.c"
 #include "eng_fm6.c"            /* FM6: 6-operator FM, msfa ported (fm6_core.c, Apache-2.0) */
 #include "fm4_convert.c"        /* DIGITAL's tables, and its sounds -> FM6 */
-#include "eng_fmini.c"           /* FMINI (FMini-1): a three-oscillator ladder-filter monosynth */
 #include "eng_nano.c"            /* NANO (Nano Freak): the Freak Synthesizer engine, BASIC WAVES first */
 #if FELUCCA_FM4
 #include "eng_digital.c"        /* DIGITAL: four-operator FM (retired; FELUCCA_FM4=1 builds it) */
@@ -76,7 +75,7 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_NOISE,                  /* 11 */
     &ENG_FM6,                    /* 12 (ENGI_FM6) */
     &ENG_RETIRED,                /* 13: SLICE (retired 1.13) */
-    &ENG_FMINI,                  /* 14 (ENGI_FMINI) */
+    &ENG_RETIRED,                /* 14: FMINI (FMini-1's monosynth, retired: the Nano Freak replaced it; its sounds are silent, not offered) */
     &ENG_NANO,                   /* 15 (ENGI_NANO) */
 };
 
@@ -108,7 +107,6 @@ static void eng_mem_claim(const track_t *t)
 static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     0,                           /* ANALOG */
     12,                          /* FM6 */
-    ENGI_FMINI,                   /* FMINI */
     ENGI_NANO,                    /* NANO */
 #if FELUCCA_FM4
     1,                           /* DIGITAL */
@@ -122,7 +120,7 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
  * eng_vis(n), e's place among them eng_rank(e), the next / previous one eng_step(e, dir) (wraps) */
 static int eng_ok(uint32_t e)
 {
-    return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL) && e != ENGI_SAMPLE && e != ENGI_GRAIN && e != ENGI_SLICE;
+    return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL) && e != ENGI_SAMPLE && e != ENGI_GRAIN && e != ENGI_SLICE && e != ENGI_FMINI;
 }
 static uint32_t eng_vis(uint32_t n) { return ENGINE_ORDER[n % NENG_SHOWN]; }
 static uint32_t eng_rank(uint32_t e)
