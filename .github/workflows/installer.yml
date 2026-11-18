@@ -47,16 +47,6 @@ jobs:
           BOARD=smk37 MODEL=mke ./build.sh
           ./build.sh
 
-      - name: Build the FM-1 engine preview (Felucca's full UI, so the NANO engine can be selected)
-        continue-on-error: true
-        run: |
-          VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
-          mkdir -p build/preview
-          cp "build/fmini-1-fm1-$VERSION.fwsc" "build/preview/product.fwsc"
-          FELUCCA_FMINI_ONLY=0 ./build.sh
-          cp "build/fmini-1-fm1-$VERSION.fwsc" "build/nano-engine-preview-fm1-$VERSION.fwsc"
-          cp "build/preview/product.fwsc" "build/fmini-1-fm1-$VERSION.fwsc"
-
       - name: Make the installer page
         run: |
           VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
@@ -64,7 +54,7 @@ jobs:
           python3 web/make_fmini_installer.py "build/fmini-1-fm1-$VERSION.fwsc" _site/index.html "$VERSION"
           cp "build/fmini-1-fm1-$VERSION.fwsc" "_site/fmini-1-$VERSION.fwsc"
           cp "build/fmini-1-fm1-$VERSION.fwsc" build/fmini-1-smk37*-"$VERSION".fwsc _site/
-          mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the patch editor (web/test_editor_fmini.py)
+          mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the web editor
           cp -r docs/emu _site/emu                 # the browser emulators: FM-1 in docs/emu, SMK-37 in docs/emu/smk (web/emu/build_wasi.sh, SMK=1)
           echo "Nano Freak (FMini-1 base) v$VERSION (FM-1 and SMK-37)" >> "$GITHUB_STEP_SUMMARY"
 

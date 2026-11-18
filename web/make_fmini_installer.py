@@ -42,7 +42,8 @@ def main(pkg, out, version="1.4.2", smk_version=None):
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8")) for f in ("fm1pkg.js", "fm1ota.js", "fm1backup.js"))
     meta = json.dumps({"version": version, "smkVersion": smk_version, "pkgs": pkgs})
     imgs = {p.stem: ("data:image/" + ("webp" if p.suffix == ".webp" else "png") + ";base64,") + base64.b64encode(p.read_bytes()).decode() for p in sorted((HERE.parent / "assets" / "site").glob("*.*"))}
-    names = re.findall(r'"([A-Z0-9 .\'/+&-]{2,12})"', (HERE.parent / "firmware" / "src" / "eng_fmini_presets.h").read_text())[:10]
+    src = (HERE.parent / "firmware" / "src" / "eng_nano.c").read_text()
+    names = re.findall(r'^    \{"([A-Z0-9 .\'/+&-]{2,12})", \{', src[src.index("NANO_PRESETS[] = {"):], re.M)[:10]
     html = html.replace("/*IMGS*/{}", json.dumps(imgs)).replace("/*PRESETS*/[]", json.dumps(names))
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:

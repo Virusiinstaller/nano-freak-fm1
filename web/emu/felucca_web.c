@@ -22,7 +22,7 @@
 
 #define FELUCCA_WEB 1
 #ifndef FELUCCA_FMINI_ONLY
-#define FELUCCA_FMINI_ONLY 1                /* FMini-1 (fmini_app.c); 0 = Felucca's whole UI */
+#define FELUCCA_FMINI_ONLY 1                /* the Nano Freak (nano_app.c) */
 #endif
 #ifndef FELUCCA_CDC
 #define FELUCCA_CDC 1                    /* as src/felucca.c: MENU > USB SERIAL is there (nothing behind it) */
@@ -173,12 +173,7 @@ static void lcd_init(void) {}
 #include "../../firmware/src/panel.c"
 #include "../../firmware/src/ui.c"
 #include "../../firmware/src/menu_items.c"
-#include "../../firmware/src/icons.c"
-#include "../../firmware/src/ui_graph.c"
-#include "../../firmware/src/ui_draw.c"
-#include "../../firmware/src/ui_menu.c"
-#include "../../firmware/src/ui_input.c"
-#include "../../firmware/src/ui_layer.c"
+#include "../../firmware/src/panel_setup.c"
 
 /* ------------------------------------------------------------ the flash --- */
 static uint32_t web_flash_writes;
@@ -226,7 +221,6 @@ static const uint8_t *fm1_xip_ptr(uint32_t off) { return nor + off; }
 static void fl_plain_window_init(void) {}
 #define FL_FAR(fn) (fn)
 #include "../../firmware/src/storage.c"
-#include "../../firmware/src/fmini_bank.c"   /* after storage.c (its flash save and load) */
 #include "../../firmware/src/upreset.c"
 #include "../../firmware/src/project.c"
 
@@ -279,9 +273,13 @@ static void cdc_task(void) {}
 #define usb_retry(ms) ((void)(ms))
 #define usb_detach() ((void)0)
 #include "../../firmware/src/master.c"
-#if FELUCCA_FMINI_ONLY
-#include "../../firmware/src/fmini_app.c"
-#endif
+#include "../../firmware/src/nano_app.c"
+#define UI_INPUT na_input
+#define UI_LEDS na_leds
+#define UI_DRAW na_draw
+#define UI_SPLASH na_splash
+#define UI_INIT na_init
+#define UI_FADERS na_smk_faders
 #include "../../firmware/src/main.c"
 #undef usb_poll
 #undef usb_start
@@ -298,11 +296,7 @@ static void web_power_on(void)
     settings_init();
     usb_serial_apply();
     lcd_init();
-#if FELUCCA_FMINI_ONLY
-    fa_splash();
-#else
-    draw_splash();                        /* main.c: the splash (ui_draw.c) */
-#endif
+    na_splash();
     memset(&felucca_dbg, 0, sizeof felucca_dbg);
     felucca_dbg.magic = DBG_MAGIC;
     fm1_input_init();
@@ -314,12 +308,8 @@ static void web_power_on(void)
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
     autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
-#if FELUCCA_FMINI_ONLY
-    fa_init();                            /* main.c: track 1 = the instrument */
+    na_init();                            /* main.c: track 1 = the instrument */
     web_boot_ms = fm1_ms + 3030u;        /* main.c: 30 ms + the 3 s splash */
-#else
-    web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
-#endif
     web_booted = 1;
 }
 
