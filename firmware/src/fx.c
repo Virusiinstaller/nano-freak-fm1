@@ -6,7 +6,8 @@
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
-#define PD_LEN 4096u             /* the reverb's pre-delay line: 80 ms is 3528 samples (Nano Freak: the test bed's PRE-DLY 0..100 = 0..80 ms) */
+#define PD_LEN 2048u             /* the reverb's pre-delay line (Nano Freak: the test bed's PRE-DLY 0..100 = 0..80 ms = 3528 samples): kept at half the rate
+                                  * (pairs of samples averaged: 1764 of them) so that it fits the pool's headroom (tools/size_fns.py checks 8192 B) */
 static int16_t rev_pd[PD_LEN] __attribute__((section(".pool")));
 static const uint16_t REV_COMB[4] = {1116, 1188, 1277, 1356};
 static const uint16_t REV_AP[2] = {556, 441};
@@ -34,7 +35,8 @@ static struct {
                                              * length (Q8, glides) */
     uint32_t sp_ph;                      /* .. the output tap's wobble */
     uint32_t pd_w, pd_d;                 /* the pre-delay line's write index and the delay now (samples, glides to the knob) */
-    uint8_t pd_on;
+    uint8_t pd_on, pd_ph;
+    int32_t pd_acc;
     uint8_t cho_on, dly_on, rev_on;      /* FMini-1: the bus ran last block (a bus whose send is 0 and input silent does not run at all) */
     uint32_t dly_start;                  /* .. the delay's write index when it last started (older samples are silence) */
 #if FELUCCA_FMINI_ONLY
@@ -1291,9 +1293,14 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, int32_t *rev_
         if (d || fx.pd_on) {
             for (i = 0; i < n; i++) {
                 int32_t x = rev_in[i];
-                rev_pd[fx.pd_w & (PD_LEN - 1u)] = (int16_t)clamp(x >> 1, -32768, 32767);
-                rev_in[i] = d ? (int32_t)rev_pd[(fx.pd_w - d) & (PD_LEN - 1u)] << 1 : x;
-                fx.pd_w++;
+                if (fx.pd_ph) {
+                    rev_pd[fx.pd_w & (PD_LEN - 1u)] = (int16_t)clamp((fx.pd_acc + x) >> 2, -32768, 32767);
+                    fx.pd_w++;
+                } else {
+                    fx.pd_acc = x;
+                }
+                fx.pd_ph ^= 1u;
+                rev_in[i] = d ? (int32_t)rev_pd[(fx.pd_w - 1u - (d >> 1)) & (PD_LEN - 1u)] << 1 : x;
             }
             fx.pd_on = d != 0u;
         }

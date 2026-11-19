@@ -350,7 +350,7 @@ int main(int argc, char **argv)
         fresh(0);
         for (pre = 0; pre < 2u; pre++) {
             uint32_t pos = 0, found = 0;
-            memset(rev_pd, 0, sizeof rev_pd); fx.pd_on = 0; fx.pd_d = 0; fx.pd_w = 0; rev_clear(); fx.rev_on = 0;
+            memset(rev_pd, 0, sizeof rev_pd); fx.pd_on = 0; fx.pd_d = 0; fx.pd_w = 0; fx.pd_ph = 0; fx.pd_acc = 0; rev_clear(); fx.rev_on = 0;
             trk[0].p[P_REV] = 127; trk[0].p[P_LN5] = pre ? 127 : 0; song.g[G_RSIZE] = 60; song.g[G_RDAMP] = 127;
             trk[0].p[P_REV] = 127;
             for (b = 0; b < 400u; b++) { for (k = 0; k < CTL; k++) c[k] = d[k] = r[k] = 0; fx_buses(c, d, r, w, CTL); }   /* (the pre-delay glides to its knob) */
