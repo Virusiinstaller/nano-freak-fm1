@@ -19,7 +19,7 @@ enum {
     NI_NONE = -1,
     NI_WAVE, NI_TIMBRE, NI_SHAPE, NI_FOLD, NI_POS,
     NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT, NI_FSLOPE, NI_FDRIVE, NI_FCLIP,
-    NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_DLYMIX, NI_DLYTIME, NI_DLYFB,
+    NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE, NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE,
     NI_GLIDE, NI_GLMODE, NI_IMPRESS, NI_CHANCE,
     NI_ATTACK, NI_DECAY, NI_SUSTAIN, NI_RISE, NI_FALL, NI_HOLD, NI_CAMT, NI_CMODE,
     NI_LSHAPE, NI_LRATE, NI_LMORPH, NI_UDETUNE,
@@ -27,16 +27,20 @@ enum {
     NI_PBANK, NI_PSLOT,
     NI_SQPAT, NI_SQRND, NI_SQMUT, NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING, NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST, NI_SQENT, NI_SQRESTS, NI_SQGATE,
     NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT, NI_AS1, NI_AS2, NI_AS3, NI_AS4,
-    NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK, NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY, NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO, NI_MINCH,   /* GLOBAL: (these 19 are na_g[]) */
-    NI_BDEV, NI_BACT, NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO,
+    NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK, NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY, NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO, NI_MINCH,   /* GLOBAL: (with the six below and NI_BENDRNG, these are na_g[]) */
+    NI_BDEV, NI_BACT, NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO, NI_BENDRNG,
     NI_SSLOT, NI_PCUR, NI_PCHR,
+    NI_BENDSPD, NI_AMPMOD, NI_SM1, NI_SM2, NI_SM3, NI_SM4, NI_CDEST, NI_CDEPTH, NI_LSYNC, NI_FOLD2,
     NI_COUNT
 };
 static const char *const NT_FTYPE[] = {"LPF", "BPF", "HPF"};
 static const char *const NT_SLOPE[] = {"12 DB", "24 DB"};
-static const char *const NT_GLMODE[] = {"TIME", "RATE"};
+static const char *const NT_OFFON[] = {"OFF", "ON"};
+static const char *const NT_AMPENV[] = {"GATE ONLY", "ENV ON"};
+static const char *const NT_GLMODE[] = {"TIME", "SYNC", "RATE"};
 static const char *const NT_LSHAPE[] = {"SINE", "TRI", "SAW", "SQUARE", "S&H", "GLIDE"};
-static const char *const NT_CMODE[] = {"ENV", "LOOP", "GATE"};
+static const char *const NT_CMODE[] = {"ENV", "RUN", "LOOP"};
+static const char *const NT_CDEST[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "A1", "A2", "A3", "A4"};
 static const char *const NT_PAT[] = {"UP", "DOWN", "UP/DOWN", "ORDER", "RANDOM", "PATTERN", "AS PLAYED", "CONVERGE", "DIVERGE", "HOLLOW", "JEOPARDY", "CHORD", "BROKEN", "ALTERNATING"};
 static const char *const NT_CHORD[] = {"OFF", "MAJ", "MIN", "7", "MIN7", "MAJ7", "SUS4", "DIM7", "POWER"};
 static const char *const NT_ONOFF[] = {"OFF", "ON"};
@@ -44,7 +48,7 @@ static const char *const NT_TYPE[] = {"MONO", "CHORD"};
 static const char *const NT_SQSCALE[] = {"MIN PENT", "MAJ PENT", "MAJOR", "MINOR", "DORIAN", "BLUES", "CHROMATIC"};
 static const char *const NT_SQDUR[] = {"1/16", "1/8", "1/4", "1/2"};
 static const char *const NT_SQTYPE[] = {"NOTE", "REST"};
-static const char *const NT_SQPAT[] = {"A"};
+static const char *const NT_SQPAT[] = {"A", "B"};
 static const char *const NT_BANK[] = {"USER", "FACTORY"};
 static const char *const NT_ROLE[] = {"DEVICE", "HOST"};
 static const char *const NT_CLK[] = {"INTERNAL", "MIDI"};
@@ -64,15 +68,15 @@ static const nk_t NK[NI_COUNT] = {
     [NI_CUTOFF] = {"CUTOFF", 0, 0}, [NI_RESO] = {"RESO", 0, 0}, [NI_FTYPE] = {"TYPE", 3, NT_FTYPE}, [NI_FAMT] = {"FILT AMT", 0, 0},
     [NI_FSLOPE] = {"SLOPE", 2, NT_SLOPE}, [NI_FDRIVE] = {"DRIVE", 0, 0}, [NI_FCLIP] = {"CLIP", 0, 0},
     [NI_RVBMIX] = {"MIX", 0, 0}, [NI_RVBSIZE] = {"SIZE", 0, 0}, [NI_RVBDAMP] = {"DAMP", 0, 0},
-    [NI_DLYMIX] = {"MIX", 0, 0}, [NI_DLYTIME] = {"TIME", 0, 0}, [NI_DLYFB] = {"FEEDBACK", 0, 0},
-    [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 2, NT_GLMODE}, [NI_IMPRESS] = {"IMPRESS", 0, 0}, [NI_CHANCE] = {"CHANCE", 0, 0},
+    [NI_RVBPRE] = {"PRE-DELAY", 0, 0}, [NI_DLYTONE] = {"TONE", 0, 0}, [NI_DLYMIX] = {"MIX", 0, 0}, [NI_DLYTIME] = {"TIME", 0, 0}, [NI_DLYFB] = {"FEEDBACK", 0, 0},
+    [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 3, NT_GLMODE}, [NI_IMPRESS] = {"IMPRESS", 0, 0}, [NI_CHANCE] = {"CHANCE", 0, 0},
     [NI_ATTACK] = {"ATTACK", 0, 0}, [NI_DECAY] = {"DECAY", 0, 0}, [NI_SUSTAIN] = {"SUSTAIN", 0, 0},
     [NI_RISE] = {"RISE", 0, 0}, [NI_FALL] = {"FALL", 0, 0}, [NI_HOLD] = {"HOLD", 0, 0}, [NI_CAMT] = {"AMOUNT", 0, 0}, [NI_CMODE] = {"MODE", 3, NT_CMODE},
     [NI_LSHAPE] = {"SHAPE", 6, NT_LSHAPE}, [NI_LRATE] = {"RATE", 0, 0}, [NI_LMORPH] = {"MORPH", 0, 0}, [NI_UDETUNE] = {"DETUNE", 0, 0},
     [NI_ARPRATE] = {"RATE", 0, 0}, [NI_ARPRANGE] = {"RANGE", 4, 0}, [NI_ARPPAT] = {"PATTERN", 14, NT_PAT}, [NI_ARPLEN] = {"LENGTH", 16, 0},
     [NI_SWING] = {"SWING", 0, 0}, [NI_ARPLATCH] = {"LATCH", 2, NT_ONOFF}, [NI_ARPTYPE] = {"TYPE", 2, NT_TYPE}, [NI_ARPCHORD] = {"CHORD", 9, NT_CHORD},
     [NI_PBANK] = {"BANK", 1, NT_BANK}, [NI_PSLOT] = {"PRESET", 0, 0},
-    [NI_SQPAT] = {"PATTERN", 1, NT_SQPAT}, [NI_SQRND] = {"RANDOM", 100, 0}, [NI_SQMUT] = {"MUTATE", 100, 0}, [NI_SQLEN] = {"LENGTH", 64, 0},
+    [NI_SQPAT] = {"PATTERN", 2, NT_SQPAT}, [NI_SQRND] = {"RANDOM", 100, 0}, [NI_SQMUT] = {"MUTATE", 100, 0}, [NI_SQLEN] = {"LENGTH", 64, 0},
     [NI_SQSCALE] = {"SCALE", 7, NT_SQSCALE}, [NI_SQOCT] = {"OCTAVES", 3, 0}, [NI_SQSWING] = {"SWING", 0, 0}, [NI_SQSTEP] = {"STEP", 64, 0},
     [NI_SQNOTE] = {"NOTE", 128, 0}, [NI_SQDUR] = {"LENGTH", 4, NT_SQDUR}, [NI_SQREST] = {"TYPE", 2, NT_SQTYPE}, [NI_SQENT] = {"REC LENGTH", 4, NT_SQDUR},
     [NI_SQRESTS] = {"RESTS", 11, 0}, [NI_SQGATE] = {"GATE", 10, 0},
@@ -81,7 +85,7 @@ static const nk_t NK[NI_COUNT] = {
     [NI_GBT] = {"BLUETOOTH", 2, NT_ONOFF}, [NI_GBTA] = {"BT AUDIO", 2, NT_ONOFF}, [NI_GROLE] = {"BLE ROLE", 2, NT_ROLE}, [NI_GCLK] = {"CLOCK", 2, NT_CLK},
     [NI_MMODE] = {"ARP OUT", 3, NT_MMODE}, [NI_MCH] = {"OUT CH", 16, 0}, [NI_MPORT] = {"OUT PORT", 8, NT_PORT}, [NI_MKEY] = {"KEY OUT", 2, NT_ONOFF},
     [NI_MLOCAL] = {"LOCAL", 2, NT_ONOFF}, [NI_MCLKO] = {"CLOCK OUT", 2, NT_ONOFF}, [NI_MTHI] = {"THRU IN", 3, NT_THRU}, [NI_MTHO] = {"THRU OUT", 8, NT_PORT},
-    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
+    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BENDRNG] = {"RANGE", 25, 0}, [NI_BENDSPD] = {"SPEED", 0, 0}, [NI_AMPMOD] = {"AMP ENV", 2, NT_AMPENV}, [NI_FOLD2] = {"FOLD", 0, 0}, [NI_LSYNC] = {"SYNC", 2, NT_OFFON}, [NI_CDEST] = {"DEST", 8, NT_CDEST}, [NI_CDEPTH] = {"DEPTH", 0, 0}, [NI_SM1] = {"M1", 2, NT_OFFON}, [NI_SM2] = {"M2", 2, NT_OFFON}, [NI_SM3] = {"M3", 2, NT_OFFON}, [NI_SM4] = {"M4", 2, NT_OFFON}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
     [NI_SUBOOT] = {"BOOT SCR", 2, NT_ONOFF}, [NI_SUPAGE] = {"START PG", 2, NT_SUPAGE}, [NI_SURADIO] = {"RADIO", 2, NT_SURAD},
     [NI_SSLOT] = {"SAVE TO", 16, 0}, [NI_PCUR] = {"CURSOR", 10, 0}, [NI_PCHR] = {"LETTER", 38, 0},
 };
@@ -100,20 +104,21 @@ static const nosc_t NOSC[15] = {
 /* the groups: pages (sub), each with the painter's page number and the four controls */
 typedef struct { const char *name; uint8_t ui; int8_t k[4]; } nsub_t;
 typedef struct { const char *title; uint8_t ui, n; const nsub_t *sub; } ngrp_t;
-static const nsub_t NS_OSC[] = {{"OSCILLATOR", 0, {NI_WAVE, NI_TIMBRE, NI_SHAPE, NI_FOLD}}, {"STRINGS", 1, {NI_POS, NI_NONE, NI_NONE, NI_NONE}}};
+static const nsub_t NS_OSC[] = {{"OSCILLATOR", 0, {NI_WAVE, NI_TIMBRE, NI_SHAPE, NI_FOLD}}, {"STRINGS", 1, {NI_POS, NI_FOLD2, NI_NONE, NI_NONE}}};
 static const nsub_t NS_ENV[] = {{"ENVELOPE", 0, {NI_ATTACK, NI_DECAY, NI_SUSTAIN, NI_FAMT}}, {"CYCLING ENV", 1, {NI_RISE, NI_FALL, NI_HOLD, NI_CAMT}},
-                                {"CYCLING MODE", 2, {NI_CMODE, NI_NONE, NI_NONE, NI_NONE}}};
+                                {"CYCLING MODE", 2, {NI_CMODE, NI_CDEST, NI_CDEPTH, NI_NONE}}, {"AMP ENVELOPE", 3, {NI_AMPMOD, NI_NONE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_FX[] = {{"FILTER", 0, {NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT}}, {"FILTER 2", 1, {NI_FSLOPE, NI_FDRIVE, NI_FCLIP, NI_NONE}},
-                               {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_NONE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_NONE}},
-                               {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_NONE, NI_NONE}}};
-static const nsub_t NS_LFO[] = {{"LFO", 0, {NI_LSHAPE, NI_LRATE, NI_NONE, NI_LMORPH}}};
+                               {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE}},
+                               {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"PITCH BEND", 5, {NI_BENDRNG, NI_BENDSPD, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_NONE, NI_NONE}}};
+static const nsub_t NS_LFO[] = {{"LFO", 0, {NI_LSHAPE, NI_LRATE, NI_LSYNC, NI_LMORPH}}};
 static const nsub_t NS_VOICE[] = {{"MONO", 0, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}, {"UNISON", 1, {NI_UDETUNE, NI_NONE, NI_NONE, NI_NONE}},
                                   {"PARAPHONIC", 2, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}, {"POLY", 3, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_ARP[] = {{"ARPEGGIO", 0, {NI_ARPRATE, NI_ARPRANGE, NI_ARPPAT, NI_ARPLEN}}, {"ARP TIMING", 1, {NI_SWING, NI_ARPLATCH, NI_NONE, NI_NONE}},
                                 {"ARP TYPE", 2, {NI_ARPTYPE, NI_ARPCHORD, NI_NONE, NI_NONE}}};
 static const nsub_t NS_MX[] = {{"MATRIX", 0, {NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT}}, {"ASSIGN", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};
 static const nsub_t NS_SEQ[] = {{"SEQUENCE", 0, {NI_ARPRATE, NI_SQPAT, NI_SQRND, NI_SQMUT}}, {"SEQ LENGTH", 1, {NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING}},
-                                {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}}};
+                                {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}},
+                                {"MOD SMOOTH", 4, {NI_SM1, NI_SM2, NI_SM3, NI_SM4}}};
 static const nsub_t NS_PRE[] = {{"BROWSE", 0, {NI_PBANK, NI_PSLOT, NI_NONE, NI_NONE}}, {"SAVE", 1, {NI_SSLOT, NI_PCUR, NI_PCHR, NI_NONE}}};
 static const nsub_t NS_GLO[] = {{"BLUETOOTH", 0, {NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK}}, {"MIDI OUT", 1, {NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY}},
                                 {"MIDI ROUTING", 2, {NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO}}, {"MIDI IN", 3, {NI_MINCH, NI_GCLK, NI_NONE, NI_NONE}},
@@ -128,9 +133,9 @@ static uint8_t na_cur, na_root = 48, na_rec, na_seqmode, na_grp, na_sub[NG_COUNT
 static int8_t na_ost = -1;
 /* the GLOBAL settings (ids NI_GBT.. in order), saved in the flash settings record (favorites.factory[6]: no engine of this firmware
  * uses that row), and the PRESETS state: the bank (0 USER, 1 FACTORY), the sound's name, the SAVE page's slot, name and cursor */
-#define NA_NG 19u
+#define NA_NG 20u
 #define GI(id) na_g[(id) - NI_GBT]
-static uint8_t na_g[NA_NG] = {0, 0, 0, 0, 1, 0, 3, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0};
+static uint8_t na_g[NA_NG] = {0, 0, 0, 0, 1, 0, 3, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0};
 static uint8_t na_bank = 1, na_sslot, na_scur, na_conf, na_gsel;
 static char na_name[16], na_chr[11];
 static const char NA_CHARS[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
@@ -247,8 +252,57 @@ static void na_mxset(uint32_t r, uint32_t c, int32_t pct, int32_t on)  /* 0 for 
     }
     na_put(P_M1AMT + 3u * (uint32_t)k, on ? pct * 64 / 100 : 0);
 }
+/* CYCLING MODE's DEST and DEPTH write the CycEnv row of the matrix (the test bed's cycRoute): the depth (50 % = none, 0..100 -> -100..+100 %) goes to the
+ * chosen destination and the old one is cleared. The tracker is what the matrix was left at; a sound load re-reads it from the sound. */
+static int8_t na_cyc_d = -1;
+static int16_t na_cyc_a;
+static void na_cyc_sync(track_t *t)
+{
+    na_cyc_d = (int8_t)clamp(t->p[P_FM4_SUS], 0, 7);
+    na_cyc_a = (int16_t)((na_f100(t->p[P_FM4_DEC]) - 50) * 2);
+}
+static void na_cyc_route(void)
+{
+    track_t *t = TSEL;
+    int32_t d = clamp(t->p[P_FM4_SUS], 0, 7), a = (na_f100(t->p[P_FM4_DEC]) - 50) * 2;
+    if (na_cyc_d == d && na_cyc_a == a)
+        return;
+    if (na_cyc_d >= 0 && na_cyc_d != d)
+        na_mxset(0, (uint32_t)na_cyc_d, 0, 0);
+    if (!(na_cyc_d < 0 && a == 0))
+        na_mxset(0, (uint32_t)d, a, a != 0);
+    na_cyc_d = (int8_t)d;
+    na_cyc_a = (int16_t)a;
+}
 
 /* ---- SEQ: the steps are the track's (nano_ctl.c); the cursor and the record flag are the screen's */
+/* A / B: the pattern in the track is the one playing and edited; the other waits in the next track (its steps, and its Random and Mutate positions
+ * P_FM2_DEC / P_FM2_SUS: the generators keep what they replaced in the steps themselves). Changing pattern swaps the two. Not saved with a sound. */
+static uint8_t na_sqb;
+static void na_sq_swap(void)
+{
+    track_t *a = TSEL, *b = &trk[((uint32_t)song.sel + 1u) % NTRK];
+    uint32_t i;
+    int16_t x;
+    for (i = 0; i < NSTEP; i++) {
+        step_t s = a->step[i];
+        a->step[i] = b->step[i];
+        b->step[i] = s;
+    }
+    x = a->p[P_FM2_DEC], a->p[P_FM2_DEC] = b->p[P_FM2_DEC], b->p[P_FM2_DEC] = x;
+    x = a->p[P_FM2_SUS], a->p[P_FM2_SUS] = b->p[P_FM2_SUS], b->p[P_FM2_SUS] = x;
+}
+static void na_cyc_sync(track_t *t);
+static void na_sq_b_reset(track_t *t)                    /* a sound came in: pattern A, and B starts as a copy of it */
+{
+    na_cyc_sync(t);
+    track_t *b = &trk[((uint32_t)(t - trk) + 1u) % NTRK];
+    uint32_t i;
+    na_sqb = 0;
+    for (i = 0; i < NSTEP; i++)
+        b->step[i] = t->step[i];
+    b->p[P_FM2_DEC] = b->p[P_FM2_SUS] = 0;
+}
 static void na_sq_reroll(void)                           /* the scale, the rests and the octaves redo a Random that is on */
 {
     track_t *t = TSEL;
@@ -318,7 +372,7 @@ static void na_g_apply(int32_t id)
 static void na_g_load(void)
 {
     const uint8_t *f = favorites.factory[6];
-    static const uint8_t MX[NA_NG] = {1, 1, 1, 1, 2, 15, 7, 1, 1, 1, 2, 7, 15, 7, 3, 17, 1, 1, 1};
+    static const uint8_t MX[NA_NG] = {1, 1, 1, 1, 2, 15, 7, 1, 1, 1, 2, 7, 15, 7, 3, 17, 1, 1, 1, 28};
     uint32_t i;
     if (f[0] == 0xB6 && f[1] == 1)
         for (i = 0; i < NA_NG; i++)
@@ -348,11 +402,21 @@ static int32_t na_get(int32_t id)
     case NI_RVBMIX: return na_f100(p[P_REV]);
     case NI_RVBSIZE: return na_f100(song.g[G_RSIZE]);
     case NI_RVBDAMP: return na_f100(song.g[G_RDAMP]);
+    case NI_RVBPRE: return na_f100(p[P_LN5]);
+    case NI_DLYTONE: return na_f100(song.g[G_DCOLOR]);
     case NI_DLYMIX: return na_f100(p[P_DLY]);
     case NI_DLYTIME: return na_f100(song.g[G_DRREV]);
     case NI_DLYFB: return na_cl(song.g[G_DFDBK], 0, 120) * 100 / 120;
+    case NI_BENDRNG: return GI(NI_BENDRNG) ^ 12;               /* semitones 0..24 (stored xor 12: a settings record without it reads as 12) */
+    case NI_BENDSPD: return na_f100(p[P_FM3_SUS]);
+    case NI_SM1: case NI_SM2: case NI_SM3: case NI_SM4: return (p[P_FM3_REL] >> (id - NI_SM1)) & 1;   /* the four mod tracks' smoothing (4 bits of P_FM3_REL) */
+    case NI_FOLD2: return na_f100(p[P_LN6]);
+    case NI_LSYNC: return p[P_LSYNC] ? 1 : 0;
+    case NI_CDEST: return na_cl(p[P_FM4_SUS], 0, 7);
+    case NI_CDEPTH: return na_f100(p[P_FM4_DEC]);
+    case NI_AMPMOD: return p[P_FM4_ATK] ? 0 : 1;                /* (stored inverted: 0 = ENVELOPE ON, the default) */
     case NI_GLIDE: return na_f100(p[P_GLIDE]);
-    case NI_GLMODE: return p[P_GLMODE] ? 0 : 1;
+    case NI_GLMODE: return p[P_GLMODE] == 1 ? 0 : p[P_GLMODE] == 2 ? 1 : 2;     /* the page's TIME SYNC RATE <- P_GLMODE's 1 2 0 */
     case NI_IMPRESS: return na_f100(p[P_LN3]);
     case NI_CHANCE: return na_f100(p[P_LN4]);
     case NI_ATTACK: return na_f100(p[P_ATK]);
@@ -375,7 +439,7 @@ static int32_t na_get(int32_t id)
     case NI_ARPLATCH: return p[P_AHOLD] != 0;
     case NI_ARPTYPE: return nano_atype(t);
     case NI_ARPCHORD: return (int32_t)nano_achord(t);
-    case NI_SQPAT: return 0;
+    case NI_SQPAT: return na_sqb;
     case NI_SQRND: return na_cl(p[P_FM2_DEC], 0, 99);
     case NI_SQMUT: return na_cl(p[P_FM2_SUS], 0, 99);
     case NI_SQLEN: return na_cl(p[P_SLEN], 1, 64) - 1;
@@ -431,11 +495,21 @@ static void na_set(int32_t id, int32_t v)
     case NI_RVBMIX: na_put(P_REV, na_f127(v)); break;
     case NI_RVBSIZE: song.g[G_RSIZE] = (int16_t)na_f127(v); break;
     case NI_RVBDAMP: song.g[G_RDAMP] = (int16_t)na_f127(v); break;
+    case NI_RVBPRE: na_put(P_LN5, na_f127(v)); break;
+    case NI_DLYTONE: song.g[G_DCOLOR] = (int16_t)na_f127(v); break;
     case NI_DLYMIX: na_put(P_DLY, na_f127(v)); break;
     case NI_DLYTIME: song.g[G_DRREV] = (int16_t)na_f127(v); break;
     case NI_DLYFB: song.g[G_DFDBK] = (int16_t)(v * 120 / 100); break;
+    case NI_BENDRNG: GI(NI_BENDRNG) = (uint8_t)(v ^ 12); na_g_save(); break;
+    case NI_BENDSPD: na_put(P_FM3_SUS, na_f127(v)); break;
+    case NI_SM1: case NI_SM2: case NI_SM3: case NI_SM4: na_put(P_FM3_REL, (t->p[P_FM3_REL] & ~(1 << (id - NI_SM1))) | (v << (id - NI_SM1))); break;
+    case NI_FOLD2: na_put(P_LN6, na_f127(v)); break;
+    case NI_LSYNC: na_put(P_LSYNC, v ? 1 : 0); break;
+    case NI_CDEST: na_put(P_FM4_SUS, v); na_cyc_route(); break;
+    case NI_CDEPTH: na_put(P_FM4_DEC, na_f127(v)); na_cyc_route(); break;
+    case NI_AMPMOD: na_put(P_FM4_ATK, v ? 0 : 1); break;
     case NI_GLIDE: na_put(P_GLIDE, na_f127(v)); break;
-    case NI_GLMODE: na_put(P_GLMODE, v ? 0 : 1); break;
+    case NI_GLMODE: na_put(P_GLMODE, v == 0 ? 1 : v == 1 ? 2 : 0); break;
     case NI_IMPRESS: na_put(P_LN3, na_f127(v)); break;
     case NI_CHANCE: na_put(P_LN4, na_f127(v)); break;
     case NI_ATTACK: na_put(P_ATK, na_f127(v)); break;
@@ -462,7 +536,12 @@ static void na_set(int32_t id, int32_t v)
     case NI_ARPLATCH: na_put(P_AHOLD, v); break;
     case NI_ARPTYPE: na_put(P_LN2, v); break;
     case NI_ARPCHORD: na_put(P_LN1, v); break;
-    case NI_SQPAT: break;
+    case NI_SQPAT:
+        if (v != na_sqb) {
+            na_sq_swap();
+            na_sqb = (uint8_t)v;
+        }
+        break;
     case NI_SQRND: nano_sq_random(t, (uint32_t)v, na_root); break;
     case NI_SQMUT: nano_sq_mutate(t, (uint32_t)v, na_root); break;
     case NI_SQLEN: na_put(P_SLEN, v + 1); break;
@@ -571,6 +650,9 @@ static void na_text(int32_t id, char *out)
             na_str(out, "USER ");
             fmt_int(out + 5, v - 1);
         }
+    } else if (id == NI_BENDRNG) {
+        fmt_int(out, v * 2);
+        na_cat(out, " STEPS");
     } else if (id == NI_ARPRANGE) {
         fmt_int(out, v + 1);
         na_cat(out, " OCT");
@@ -762,6 +844,8 @@ static void na_sync(void)
         if (sp->ui == 1u)
             nf_ui_set(UI_P, na_get(NI_RISE)), nf_ui_set(UI_P + 1, na_get(NI_FALL)), nf_ui_set(UI_P + 2, na_get(NI_HOLD));
         nf_ui_set(UI_P + 3, sp->ui == 0u ? 1 : na_get(NI_CMODE));      /* (the envelope page: the amp envelope on) */
+        if (sp->ui == 3u)
+            nf_ui_set(UI_P, na_get(NI_AMPMOD));
         break;
     case NG_FX:
         if (sp->ui == 0u)
@@ -769,16 +853,18 @@ static void na_sync(void)
         else if (sp->ui == 1u)
             nf_ui_set(UI_P, na_get(NI_FSLOPE)), nf_ui_set(UI_P + 1, na_get(NI_FDRIVE)), nf_ui_set(UI_P + 2, na_get(NI_FCLIP));
         else if (sp->ui == 2u)
-            nf_ui_set(UI_P, na_get(NI_RVBMIX)), nf_ui_set(UI_P + 1, na_get(NI_RVBSIZE)), nf_ui_set(UI_P + 2, na_get(NI_RVBDAMP)), nf_ui_set(UI_P + 3, 0);
+            nf_ui_set(UI_P, na_get(NI_RVBMIX)), nf_ui_set(UI_P + 1, na_get(NI_RVBSIZE)), nf_ui_set(UI_P + 2, na_get(NI_RVBDAMP)), nf_ui_set(UI_P + 3, na_get(NI_RVBPRE));
         else if (sp->ui == 3u)
-            nf_ui_set(UI_P, na_get(NI_DLYMIX)), nf_ui_set(UI_P + 1, na_get(NI_DLYTIME)), nf_ui_set(UI_P + 2, na_get(NI_DLYFB)), nf_ui_set(UI_P + 3, 50);
+            nf_ui_set(UI_P, na_get(NI_DLYMIX)), nf_ui_set(UI_P + 1, na_get(NI_DLYTIME)), nf_ui_set(UI_P + 2, na_get(NI_DLYFB)), nf_ui_set(UI_P + 3, na_get(NI_DLYTONE));
+        else if (sp->ui == 5u)
+            nf_ui_set(UI_P, na_get(NI_BENDRNG) * 2), nf_ui_set(UI_P + 1, na_get(NI_BENDSPD));
         else if (sp->ui == 4u)
-            nf_ui_set(UI_P, na_get(NI_GLIDE)), nf_ui_set(UI_P + 1, na_get(NI_GLMODE) ? 2 : 0);
+            nf_ui_set(UI_P, na_get(NI_GLIDE)), nf_ui_set(UI_P + 1, na_get(NI_GLMODE));
         else
             nf_ui_set(UI_P, na_get(NI_IMPRESS)), nf_ui_set(UI_P + 1, na_get(NI_CHANCE));
         break;
     case NG_LFO:
-        nf_ui_set(UI_P, na_get(NI_LSHAPE)), nf_ui_set(UI_P + 1, na_get(NI_LRATE)), nf_ui_set(UI_P + 2, 0), nf_ui_set(UI_P + 3, na_get(NI_LMORPH));
+        nf_ui_set(UI_P, na_get(NI_LSHAPE)), nf_ui_set(UI_P + 1, na_get(NI_LRATE)), nf_ui_set(UI_P + 2, na_get(NI_LSYNC)), nf_ui_set(UI_P + 3, na_get(NI_LMORPH));
         break;
     case NG_VOICE:
         nf_ui_set(UI_P, na_get(NI_UDETUNE));
@@ -789,11 +875,12 @@ static void na_sync(void)
         break;
     case NG_SEQ: {
         uint32_t k;
-        nf_ui_set(UI_P, 0), nf_ui_set(UI_P + 1, na_get(NI_SQRND)), nf_ui_set(UI_P + 2, na_get(NI_SQLEN) + 1), nf_ui_set(UI_P + 3, na_get(NI_SQENT));
+        nf_ui_set(UI_P, na_get(NI_SQPAT)), nf_ui_set(UI_P + 1, na_get(NI_SQRND)), nf_ui_set(UI_P + 2, na_get(NI_SQLEN) + 1), nf_ui_set(UI_P + 3, na_get(NI_SQENT));
         nf_ui_set(UI_P + 8, (na_get(NI_SQGATE) + 1) * 10), nf_ui_set(UI_P + 10, na_get(NI_SQSCALE)), nf_ui_set(UI_P + 11, na_get(NI_SQRESTS) * 5);
         nf_ui_set(UI_P + 12, na_get(NI_SQOCT) + 1), nf_ui_set(UI_P + 13, na_get(NI_SQMUT));
         for (k = 0; k < NSTEP; k++)
             nf_ui_set(UI_SEQ + (int)k, (int)(nano_sq_note(&t->step[k]) | (uint32_t)(t->step[k].acc & 3u) << 8));
+        nf_ui_set(UI_P + 4, na_get(NI_SM1)), nf_ui_set(UI_P + 5, na_get(NI_SM2)), nf_ui_set(UI_P + 6, na_get(NI_SM3)), nf_ui_set(UI_P + 7, na_get(NI_SM4));
         nf_ui_set(UI_SEQCUR, na_cur), nf_ui_set(UI_SEQREC, na_rec);
         nf_ui_set(UI_STEP, song.playing && na_seqmode ? (int)(t->seq_idx % (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP)) : -1);
         break;
@@ -922,6 +1009,7 @@ static void na_load(uint32_t n)                           /* factory preset n: t
     na_bank = 1;
     apply_preset_to(t, n);
     na_sq_defaults(t);
+    na_sq_b_reset(t);
     na_str(na_name, ENGINES[ENGI_NANO]->presets[n].name);
     na_pat = 0;
     na_arp_pat_sync();
@@ -941,6 +1029,7 @@ static void na_load_user(uint32_t k)                      /* user slot k (an emp
     }
     up_load(k);
     TSEL->p[P_FM2_DEC] = TSEL->p[P_FM2_SUS] = 0;              /* (no copy of a pattern to put back) */
+    na_sq_b_reset(TSEL);
     up_name(k, na_name);
     na_pat_from_amode();
     na_g_apply(-1);
@@ -1145,6 +1234,57 @@ static void na_voice_sync(void)                            /* the VOICE page the
     t->p[P_PRIO] = 1;
     panic_req |= (uint8_t)(1u << trk_index(t));
     motion_capture(t, P_VOICE, t->p[P_VOICE]);
+}
+
+/* ---- the touch strip's three keys (the FM-1's last three: F5, up, down). F5 cycles what the other two do: BEND (hold to bend the pitch, release to
+ * return: RANGE and SPEED on FX > PITCH BEND), IMPRESS or CHANCE (hold to step the amount, 4 % every 110 ms). seq.c keyboard_block hands the keys here. */
+static uint8_t na_strip_mode, nb_up, nb_dn;
+static int32_t nb_v;                                     /* the bend, -32768..32768 (Q15 of the range) */
+static uint32_t nb_t;                                    /* samples since the amount last stepped */
+static uint32_t nano_strip_key(uint32_t k, uint32_t down)
+{
+#if BOARD_SMK37
+    (void)k, (void)down;
+    return 0;
+#else
+    if (k < 24u || k > 26u)
+        return 0;
+    if (k == 24u) {
+        if (down) {
+            na_strip_mode = (uint8_t)((na_strip_mode + 1u) % 3u);
+            nb_up = nb_dn = 0;
+            nb_t = 0;
+        }
+    } else if (k == 25u) {
+        nb_up = (uint8_t)down;
+    } else {
+        nb_dn = (uint8_t)down;
+    }
+    return 1;
+#endif
+}
+static void nano_strip_tick(void)                        /* once a block */
+{
+#if !BOARD_SMK37
+    int32_t tgt = na_strip_mode == 0u ? (nb_up && !nb_dn ? 32768 : nb_dn && !nb_up ? -32768 : 0) : 0;
+    uint32_t ti = (uint32_t)song.sel % NTRK;
+    if (nb_v != tgt) {
+        /* the whole stroke takes 50 ms + (100 - SPEED) x 8 ms (the test bed's ramp) */
+        int32_t ms = 50 + (127 - trk[ti].p[P_FM3_SUS]) * 800 / 127, st = (int32_t)(32768u * CTL * 1000u / (44100u * (uint32_t)ms));
+        nb_v += clamp(tgt - nb_v, -st, st);
+        midi_bend_target[ti] = (int32_t)(((int64_t)nb_v * (int32_t)(GI(NI_BENDRNG) ^ 12) * 256) >> 15);
+    }
+    if (na_strip_mode && (nb_up != nb_dn)) {
+        nb_t += CTL;
+        if (nb_t >= 4851u) {                             /* 110 ms */
+            int16_t *q = &trk[ti].p[na_strip_mode == 1u ? P_LN3 : P_LN4];   /* (written here, in the audio block: not through na_put) */
+            nb_t = 0;
+            *q = (int16_t)clamp(*q + (nb_up ? 5 : -5), 0, 127);
+        }
+    } else {
+        nb_t = 0;
+    }
+#endif
 }
 
 static void na_input(void)

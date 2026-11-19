@@ -2037,7 +2037,7 @@ static void nano_render_rf(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
         gain += ((g_t - gain) * (k > 32768 ? 32768 : k)) >> 15;
         s = (car * gain) >> 15;
         s = (s * 22938) >> 15;                                                           /* the model gain 0.7 */
-        s = nano_ftap(&flt, &nfl, s >> 1, &ic1, &ic2);
+        s = nano_ftap(&flt, &nfl, nano_k4(s >> 1, p[P_LN6]), &ic1, &ic2);       /* (P_LN6: the Strings page's FOLD, the test bed's fold2) */
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     F->cph = cph;
@@ -2391,7 +2391,7 @@ static void nano_render_rs(track_t *t, voice_t *v, int32_t *out, uint32_t n, con
     nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
         int32_t x = clamp(((ob[i] - ab[i]) * gx) >> 1, -24000, 24000);   /* Rings' gain (1.4 STRING, 1 the others) x 4 (Q13 to Q15) */
-        x = nano_ftap(&flt, &nfl, x >> 1, &ic1, &ic2);
+        x = nano_ftap(&flt, &nfl, nano_k4(x >> 1, p[P_LN6]), &ic1, &ic2);
         out[i] += voice_amp(x, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;
@@ -2508,7 +2508,7 @@ static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int
     }
     nano_fcoef(&flt, &nfl, t, v, cut, p[P_E6]);
     for (i = 0; i < (int32_t)n; i++) {
-        int32_t s = nano_ftap(&flt, &nfl, clamp(soft_knee(acc[i], 16000), -32768, 32767) >> 1, &ic1, &ic2);
+        int32_t s = nano_ftap(&flt, &nfl, nano_k4(clamp(soft_knee(acc[i], 16000), -32768, 32767) >> 1, p[P_LN6]), &ic1, &ic2);
         out[i] += voice_amp(s, m, (uint32_t)i) << 1;
     }
     v->s[0] = ic1;

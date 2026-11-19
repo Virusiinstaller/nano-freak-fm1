@@ -59,6 +59,7 @@ static uint32_t lfo_rand(track_t *t)
  * advances 2^32 x CTL / cycle a block (two 32-bit divides; the 1-bit truncation of 0xFFFFFFFF drifts by less than a
  * millionth of a cycle a cycle). OFF: RATE's table, as before */
 static uint32_t div_samples(uint32_t div);         /* (fx.c) */
+static uint32_t beat_samples(void);                /* (fx.c) */
 static uint32_t lfo_rate_inc(const track_t *t)         /* RATE's step: the table, NANO's own law (the test bed's 0.005 Hz * 2^(14.3 n)) */
 {
     return ENGINES[t->engine] == &ENG_NANO ? NANO_LFO_INC[t->p[P_LRATE] & 127] : LFO_INC[t->p[P_LRATE] & 127];
@@ -67,7 +68,13 @@ static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t)   /* (n
                                                                            * the audio ISR's loop over the tracks) */
 {
     uint32_t cyc, q, r;
-    cyc = div_samples(LSYNC_DIV[(uint32_t)t->p[P_LSYNC] % NELEM(LSYNC_DIV)]);
+    if (ENGINES[t->engine] == &ENG_NANO) {              /* Nano Freak: SYNC on, the RATE knob picks the note value (the test bed's DIV_BEATS), 8 bars .. 1/32,
+                                                         * in 1/24 beats; the matrix's moves of RATE do not count */
+        static const uint16_t LK[13] = {768, 384, 192, 96, 48, 32, 24, 16, 12, 8, 6, 4, 3};
+        cyc = beat_samples() * LK[(uint32_t)clamp(t->p[P_LRATE] * 13 >> 7, 0, 12)] / 24u;
+    } else {
+        cyc = div_samples(LSYNC_DIV[(uint32_t)t->p[P_LSYNC] % NELEM(LSYNC_DIV)]);
+    }
     cyc = cyc ? cyc : 1u;
     q = 0xFFFFFFFFu / cyc;
     r = 0xFFFFFFFFu % cyc;
@@ -298,10 +305,22 @@ static void glide_set(track_t *t, voice_t *v, int glide)
         v->gstep = 0;
         return;
     }
+#if FELUCCA_FMINI_ONLY
+    if (t->p[P_GLMODE]) {
+        int32_t d = v->pitch16 - v->pitch_cur, ticks = 1 + (t->p[P_GLIDE] * t->p[P_GLIDE] * 27342 / 1000) / (int32_t)(GLIDE_SLOW * CTL);   /* TIME: (knob)^2 x 10 s, the test bed's */
+        if (t->p[P_GLMODE] == 2) {                      /* SYNC (Nano Freak): the whole glide takes one note value, picked by the knob, at the tempo:
+                                                         * 1/32T 1/32 1/16T 1/16 1/8T 1/8 1/4T 1/4 1/2T 1/2 1/1 (the test bed's GDIV), in 1/24 quarters */
+            static const uint8_t GK[11] = {2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 96};
+            ticks = 1 + (int32_t)(beat_samples() * GK[(uint32_t)clamp(t->p[P_GLIDE] * 11 >> 7, 0, 10)] / 24u / (GLIDE_SLOW * CTL));
+        }
+        d = d < 0 ? -d : d;
+        v->gstep = (d * 256 / ticks > 0 ? d * 256 / ticks : 1) << 8;       /* TIME / SYNC: the step in 1/256 of 1/16 st per tick, in the high bits; the low 8 hold the fraction carried (slow glides move 1 in n ticks) */
+#else
     if (t->p[P_GLMODE]) {
         int32_t d = v->pitch16 - v->pitch_cur, ticks = 1 + t->p[P_GLIDE] * t->p[P_GLIDE] / 8;
         d = d < 0 ? -d : d;
         v->gstep = d / ticks > 0 ? d / ticks : 1;
+#endif
     } else {
         v->gstep = 0;
     }
@@ -794,6 +813,7 @@ static uint32_t dg_bend_n, dg_on_n;
 static int32_t dg_bend_raw, dg_on_bend, dg_on_tgt, dg_on_q8, dg_run_q8, dg_on_note;
 static int32_t dg_bend_ch, dg_on_ch;               /* MIDI channel (1..16) of the last wheel message and of the last note-on, 0 = none yet */
 #endif
+static int32_t nano_gamp[NTRK][NVOICE];                 /* NANO, AMP ENVELOPE: GATE ONLY: each voice's loudness (Q15) following its gate */
 static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
 {
     const engine_t *e = ENGINES[t->engine];
@@ -869,6 +889,11 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
                 env = e->amp(t, v, env);
             m.envq15 = e->ownenv ? 0 : env;
             m.amp1 = e->ownenv ? env : mulq15(env, v->vel * 258);
+            if (e == &ENG_NANO && p[P_FM4_ATK]) {       /* NANO, AMP ENVELOPE: GATE ONLY: the loudness follows the key (2 ms in, 30 ms out) and the ADSR drives the filter only */
+                int32_t *ga = &nano_gamp[(uint32_t)(t - trk) % NTRK][(uint32_t)(v - t->v) % NVOICE];
+                *ga = v->gate ? (*ga + (int32_t)(CTL * 371u) < 32767 ? *ga + (int32_t)(CTL * 371u) : 32767) : (*ga > (int32_t)(CTL * 25u) ? *ga - (int32_t)(CTL * 25u) : 0);
+                m.amp1 = mulq15(*ga, v->vel * 258);
+            }
             if (p[P_LD_AMP])
                 m.amp1 = mulq15(m.amp1, 32767 - mulq15(p[P_LPOL] ? lfo : (lfo + 32768) >> 1, p[P_LD_AMP] * 258));
             if (fade)                                   /* linear to 0 over the fade */
@@ -882,8 +907,19 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
         if (v->pitch_cur != v->pitch16) {               /* glide */
 #endif
             int32_t d = v->pitch16 - v->pitch_cur;
-            int32_t st = v->gstep ? v->gstep : (int32_t)(ENV_LIN[(p[P_GLIDE] ? p[P_GLIDE] : 40) & 127] >> 14);   /* slide: ~45 ms */
-            if (st < 1)
+            int32_t st;
+            if (v->gstep) {
+#if FELUCCA_FMINI_ONLY
+                int32_t acc = (v->gstep & 255) + (v->gstep >> 8);     /* (Q8 with the carried fraction: glide_set) */
+                st = acc >> 8;
+                v->gstep = (v->gstep & ~255) | (acc & 255);
+#else
+                st = v->gstep;
+#endif
+            } else {
+                st = (int32_t)(ENV_LIN[(p[P_GLIDE] ? p[P_GLIDE] : 40) & 127] >> 14);   /* slide: ~45 ms */
+            }
+            if (st < 1 && !v->gstep)
                 st = 1;
             v->pitch_cur += d > 0 ? (d < st ? d : st) : (-d < st ? d : -st);
         }

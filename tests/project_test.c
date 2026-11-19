@@ -503,7 +503,7 @@ int main(void)
             ok = old_pack(v8, &e, OLD_FUN8, 91u) == sizeof v8;   /* (its E3 at 86, its E5 lock at 88) */
             ok = ok && proj_import(&c, v8, sizeof v8);
             for (k = 0; ok && k < NTRK; k++) {
-                for (j = P_LN0; j <= P_LN7; j++) ok &= c.t[k].p[j] == 127;
+                for (j = P_LN0; j <= P_LN7; j++) ok &= c.t[k].p[j] == (j == P_LN5 || j == P_LN6 ? 0 : 127);   /* (NANO's PRE-DELAY and FOLD lanes default to 0) */
                 ok &= !memcmp(c.fm6[k], FM6_FACTORY[k * 2u], FM6_PACKED);
             }
             bad += check("FUN8 of 1.0.x (91 parameters): lane levels 100 %, E0..E7 at P_E0, patches and name kept", ok &&

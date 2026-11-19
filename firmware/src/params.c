@@ -43,7 +43,7 @@ static const char *const N_QUANT[] = {"OFF", "SNAP", "WHITE", "SEQ", "SEQ+T"};
 static const char *const N_CHRD[] = {"OFF", "DIA3", "DIA7", "MAJ", "MIN", "DOM7", "MAJ7", "MIN7", "SUS4", "POW"};
 static const char *const N_VOIC[] = {"CLOSE", "OPEN", "INV1", "INV2", "+OCT"};   /* VC_CLOSE .. VC_BASS */
 static const char *const N_VOICE[] = {"POLY", "MONO", "LEG", "UNI"};   /* V_POLY .. V_UNISON */
-static const char *const N_GLMODE[] = {"RATE", "TIME"};
+static const char *const N_GLMODE[] = {"RATE", "TIME", "SYNC"};
 static const char *const N_PRIO[] = {"LAST", "LOW", "HIGH"};
 static const char *const N_ALLOC[] = {"ROT", "REUSE"};
 static const char *const N_ORDER[] = {"NOTE", "PLAY"};
@@ -146,19 +146,26 @@ static const param_desc_t TP[P_COUNT] = {
 /* the OP ENV / OP LEVEL values of DIGITAL (ids 61..80): with FELUCCA_FM4 its operator envelopes; without it
  * inert, on no page and in no editor layout, read only when a DIGITAL sound converts (fm4_convert.c). Their labels
  * stay: the editor's library files key parameters by label ("ATK#2" ..), so an old file's values still find them */
-#define FMOP(k) [P_FM##k##_ATK] = PD("ATK", F_TIME, 0, 127, 0), \
-                [P_FM##k##_DEC] = PD("DEC", F_TIME, 0, 127, 0), \
-                [P_FM##k##_SUS] = PD("SUS", F_PCT, 0, 127, 127), \
+#define FMOP(k, sus, dec) [P_FM##k##_ATK] = PD("ATK", F_TIME, 0, 127, 0), \
+                [P_FM##k##_DEC] = dec, \
+                [P_FM##k##_SUS] = sus, \
                 [P_FM##k##_REL] = PD("REL", F_TIME, 0, 127, 0), \
                 [P_FM##k##_LEVEL] = PD("LVL", F_PCT, 0, 127, 127)
-    FMOP(1), FMOP(2), FMOP(3), FMOP(4),
+#define FSUS PD("SUS", F_PCT, 0, 127, 127)
+#define FDEC PD("DEC", F_TIME, 0, 127, 0)
+    FMOP(1, FSUS, FDEC), FMOP(2, FSUS, FDEC), FMOP(3, PD("BENDSPD", F_PCT, 0, 127, 64), FDEC),
+    FMOP(4, PD("CDEST", F_INT, 0, 127, 3), PD("CDEPTH", F_PCT, 0, 127, 64)),   /* (OP4: the cycling envelope's destination and depth, nano_app.c) */   /* (OP3's SUS: Nano Freak's bend speed, nano_app.c, the test bed's 50 %) */
 #undef FMOP
+#undef FSUS
+#undef FDEC
     [P_CHRD] = PE("CHRD", N_CHRD, 0),
     [P_VOIC] = PE("VOIC", N_VOIC, 0),
 /* the DRUM engine's lane levels (eng_drum.c, #97): 100 % = the kit as designed (the sound before 1.1) */
 #define LANE(k, l) [P_LN0 + (k)] = PD(l, F_PCT, 0, 127, 127)
     LANE(0, "KICK"), LANE(1, "SNARE"), LANE(2, "CLAP"), LANE(3, "HATCL"),
-    LANE(4, "HATOP"), LANE(5, "TOM"), LANE(6, "RIM"), LANE(7, "BELL"),
+    LANE(4, "HATOP"), LANE(7, "BELL"),
+    [P_LN6] = PD("FOLD2", F_PCT, 0, 127, 0),       /* Nano Freak: the Strings page's FOLD (eng_nano.c); was DRUM's RIM lane */
+    [P_LN5] = PD("PREDLY", F_PCT, 0, 127, 0),     /* Nano Freak: the reverb's pre-delay (fx.c), 0..80 ms; was DRUM's TOM lane */
 #undef LANE
     [P_LSYNC] = PE("SYNC", N_LSYNC, 0),
     [P_LTRIG] = PE("TRIG", N_LTRIG, 0),

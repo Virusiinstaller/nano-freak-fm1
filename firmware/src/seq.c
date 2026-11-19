@@ -923,6 +923,10 @@ static void ext_keys_block(void)
 }
 #endif
 
+#if FELUCCA_FMINI_ONLY
+static uint32_t nano_strip_key(uint32_t k, uint32_t down);   /* (nano_app.c: the FM-1's last three keys are the touch strip) */
+static void nano_strip_tick(void);
+#endif
 static void keyboard_block(void)
 {
     uint32_t cur = fm1_in.notes, ch, k;
@@ -930,6 +934,9 @@ static void keyboard_block(void)
     nano_cc_flush();                                /* NANO's CCs the controls changed (nano_ctl.c) */
 #if BOARD_SMK37
     ext_keys_block();
+#endif
+#if FELUCCA_FMINI_ONLY
+    nano_strip_tick();
 #endif
     ch = cur ^ kb_prev;                          /* keys also sound while entering steps */
     if (perf_remap)
@@ -949,6 +956,12 @@ static void keyboard_block(void)
     for (k = 0; k < 27u; k++) {
         if (!((ch >> k) & 1u))
             continue;
+#if FELUCCA_FMINI_ONLY
+        if (k >= 24u && nano_strip_key(k, (cur >> k) & 1u)) {   /* the touch strip (FM-1): not notes */
+            kb_note[k] = KB_SILENT;
+            continue;
+        }
+#endif
         if ((cur >> k) & 1u) {                    /* the selected track; the key-up goes to the same one */
             kb_trk[k] = song.sel;
             if (kb_asleep) {                      /* (SCREEN OFF: the wake press is swallowed) */

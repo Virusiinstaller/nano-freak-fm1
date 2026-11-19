@@ -1353,3 +1353,14 @@ them): `P_LN0` ARP LENGTH (0..127 -> 1..16 steps, 127 = 16), `P_LN1` ARP CHORD (
 Power), `P_LN2` ARP TYPE (1 = chord), `P_LN3` IMPRESS, `P_LN4` CHANCE (a change rolls the variation). The matrix source CYC
 (id 11) and the cycling envelope's `P_FM1_ATK DEC SUS REL LEVEL` are described in the NANO section above. MIDI CC in/out (a
 NANO part): the map is `nano_cc[]` in `firmware/src/nano_ctl.c`.
+
+### NANO FX, bend, amp, LFO sync and cycling parameters (2.5.49)
+
+More per-sound slots a NANO track reads (a sound from 2.5.48 or before reads them at their defaults, which keep its sound):
+`P_LN5` reverb PRE-DELAY (0..127 = 0..80 ms, default 0; was DRUM's TOM lane), `P_LN6` the Strings page's FOLD (default 0; was RIM),
+`P_FM3_SUS` pitch-bend SPEED (default 64), `P_FM3_REL` the four Mod Smooth toggles (bits 0..3; no sound effect yet),
+`P_FM4_ATK` AMP ENVELOPE (0 = envelope, the default; 1 = gate only: the ADSR then drives the filter only), `P_FM4_SUS` and
+`P_FM4_DEC` the cycling envelope's DEST (0..7: pitch, OSC K2, OSC K3, cutoff, A1..A4; default 3) and DEPTH (64 = none; the
+page writes the matrix's CycEnv row from them). `P_GLMODE` is 0 RATE, 1 TIME, 2 SYNC; `P_LSYNC` nonzero = the LFO RATE knob picks
+a note value. Delay TONE is the global `G_DCOLOR` (the delay is always the ping-pong); bend RANGE is a GLOBAL setting (the
+settings record, slot 19, stored xor 12). The A/B sequence pattern's other half and the strip's mode are not saved.

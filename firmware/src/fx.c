@@ -6,6 +6,8 @@
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
+#define PD_LEN 4096u             /* the reverb's pre-delay line: 80 ms is 3528 samples (Nano Freak: the test bed's PRE-DLY 0..100 = 0..80 ms) */
+static int16_t rev_pd[PD_LEN] __attribute__((section(".pool")));
 static const uint16_t REV_COMB[4] = {1116, 1188, 1277, 1356};
 static const uint16_t REV_AP[2] = {556, 441};
 static int16_t rev_comb[1116 + 1188 + 1277 + 1356] __attribute__((section(".pool")));
@@ -31,6 +33,8 @@ static struct {
     int32_t sp_lp, sp_hp, sp_he, sp_size;   /* .. its loop low-pass, low cut (and its remainder), the loop
                                              * length (Q8, glides) */
     uint32_t sp_ph;                      /* .. the output tap's wobble */
+    uint32_t pd_w, pd_d;                 /* the pre-delay line's write index and the delay now (samples, glides to the knob) */
+    uint8_t pd_on;
     uint8_t cho_on, dly_on, rev_on;      /* FMini-1: the bus ran last block (a bus whose send is 0 and input silent does not run at all) */
     uint32_t dly_start;                  /* .. the delay's write index when it last started (older samples are silence) */
 #if FELUCCA_FMINI_ONLY
@@ -306,7 +310,12 @@ static const uint8_t DIV_DOT[3] = {2, 3, 1};           /* 3 quarters >> this */
 static uint32_t dly_kind(void)
 {
     uint32_t d = (uint32_t)song.g[G_DTIME];
+#if FELUCCA_FMINI_ONLY
+    (void)d;
+    return 3u;                                           /* Nano Freak: the delay is the test bed's stereo ping-pong, TONE (G_DCOLOR) in its loop */
+#else
     return d == 7u ? 0u : d % 7u;
+#endif
 }
 /* A-SYNC: a note value longer than the delay line (1.48 s) is silent, not cut: the delay does not play (dly_block is skipped) */
 static uint32_t dly_div_fits(uint32_t div)           /* A-SYNC: this note value is shorter than the line (at the tempo now) */
@@ -1068,6 +1077,8 @@ static __attribute__((noinline)) void dly_block(const int32_t *dly_in, int32_t *
 {
     uint32_t i, ty = dly_kind(), w;
     int32_t dmix = song.g[G_DMIX] * 258, tgt = (int32_t)delay_samples() << 8, st = tgt - fx.dl_q, slap;
+    int32_t tn = clamp(song.g[G_DCOLOR], 0, 127) * 258, tc;     /* TONE 0..1 in Q15: the loop's low-pass a = 0.04 + 0.96 tone^2, as the test bed's */
+    tc = 1311 + mulq15(mulq15(tn, tn), 31457);
     fx.dl_q += clamp(st, -2048, 2048);                  /* up to 8 samples a block: +-25 % speed: a quick, smooth bend */
     slap = (1323 << 8) + (((fx.dl_q >> 6) * 3277) >> 9);   /* SLAP's time, 30 ms + TIME / 10 */
     for (i = 0; i < n; i++) {
@@ -1098,8 +1109,9 @@ static __attribute__((noinline)) void dly_block(const int32_t *dly_in, int32_t *
         case 3u: {                                      /* P-PONG */
             uint32_t t = (uint32_t)clamp(fx.dl_q >> 8, 16, 32767);
             int32_t l = dly_at(t), r = dly_at(2u * t);
-            fx.dly_lp += mulq15(r - fx.dly_lp, 22000);
-            dly_put(in + mulq15(fx.dly_lp, fb));
+            fx.dly_lp += mulq15(r - fx.dly_lp, tc);
+            fx.dly_hp += mulq15(in - fx.dly_hp, tc);       /* TONE darkens what goes in as well as the repeats (the test bed's low-pass before the line) */
+            dly_put(fx.dly_hp + mulq15(fx.dly_lp, fb));
             wet[i] += mulq15(l + r, dmix);
             dside[i] += mulq15(l - r, dmix);
             break;
@@ -1153,7 +1165,7 @@ static __attribute__((noinline)) void dly_block(const int32_t *dly_in, int32_t *
 
 /* process the three buses for one block; sends in, wet stereo-equal out. FMini-1: a bus whose send is 0 on every part
  * (the FX page's MIX at 0) and whose input is silent is OFF: nothing of it runs (its state cleared once), the CPU is free */
-static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet,
+static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, int32_t *rev_in, int32_t *wet,
                      uint32_t n)
 {
     uint32_t i, dl = delay_samples();
@@ -1257,10 +1269,35 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
             rev_clear();
             fx.rev_on = 0;
         }
+        if (fx.pd_on || fx.pd_d) {                        /* the pre-delay line: silent too */
+            for (i = 0; i < PD_LEN; i++)
+                rev_pd[i] = 0;
+            fx.pd_on = 0;
+            fx.pd_d = 0;
+        }
         hl.side = 0;
         return;
     }
     fx.rev_on = 1;
+    {   /* PRE-DLY: the send is delayed 0..80 ms before the model (the knob of the loudest REVERB send's part) */
+        int32_t pre = 0, tgt;
+        uint32_t k, d;
+        for (k = 0; k < NTRK; k++)
+            if (trk[k].p[P_REV] > 0 && trk[k].p[P_LN5] > pre)
+                pre = trk[k].p[P_LN5];
+        tgt = clamp(pre, 0, 127) * 3528 / 127;
+        fx.pd_d += (uint32_t)clamp(tgt - (int32_t)fx.pd_d, -16, 16);
+        d = fx.pd_d;
+        if (d || fx.pd_on) {
+            for (i = 0; i < n; i++) {
+                int32_t x = rev_in[i];
+                rev_pd[fx.pd_w & (PD_LEN - 1u)] = (int16_t)clamp(x >> 1, -32768, 32767);
+                rev_in[i] = d ? (int32_t)rev_pd[(fx.pd_w - d) & (PD_LEN - 1u)] << 1 : x;
+                fx.pd_w++;
+            }
+            fx.pd_on = d != 0u;
+        }
+    }
 #else
     rt = rt == 1 || rt == 2 ? rt : 0;
 #endif

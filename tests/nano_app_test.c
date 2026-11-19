@@ -37,7 +37,7 @@ static void nturn(uint32_t role, int32_t d)
     host_ticks += 200000u;
 }
 static int fails;
-static uint32_t stephash(void) { uint32_t h = na_cur, k; const uint8_t *b = (const uint8_t *)trk[0].step; for (k = 0; k < sizeof trk[0].step; k++) h = h * 31u + b[k]; return h; }
+static uint32_t stephash(void) { uint32_t h = na_cur, k; const uint8_t *b = (const uint8_t *)trk[0].step; for (k = 0; k < sizeof trk[0].step; k++) h = h * 31u + b[k]; for (k = 0; k < NA_NG; k++) h = h * 31u + na_g[k]; return h; }
 #define CHECK(c, ...) do { if (!(c)) { printf("FAIL: " __VA_ARGS__); printf("\n"); fails++; } } while (0)
 static void draw(void) { na_dirty = 1; ui.force = 1; na_draw(); }
 int main(int argc, char **argv)
@@ -59,6 +59,9 @@ int main(int argc, char **argv)
             npress(BTN[g]);
             for (sb = 0; sb < 8; sb++) {
                 uint32_t k;
+                if (na_grp == NG_MATRIX) {                   /* (the cycling page's DEST and DEPTH, turned before, made a route: the four slots are free here) */
+                    for (k = 0; k < 4u; k++) TSEL->p[P_M1SRC + 3u * k] = TSEL->p[P_M1DST + 3u * k] = TSEL->p[P_M1AMT + 3u * k] = 0;
+                }
                 draw();
                 dump(dir, n++);
                 for (k = 0; k < 4u; k++) {
