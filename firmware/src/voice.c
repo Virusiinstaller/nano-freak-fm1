@@ -134,6 +134,13 @@ static void track_lfo_tick(track_t *t)                  /* (one core: the whole 
 static uint32_t trk_nvoice(const track_t *t)
 {
     uint32_t c = ENGINES[t->engine]->poly;
+#if FELUCCA_FMINI_ONLY
+    if (t->engine == ENGI_NANO) {                       /* the types whose state is kept for four voices only (MODAL, PLUCK, RINGS, the SAW comb):  */
+        uint32_t e = (uint32_t)t->p[P_E0];              /* the round robin would put every other note on a voice that stays silent (or dry) */
+        if (e == 6u || e == 9u || e == 14u || (e == 11u && ((uint32_t)t->p[P_E1] * 3u) / 127u == 1u))
+            return 4u;
+    }
+#endif
     return c && c < NVOICE ? c : NVOICE;
 }
 

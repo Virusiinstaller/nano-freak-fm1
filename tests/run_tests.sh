@@ -303,6 +303,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "Ladder filter (kept from FMini-1, firmware/src/ladder.c): sings a sine from silence, the CUTOFF and EMPHASIS dials, the high-pass output, no runaway" "$OUT/ladder_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_sound_test" tests/nano_sound_test.c -lm
     run "Nano Freak controls reach the SOUND: keys, ARP, SEQ, filter, envelopes, LFO, every matrix route, MIDI keys" "$OUT/nano_sound_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_osc_knobs_test" tests/nano_osc_knobs_test.c -lm
+    run "Nano Freak oscillator knobs K1..K4 change the sound and the waveform sketch on every type, K4 is labelled as the test bed" "$OUT/nano_osc_knobs_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/nano_test" tests/nano_test.c -lm
     run "NANO (Nano Freak) BASIC WAVES: pitch, SYM, SUB, SYNC repeats, TWO OP FM (pitch, INDEX, RATIO, FEEDBACK, DC), WAVESHAPER, FORMANT, NOISE, CHORDS, MODAL, SWARM, HARMONIC at the master period and is brighter, PLUCK (pitch, DECAY, four voices), BASS (pitch, SUB, WIDTH), SAW (sync period, comb, CS80), WAVETABLE (16 tables, POSITION, CHORUS, MORPH), V.ANALOG (saw period, DETUNE, SYNC), FOLD (the fourth knob), the levels against the test bed, the filter, RINGS modal, FM, STRING, SYMPA and QUANT (pitch, DAMPING, STRUCTURE, POSITION, sidebands), bounded sweep with no DC or click, every preset sounds" "$OUT/nano_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/speaker_test" tests/speaker_test.c -lm

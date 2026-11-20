@@ -1371,3 +1371,10 @@ settings record, slot 19, stored xor 12). The A/B sequence pattern's other half 
 1 = the Minimoog ladder (`firmware/src/ladder.c`, kept from FMini-1). The ladder is 24 dB by itself, so SLOPE is ignored with it; CUT is its
 singing pitch, RES its emphasis, TYPE LP / HP as usual, BP the second stage less the fourth. The page is FILTER 2, fourth knob (MODEL).
 A sound from 2.5.49 or before has 0 there and sounds as it did. The per-voice side store grew from two to three states (the lag pole).
+
+### NANO oscillator knobs and voices (2.5.51)
+
+OSC page K1..K4 (`P_E1`..`P_E4`) all change the sound and the waveform sketch on every one of the 15 types. K4 is named as in the test bed: SYNC
+(BASICWAVES), MORPH (WAVETABLE), STRETCH (HARMONIC), DAMP (STRINGS), FOLD on the others; the stored value's meaning is unchanged.
+POLY mode: MODAL (6), PLUCK (9), RINGS (14) and the SAW comb (11, model 1) keep state for four voices, so the part now allocates among four
+voices for them (before, the round robin put every other note on a voice that stayed silent or dry).

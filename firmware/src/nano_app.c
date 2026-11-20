@@ -727,53 +727,213 @@ static int32_t nw_fold(int32_t x)                          /* a triangle fold of
     x = x > 0x1FFFF ? 0x3FFFF - x : x;
     return x * 2 - 0x1FFFF + 0;                            /* (a fold back and forth) */
 }
+/* the phase ph scaled by r16 (Q16: 65536 = x1), a cycle's wrap kept: a faster or slower copy of the same cycle */
+static uint32_t nw_mul(uint32_t ph, uint32_t r16) { return (ph >> 8) * (r16 >> 8); }
+/* 2^(s / 12) in Q16 for s = 0..48 */
+static uint32_t nw_semi(int32_t s)
+{
+    s = s < 0 ? 0 : s > 48 ? 48 : s;
+    return NANO_P2[(s % 12) * 2] << (s / 12);
+}
+/* the sketch's variable saw: rises over the first w (0..65535) of the cycle, falls over the rest */
+static int32_t nw_vsaw(uint32_t ph, uint32_t w)
+{
+    uint32_t u = ph >> 16;
+    w = w < 800u ? 800u : w > 64735u ? 64735u : w;
+    return u < w ? (int32_t)(u * 32768u / w) * 2 - 32768 : 32768 - (int32_t)((u - w) * 65536u / (65536u - w));
+}
+static int32_t nw_pulse(uint32_t ph, uint32_t w) { return (ph >> 16) < w ? 28000 : -28000; }
+/* the basic wave at a morph 0..127: sine, triangle, saw, square (BASICWAVES' MORPH) */
+static int32_t nw_morph(uint32_t ph, int32_t a)
+{
+    int32_t m = a * 3, f = m & 127, w0, w1;
+    w0 = m < 128 ? nano_sin824(ph) : m < 256 ? nw_tri(ph) : nw_saw(ph);
+    w1 = m < 128 ? nw_tri(ph) : m < 256 ? nw_saw(ph) : nw_sqr(ph);
+    if (m >= 381)
+        f = 127, w0 = w1;
+    return w0 + (((w1 - w0) * f) >> 7);
+}
+static int32_t nw_pow(int32_t u, int32_t n)             /* u (Q15) to the power n, n >= 1 */
+{
+    int32_t y = u;
+    while (--n > 0)
+        y = (y * u) >> 15;
+    return y;
+}
+/* a decay across the picture: 1.0 (Q15) at the start, falling toward `floor` by the end, the faster the larger `rate` (0..127) */
+static int32_t nw_decay(uint32_t i, int32_t rate, int32_t floor)
+{
+    int32_t e = 32768 - (int32_t)(i * (uint32_t)rate * 32768u / (NW_LEN * 127u));
+    return e < floor ? floor : e;
+}
+/* the oscillator's sketch at one point: ph the phase (two cycles over NW_LEN points), i the point. The knobs are those the engine
+ * reads: E1 E2 E3 by type (the labels in NOSC), E4 (SYNC, STRETCH, MORPH, DAMP, or FOLD) by type. */
 static int32_t na_wave_at(uint32_t ty, uint32_t ph, uint32_t i, const int16_t *p)
 {
-    int32_t a = p[P_E1], b = p[P_E2], c = p[P_E3], x, y, k;
+    int32_t a = p[P_E1], b = p[P_E2], c = p[P_E3], d = p[P_E4], x, y, k;
+    static int32_t sv0, sv1, sprev;                            /* the sketch's running states (the filter, the feedback) */
+    static uint32_t sr;
+    if (i == 0u)
+        sv0 = sv1 = sprev = 0, sr = 12345u;
     switch (ty) {
-    case 0: {                                              /* BASICWAVES: MORPH sine > tri > saw > square, SYM skews, SUB a square an octave down */
-        uint32_t u = ph >> 16, d = (uint32_t)(32768 + (b - 64) * 240);
-        int32_t m = a * 3, f = m & 127, w0, w1;
-        u = u < d ? u * 32768u / d : 32768u + (u - d) * 32768u / (65536u - d);
-        ph = u << 16;
-        w0 = m < 128 ? nano_sin824(ph) : m < 256 ? nw_tri(ph) : nw_saw(ph);
-        w1 = m < 128 ? nw_tri(ph) : m < 256 ? nw_saw(ph) : nw_sqr(ph);
-        if (m >= 381) f = 127, w0 = w1;
-        y = w0 + (((w1 - w0) * f) >> 7);
+    case 0: {                                              /* BASICWAVES: MORPH sine > tri > saw > square, SYM skews, SUB a square an octave down, SYNC a faster copy restarted by the first */
+        uint32_t u, dd = (uint32_t)(32768 + (b - 64) * 240);
+        if (d > 0)
+            ph = (ph >> 8) * (uint32_t)(256 + (d * 1024 + 63) / 127);
+        u = ph >> 16;
+        u = u < dd ? u * 32768u / dd : 32768u + (u - dd) * 32768u / (65536u - dd);
+        y = nw_morph(u << 16, a);
         return y + (nw_sqr(ph >> 1 | (i >= NW_LEN / 2u ? 0x80000000u : 0u)) * c >> 8);
     }
-    case 7: case 13: case 11: case 10:                    /* SUPERWAVE, V.ANALOG, SAW, BASS: saws a little apart */
-        k = ty == 7 ? b / 6 : ty == 13 ? a / 6 : 4 + c / 20;
-        y = nw_saw(ph) + nw_saw(ph + (uint32_t)(ph / 1000u) * (uint32_t)k) + nw_saw(ph - (uint32_t)(ph / 1000u) * (uint32_t)k);
-        return ty == 13 ? y / 3 + (nw_sqr(ph) * c >> 8) : ty == 10 ? y / 3 + (nw_sqr(ph >> 1) >> 1) : y / 3;
-    case 12: {                                             /* WAVETABLE: the table E1 and the wave E2 of it, as the engine reads them */
-        const int8_t *w = NANO_WT + (uint32_t)(a * 16 / 128) * 16u * 129u + (uint32_t)(b * 15 / 127) * 129u;
-        return nano_wt_rd(w, ph) * 4;
+    case 7: {                                              /* SUPERWAVE: seven waves (E1: saw, square, triangle, sine) E2 apart, E3 the six against the middle one */
+        int32_t wv = a >= 96 ? 3 : a >> 5, sx = 0, vol = c * 256 / 127;
+        uint32_t step = (uint32_t)(1 + b * b / 400);
+        for (k = 0; k < 7; k++) {
+            uint32_t pk = ph + (ph >> 8) * (uint32_t)(((int32_t)k - 3) * (int32_t)step);
+            int32_t w = nano_swv(pk, wv) * 8;
+            sx += k == 3 ? w * 256 : w * vol;
+        }
+        return sx / (256 + 6 * vol + 1);
     }
-    case 1:                                                /* TWO OP FM: the ratio E1 (1..8), the amount E2 */
+    case 13: {                                             /* V.ANALOG: a saw E1 apart from the key (unison in the middle, a fifth, an octave), E3 its width, plus a hard-synced square E2 (width, ratio, level) */
+        uint32_t r16 = a >= 64 ? 65536u + (uint32_t)(a - 64) * 65536u / 63u : 32768u + (uint32_t)a * 32768u / 64u, sw = (uint32_t)clamp(b * 520 - 9830, 328, 32768) * 2u;
+        uint32_t sr16 = 65536u + (b > 64 ? (uint32_t)((b - 64) * (b - 64) * 40) : 0u);
+        int32_t sat = nw_vsaw(nw_mul(ph, r16), (uint32_t)(65535 - c * 500)), sq, sg = b * 8 > 127 ? 127 : b * 8;
+        sq = nw_pulse(nw_mul(ph, sr16), sw > 65535u ? 65535u : sw);
+        return (sat >> 1) + ((sq * sg) >> 8);
+    }
+    case 11: {                                             /* SAW: SYNC (a second saw E2 up to five octaves, hard-synced, E3 crossfades), COMB (E2 detunes the comb, E3 its feedback), CS80 (a notch E2 moves, E3 offsets) */
+        int32_t model = a * 3 / 127;
+        if (model == 0) {
+            int32_t t = b * 5 * 24 / 127, w0 = nw_saw(ph), w1 = nw_saw(nw_mul(ph, NANO_P2[t % 24] << (t / 24)));
+            return w0 + (((w1 - w0) * c) >> 7);
+        }
+        if (model == 1) {
+            int32_t fb = c - 64;
+            return nw_saw(ph) + (nw_saw(ph + (uint32_t)((b - 63) * 1500000)) * fb >> 6) + (nw_saw(ph + (uint32_t)((b - 63) * 3000000)) * fb >> 7);
+        }
+        {
+            int32_t pos = b * 512 + (c - 64) * 64, dn = (int32_t)(ph >> 16) - pos, g;
+            dn = dn < 0 ? -dn : dn;
+            dn = dn > 32768 ? 65536 - dn : dn;
+            g = 32768 - (dn < 6000 ? (6000 - dn) * 32768 / 6000 : 0);
+            return (nw_saw(ph) >> 3) * (g >> 7) >> 5;
+        }
+    }
+    case 10: {                                             /* BASS: E1 square or saw, E2 its width, E3 the sub (nothing in the middle: two octaves down below it, one above) */
+        int32_t m = a >= 64 ? nw_vsaw(ph, (uint32_t)(b * 500 + 800)) : nw_pulse(ph, (uint32_t)(b * 500 + 800)), sub = c < 64 ? nw_sqr((ph >> 2) + 0x70000000u + (i >= NW_LEN / 2u ? 0x40000000u : 0u)) : nw_sqr((ph >> 1) | (i >= NW_LEN / 2u ? 0x80000000u : 0u)), lv = (c < 64 ? 64 - c : c - 64) * 4;
+        return m + ((sub * lv) >> 8);
+    }
+    case 12: {                                             /* WAVETABLE: table E1, the wave E2 of it, E3 a copy of it a little apart, E4 the next table crossfaded in */
+        int32_t pos = b * 258 * 30, ip = pos >> 16, fr = pos & 65535, tb = a * 16 / 127, w0, w1, y0, y1, c2, q;
+        const int8_t *t0, *t1;
+        uint32_t ph2 = ph + (ph >> 7) * (uint32_t)c / 8u;
+        if (tb > 15)
+            tb = 15;
+        if (ip > 14)
+            ip = 14;
+        t0 = NANO_WT + (uint32_t)(tb * 16 + ip) * 129u;
+        t1 = NANO_WT + (uint32_t)(((tb + 1) & 15) * 16 + ip) * 129u;
+        w0 = nano_wt_rd(t0, ph);
+        w0 += ((nano_wt_rd(t0 + 129, ph) - w0) >> 1) * (fr >> 1) >> 15;
+        w1 = nano_wt_rd(t1, ph);
+        w1 += ((nano_wt_rd(t1 + 129, ph) - w1) >> 1) * (fr >> 1) >> 15;
+        y0 = w0 + (((w1 - w0) * d) >> 7);
+        c2 = nano_wt_rd(t0, ph2);
+        c2 += ((nano_wt_rd(t0 + 129, ph2) - c2) >> 1) * (fr >> 1) >> 15;
+        q = nano_wt_rd(t1, ph2);
+        q += ((nano_wt_rd(t1 + 129, ph2) - q) >> 1) * (fr >> 1) >> 15;
+        y1 = c2 + (((q - c2) * d) >> 7);
+        return (y0 + (((y1 - y0) * c) >> 7)) * 4;
+    }
+    case 1: {                                              /* TWO OP FM: the ratio E1 (1..8), the amount E2, E3 the feedback (above the middle the modulator feeds itself, below it the carrier bends its pitch) */
+        int32_t fb = c - 64, fbp = fb > 0 ? ((fb * fb) >> 2) : 0, fbn = fb < 0 ? ((fb * fb) >> 1) : 0, sc = 4096 + ((sprev * fbn) >> 15), mo;
+        uint32_t mph;
         x = 1 + a * 7 / 127;
-        return nano_sin824(ph + (uint32_t)nano_sin824(ph * (uint32_t)x) * (uint32_t)(b * 20861 / 20) * 1u);
+        sc = sc < 0 ? 0 : sc > 7782 ? 7782 : sc;
+        mph = ph * (uint32_t)x;
+        mph += (mph >> 12) * (uint32_t)(sc - 4096);
+        mo = nano_sin824(mph + ((uint32_t)(sprev * fbp) << 5));
+        y = nano_sin824(ph + (uint32_t)mo * (uint32_t)(b * 20861 / 20));
+        sprev += (y - sprev) >> 2;
+        return y;
+    }
     case 2:                                                /* WAVESHAPER: a wave pushed into a fold, AMOUNT E2, ASYM E3 */
         x = a < 64 ? nano_sin824(ph) : nw_tri(ph);
         return nw_fold(x * (1 + b / 24) + (c - 64) * 300);
-    case 3:                                                /* FORMANT: a sine of the formant's pitch under a window */
-        x = nw_saw(ph) + 32768;
-        y = (65535 - x) >> 1;
-        return (nano_sin824(ph * (uint32_t)(2 + b / 16)) >> 1) * (y >> 7) >> 8;
-    case 5: case 6: case 8:                                /* CHORDS, MODAL, HARMONIC: harmonics, the knob moving the weight up */
+    case 3: {                                              /* FORMANT: two grains under a window each carrier cycle: the formant E2, the second at E1's interval from it, the window's sharpness E3 */
+        int32_t semi = a * 48 / 127, win, g1, g2, t;
+        uint32_t m1 = (uint32_t)(2 + b / 8), m2 = (nw_semi(semi) >> 2) * m1;
+        t = (int32_t)(ph >> 17);                           /* 0..32767 */
+        t = t > 16384 ? 32768 - t : t;
+        win = nw_pow(t * 2, 1 + c * 6 / 127);
+        g1 = nano_sin824(ph * m1);
+        g2 = nano_sin824(nw_mul(ph, m2));
+        return ((g1 + g2) >> 1) * (win >> 6) >> 9;
+    }
+    case 5: {                                              /* CHORDS: the chord E1, E2 raising the lower notes (the inversion), E3 the waveform */
+        static const int8_t CHD[8][4] = {{0, 7, 12, 19}, {0, 4, 7, 12}, {0, 3, 7, 12}, {0, 4, 7, 11}, {0, 3, 7, 10}, {0, 5, 7, 12}, {0, 4, 8, 12}, {0, 2, 7, 9}};
+        int32_t ch = a * 8 / 128, inv = b * 4 / 128, n;
+        y = 0;
+        for (n = 0; n < 4; n++)
+            y += nw_morph(nw_mul(ph, nw_semi(CHD[ch][n] + (n < inv ? 12 : 0)) >> 1), c) >> 1;
+        return y;
+    }
+    case 6: {                                              /* MODAL: partials E1 apart from the harmonic series (the material), E2 how the highs weigh, E3 how long they ring */
+        int32_t ip, env = nw_decay(i, 127 - c, 4000);
+        y = 0;
+        for (ip = 1; ip <= 8; ip++) {
+            uint32_t r = (uint32_t)ip * 256u + (uint32_t)((a * ip * (ip - 1)) / 12);
+            int32_t wgt = 1000 / ip + (b - 64) * (ip - 4) * 3;
+            y += (nano_sin824(nw_mul(ph, r << 8)) >> 4) * (wgt < 0 ? 0 : wgt) >> 7;
+        }
+        return (y >> 5) * (env >> 5) >> 5;
+    }
+    case 8: {                                              /* HARMONIC: CONTENT E1 (the weight up, the even against the odd), SCULPTING E2 a bump of partials at its place, CHORUS E3 a copy apart, STRETCH E4 the partials out of tune */
+        int32_t pos = 1 + b * 7 / 127, y2 = 0;
         y = 0;
         for (k = 1; k <= 8; k++) {
-            int32_t wgt = 1000 / k + (a - 64) * (k - 4) * 3 + (ty == 8 ? 0 : (k & 1) * (c - 64));
-            y += (nano_sin824(ph * (uint32_t)k) >> 4) * (wgt < 0 ? 0 : wgt) >> 7;
+            int32_t dk = k > pos ? k - pos : pos - k, wgt = 1000 / k + (a - 64) * (k - 4) * 3 + (k & 1 ? 0 : (a - 64) * 4);
+            uint32_t r = (uint32_t)k * 256u + (uint32_t)((d * k * (k - 1)) / 24);
+            wgt += dk < 3 ? (3 - dk) * 300 : 0;
+            wgt = wgt < 0 ? 0 : wgt;
+            y += (nano_sin824(nw_mul(ph, r << 8)) >> 4) * wgt >> 7;
+            y2 += (nano_sin824(nw_mul(ph + (ph >> 7) * (uint32_t)c / 4u, r << 8)) >> 4) * wgt >> 7;
         }
-        return y;
-    case 4: {                                              /* NOISE */
-        static uint32_t r;
-        r = r * 1664525u + 1013904223u + i;
-        return (int32_t)(r >> 16) - 32768;
+        return y + (((y2 - y) * c) >> 7);
     }
-    default:                                               /* KARPLUS, STRINGS: a saw dying away */
-        return (nw_saw(ph) * (NW_LEN - (int32_t)i)) / NW_LEN;
+    case 4: {                                              /* NOISE: held at the clock E2 (a rate), filtered by E1's mode (low, band, high pass), E3 the resonance */
+        int32_t hold = 1 + (127 - b) * 12 / 127, kd = 8192 - c * 62, hp, lp = sv0, bp = sv1;
+        if (((int32_t)i % hold) == 0) {
+            sr = sr * 1664525u + 1013904223u;
+            sprev = (int32_t)(sr >> 16) - 32768;
+        }
+        hp = sprev - lp - ((kd * bp) >> 12);
+        bp += (hp * 7000) >> 15;
+        lp += (bp * 7000) >> 15;
+        sv0 = lp;
+        sv1 = bp;
+        return a < 43 ? lp : a < 85 ? bp * 2 : hp;
+    }
+    case 9: {                                              /* KARPLUS: a string plucked at E2 (the place: a comb), E1 the bow (what keeps it sounding), E3 the decay */
+        int32_t pk = nw_saw(ph) - nw_saw(ph + (uint32_t)(b + 4) * 0x00800000u), env = nw_decay(i, 127 - c, a * 258);
+        return (pk >> 4) * (env >> 5) >> 6;
+    }
+    default: {                                             /* STRINGS: E1 the model (modal, sympathetic, string, FM, quantized), E2 the structure, E3 the brightness, E4 the damping */
+        static const uint16_t SYM[5] = {256, 128, 384, 512, 768}, QNT[5] = {256, 323, 384, 512, 768};
+        int32_t model = a * 5 / 128, env = nw_decay(i, d, 3000), n;
+        y = 0;
+        if (model == 3) {
+            y = nano_sin824(ph + (uint32_t)nano_sin824(ph * 2u) * (uint32_t)(b * 20861 / 40) + (uint32_t)nano_sin824(ph * 3u) * (uint32_t)(c * 20861 / 90));
+        } else {
+            for (n = 1; n <= 6; n++) {
+                uint32_t r = model == 0 ? (uint32_t)n * 256u + (uint32_t)(b * n * (n - 1) / 8) : model == 1 ? (uint32_t)SYM[n % 5] * (uint32_t)(1 + (n - 1) / 5) + (uint32_t)(b * (n & 1 ? 1 : 0) * 2) : model == 2 ? (uint32_t)n * 256u + (uint32_t)(b * n * (n - 1) / 14) : (uint32_t)QNT[n % 5] * (uint32_t)(1 + (n - 1) / 5);
+                int32_t wgt = 32768 * 64 / (64 + (n - 1) * (8 + (127 - c) * 3 / 2));
+                y += (nano_sin824(nw_mul(ph, r << 8)) >> 3) * wgt >> 12;
+            }
+        }
+        return (y >> 3) * (env >> 5) >> 7;
+    }
     }
 }
 static void na_wave_sketch(void)
@@ -783,8 +943,8 @@ static void na_wave_sketch(void)
     const track_t *t = TSEL;
     uint32_t ty = NOSC[na_type()].ty;
     for (i = 0; i < NW_LEN; i++) {
-        v[i] = na_wave_at(ty == 14u ? 9u : ty, (uint32_t)i * (uint32_t)(0xFFFFFFFFu / (NW_LEN / 2)), (uint32_t)i, t->p);
-        if (ty != 14u && t->p[P_E4] > 0)                   /* FOLD */
+        v[i] = na_wave_at(ty, (uint32_t)i * (uint32_t)(0xFFFFFFFFu / (NW_LEN / 2)), (uint32_t)i, t->p);
+        if (ty != 0u && ty != 8u && ty != 12u && ty != 14u && t->p[P_E4] > 0)        /* FOLD (K4 is SYNC, STRETCH, MORPH, DAMP on the others) */
             v[i] = nw_fold(v[i] * (1 + t->p[P_E4] / 20)) >> 0;
         pk = v[i] > pk ? v[i] : -v[i] > pk ? -v[i] : pk;
     }
@@ -822,6 +982,8 @@ static void na_sync(void)
         const char *lb = id == NI_NONE ? "" : NK[id].lb;
         if (na_grp == NG_OSC && sb == 0u && i < 3u)
             lb = i == 0u ? NOSC[ty].l1 : i == 1u ? NOSC[ty].l2 : NOSC[ty].l3;
+        if (na_grp == NG_OSC && sb == 0u && i == 3u)                          /* K4: SYNC, STRETCH, MORPH, DAMP, or FOLD (as the test bed) */
+            lb = NOSC[ty].ty == 0u ? "SYNC" : NOSC[ty].ty == 8u ? "STRETCH" : NOSC[ty].ty == 12u ? "MORPH" : NOSC[ty].ty == 14u ? "DAMP" : "FOLD";
         na_str(nf_ui_str(UIS_L0 + (int)i), lb);
         if (id == NI_NONE) {
             nf_ui_str(UIS_V0 + (int)i)[0] = 0;
