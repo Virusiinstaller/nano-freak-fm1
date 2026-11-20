@@ -353,5 +353,17 @@ int main(int argc, char **argv)
         npress(B_HOME);
     }
     printf("%s (%d pictures)\n", fails ? "nano_app_test FAIL" : "nano_app_test ok", n);
+    /* the footer's strip indicator: the mode F5 picked and its amount */
+    {
+        na_strip_mode = 0; nb_v = 32768 / 2; draw();
+        CHECK(nf_ui_get(UI_STRIP) == 1 && nf_ui_get(UI_STRIPV) == (GI(NI_BENDRNG) ^ 12) * 5, "BEND is not shown with half of the range (%d)", nf_ui_get(UI_STRIPV));
+        nb_v = -32768; draw();
+        CHECK(nf_ui_get(UI_STRIPV) == -(GI(NI_BENDRNG) ^ 12) * 10, "a full down bend is not minus the range (%d)", nf_ui_get(UI_STRIPV));
+        na_strip_mode = 1; TSEL->p[P_LN3] = 127; draw();
+        CHECK(nf_ui_get(UI_STRIP) == 2 && nf_ui_get(UI_STRIPV) == 100, "IMPRESS is not shown as 100 %% (%d)", nf_ui_get(UI_STRIPV));
+        na_strip_mode = 2; TSEL->p[P_LN4] = 0; draw();
+        CHECK(nf_ui_get(UI_STRIP) == 3 && nf_ui_get(UI_STRIPV) == 0, "CHANCE is not shown as 0 %% (%d)", nf_ui_get(UI_STRIPV));
+        na_strip_mode = 0; nb_v = 0;
+    }
     return fails ? 1 : 0;
 }

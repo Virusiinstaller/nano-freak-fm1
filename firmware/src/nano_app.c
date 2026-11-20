@@ -165,6 +165,7 @@ static void fa_factory_extras(track_t *t, uint32_t n) { (void)t; (void)n; }
 
 static int32_t na_cl(int32_t v, int32_t lo, int32_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 static int32_t na_f127(int32_t v) { return (v * 127 + 50) / 100; }                 /* 0..100 -> 0..127 */
+static void na_strip_ui(void);
 static int32_t na_f100(int32_t v) { return (v * 100 + 63) / 127; }                 /* 0..127 -> 0..100 */
 static uint32_t na_type(void)                                                       /* the oscillator list's index of the track's TYPE */
 {
@@ -995,6 +996,7 @@ static void na_sync(void)
     }
     na_str(nf_ui_str(UIS_HINT), na_hint);
     na_str(nf_ui_str(UIS_PRESET), na_name);
+    na_strip_ui();
     nf_ui_set(UI_OCT, song.octave);
     nf_ui_set(UI_POLY, t->p[P_VOICE] == V_MONO ? 0 : t->p[P_VOICE] == V_UNISON ? 1 : t->p[P_VOICE] == V_POLY ? 3 : 0);
     nf_ui_set(UI_PLAY, na_seqmode ? song.playing != 0u : na_arp_on());
@@ -1450,6 +1452,19 @@ static void nano_strip_tick(void)                        /* once a block */
     } else {
         nb_t = 0;
     }
+#endif
+}
+
+/* the footer's strip indicator (nano_ui.c UI_STRIP): the mode F5 picked and the amount it holds (the bend as it is now, in tenths of a semitone) */
+static void na_strip_ui(void)
+{
+#if BOARD_SMK37
+    nf_ui_set(UI_STRIP, 0);
+#else
+    const track_t *t = &trk[(uint32_t)song.sel % NTRK];
+    nf_ui_set(UI_STRIP, 1 + (int)na_strip_mode);
+    nf_ui_set(UI_STRIPV, na_strip_mode == 0u ? (int)(((int64_t)nb_v * (GI(NI_BENDRNG) ^ 12) * 10) >> 15)
+                                              : na_f100(t->p[na_strip_mode == 1u ? P_LN3 : P_LN4]));
 #endif
 }
 

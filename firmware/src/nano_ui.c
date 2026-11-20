@@ -42,7 +42,9 @@ enum {                        /* integer values */
   UI_SEQ = 73,                /* the 64 steps of the shown sequence: note (255 = rest) | length code << 8 (0 semiquaver, 1 quaver, 2 crotchet, 3 minim) */
   UI_SEQCUR = 137,            /* step being edited or recorded */
   UI_SEQREC = 138,            /* 1 while recording */
-  UI_COUNT = 139
+  UI_STRIP = 139,             /* the touch strip's mode in the footer: 0 hidden, 1 BEND, 2 IMPRESS, 3 CHANCE */
+  UI_STRIPV = 140,            /* its amount: BEND in tenths of a semitone (-240..240), IMPRESS / CHANCE in percent (0..100) */
+  UI_COUNT = 141
 };
 enum {                        /* strings, up to 43 characters */
   UIS_TITLE, UIS_SUB, UIS_TYPE, UIS_L0, UIS_L1, UIS_L2, UIS_L3, UIS_V0, UIS_V1, UIS_V2, UIS_V3, UIS_HINT, UIS_PRESET,
@@ -723,7 +725,40 @@ void nf_ui_paint_band(uint16_t *band, int y0, int rows) {
   nf_gfx_hline(0, 212, NF_W, C_LINE);
   nf_gfx_text(6, 218, str[UIS_HINT], 1, C_DIM);
   char o[8] = { 'O', 'C', 'T', ' ', v[UI_OCT] < 0 ? '-' : '+', (char)('0' + (v[UI_OCT] < 0 ? -v[UI_OCT] : v[UI_OCT])), 0 };
-  nf_gfx_text(6, 229, str[UIS_PRESET][0] ? str[UIS_PRESET] : "INIT", 1, C_TEXT);
+  {                                                           /* the patch name, 13 characters at most: the strip's mode and amount sit after it */
+    char nm[14]; const char *src = str[UIS_PRESET][0] ? str[UIS_PRESET] : "INIT"; int i;
+    for (i = 0; i < 13 && src[i]; i++) nm[i] = src[i];
+    nm[i] = 0;
+    nf_gfx_text(6, 229, nm, 1, C_TEXT);
+  }
+  if (v[UI_STRIP]) {                                          /* BEND / IMPRESS / CHANCE, and how much of it is on (a bar under it) */
+    static const char *const sn[4] = { "", "BEND", "IMPRESS", "CHANCE" };
+    int m = clampi(v[UI_STRIP], 1, 3), a = v[UI_STRIPV], x0 = 88, w = 64, fw, fx;
+    char b[12]; int n = 0;
+    if (m == 1) {
+      int u = a < 0 ? -a : a;
+      b[n++] = a < 0 ? '-' : '+';
+      if (u >= 100) b[n++] = (char)('0' + u / 100 % 10);
+      b[n++] = (char)('0' + u / 10 % 10); b[n++] = '.'; b[n++] = (char)('0' + u % 10);
+    } else {
+      a = clampi(a, 0, 100);
+      if (a >= 100) b[n++] = '1';
+      if (a >= 10) b[n++] = (char)('0' + a / 10 % 10);
+      b[n++] = (char)('0' + a % 10); b[n++] = '%';
+    }
+    b[n] = 0;
+    nf_gfx_text(x0, 229, sn[m], 1, acc);
+    text_r(x0 + w, 229, b, 1, C_TEXT);
+    nf_gfx_fill(x0, 237, w, 2, C_LINE);
+    if (m == 1) {                                             /* from the middle, either way */
+      fw = clampi((a < 0 ? -a : a) * (w / 2) / 240, 0, w / 2);
+      fx = a < 0 ? x0 + w / 2 - fw : x0 + w / 2;
+    } else {
+      fw = clampi(a, 0, 100) * w / 100;
+      fx = x0;
+    }
+    if (fw) nf_gfx_fill(fx, 237, fw, 2, acc);
+  }
   text_r(NF_W - 6, 229, o, 1, C_TEXT);
   { static const char *const vn[4] = { "MONO", "UNI", "PARA", "POLY" }; text_c(NF_W - 70, 229, vn[clampi(v[UI_POLY], 0, 3)], 1, acc); }
   if (v[UI_PLAY]) { nf_gfx_fill(NF_W - 36, 218, 0, 0, acc); text_r(NF_W - 6, 218, "PLAY", 1, acc); }
