@@ -513,5 +513,32 @@ int main(int argc, char **argv)
         CHECK(na_get(NI_FOLD2) == 80 || na_get(NI_FOLD2) == 79 || na_get(NI_FOLD2) == 81, "the Strings FOLD does not stick");
         CHECK(fabs(on.B - off.B) > 0.01 || fabs(on.L - off.L) > 0.01 || fabs(on.SL - off.SL) > 0.01, "the Strings FOLD changes nothing");
     }
+    /* FILTER MODEL: SVF / LADDER on FILTER 2's fourth knob */
+    {
+        prof_t svf, lad, lo, hi; uint32_t k, bad = 0;
+        setup_bright(); goto_page(B_FX, 1); kn(3, -3); svf = take();
+        CHECK(trk[0].p[P_FM4_REL] == 0, "MODEL does not start on SVF");
+        setup_bright(); goto_page(B_FX, 1); kn(3, 3); lad = take();
+        pshow("MODEL SVF", svf); pshow("MODEL LADDER", lad);
+        CHECK(trk[0].p[P_FM4_REL] == 1, "MODEL does not select the ladder");
+        CHECK(fabs(lad.B - svf.B) > 0.03 * svf.B || fabs(lad.L - svf.L) > 0.03 * svf.L, "MODEL changes nothing");
+        CHECK(lad.L > 0.01, "the ladder is silent");
+        setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(0, -127); lo = take();
+        setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(0, 127); hi = take();
+        pshow("LADDER CUTOFF 0", lo); pshow("LADDER CUTOFF 100", hi);
+        CHECK(hi.B > lo.B * 1.5 && hi.L > lo.L, "the ladder's CUTOFF does not open it");
+        setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(0, 40 - 127 + 127); kn(1, -127); lo = take();
+        setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(1, 127); hi = take();
+        pshow("LADDER RESO 0", lo); pshow("LADDER RESO 100", hi);
+        CHECK(fabs(hi.B - lo.B) > 0.1 * lo.B || fabs(hi.L - lo.L) > 0.1 * lo.L, "the ladder's RESO changes nothing");
+        for (k = 0; k < 3; k++) {                                 /* LP, BP, HP: sound, finite, no runaway at full resonance */
+            prof_t q;
+            setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(1, 127); kn(2, -3 + (int)k * 0); 
+            trk[0].p[P_FTYPE] = (int16_t)k;
+            q = take(); printf("LADDER type %u level %.3f\n", k, q.L);
+            if (!(q.L > 0.002 && q.L < 1.5)) bad++;
+        }
+        CHECK(!bad, "a ladder type is silent or runs away");
+    }
     return fails ? 1 : 0;
 }

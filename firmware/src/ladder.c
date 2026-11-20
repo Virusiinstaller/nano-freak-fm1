@@ -77,39 +77,45 @@ static void ladder_coef(ladder_k_t *k, int32_t pitch16, int32_t emph_q16)
     k->trim12 = trim12;
 }
 
+/* one sample through the four stages and the lag pole: the states by pointer (s0..s3 the stages', sx the lag pole's, all Q8). Returns the
+ * output with the loss applied; hp 1: the high-pass; hp 2: a band-pass (twice the second stage less the fourth). ladder_run is a loop of it,
+ * the Nano Freak's filter calls it a sample at a time from its voices' own states. */
+static inline int32_t ladder_step(const ladder_k_t *k, int32_t *ps0, int32_t *ps1, int32_t *ps2, int32_t *ps3, int32_t *psx, int32_t in, uint32_t hp)
+{
+    int32_t s0 = *ps0, s1 = *ps1, s2 = *ps2, s3 = *ps3, sx = *psx;
+    int32_t x = softclip(in), S, fbc, u, xin, v1, v2, v3, v4, y1, y2, y3, y4, w, o;   /* the input overloads softly */
+    const int32_t G16 = k->G16;
+    S = (k->c0 * ((s0 + 128) >> 8) + k->c1 * ((s1 + 128) >> 8) + k->c2 * ((s2 + 128) >> 8) + k->c3 * ((s3 + 128) >> 8)) >> 14;   /* what the stages already hold */
+    fbc = sx + ladder_mulr((S << 8) - sx, (uint32_t)k->gx16);      /* through the lag pole (Q8) */
+    u = ((x * k->inv14) >> 14) - ((k->kinv12 * ((fbc + 128) >> 8)) >> 12);  /* the input less the feedback, the loop solved */
+    xin = softclip(u) << 8;                                        /* the first stage's input (Q8) */
+    v1 = ladder_mulr(xin - s0, (uint32_t)G16);                     /* each stage is a differential pair: tanh in front of it */
+    y1 = v1 + s0;
+    s0 = y1 + v1;
+    v2 = ladder_mulr((softclip((y1 + 128) >> 8) << 8) - s1, (uint32_t)G16);
+    y2 = v2 + s1;
+    s1 = y2 + v2;
+    v3 = ladder_mulr((softclip((y2 + 128) >> 8) << 8) - s2, (uint32_t)G16);
+    y3 = v3 + s2;
+    s2 = y3 + v3;
+    v4 = ladder_mulr((softclip((y3 + 128) >> 8) << 8) - s3, (uint32_t)G16);
+    y4 = v4 + s3;
+    s3 = y4 + v4;
+    w = ladder_mulr(y4 - sx, (uint32_t)k->gx16);                   /* the lag pole follows the output */
+    sx += w + w;
+    /* HP: the stages are one-pole lows H; (1 - H)^4 = 1 - 4H + 6H^2 - 4H^3 + H^4 on the stages' outputs (linear, the states as they are) */
+    o = hp == 1 ? xin - 4 * y1 + 6 * y2 - 4 * y3 + y4 : (hp ? 2 * (y2 - y4) : y4);
+    *ps0 = s0;
+    *ps1 = s1;
+    *ps2 = s2;
+    *ps3 = s3;
+    *psx = sx;
+    return (((o + 128) >> 8) * k->trim12) >> 12;
+}
+
 static void ladder_run(ladder_t *f, const ladder_k_t *k, const int32_t *in, int32_t *out, uint32_t n, uint32_t hp)
 {
-    int32_t s0 = f->s[0], s1 = f->s[1], s2 = f->s[2], s3 = f->s[3], sx = f->s[4];
-    const int32_t c0 = k->c0, c1 = k->c1, c2 = k->c2, c3 = k->c3, inv14 = k->inv14, kinv12 = k->kinv12, trim12 = k->trim12;
-    const uint32_t G16 = (uint32_t)k->G16, gx16 = (uint32_t)k->gx16;
     uint32_t i;
-    for (i = 0; i < n; i++) {
-        int32_t x = softclip(in[i]), S, fbc, u, xin, v1, v2, v3, v4, y1, y2, y3, y4, w, o;   /* the input overloads softly */
-        S = (c0 * ((s0 + 128) >> 8) + c1 * ((s1 + 128) >> 8) + c2 * ((s2 + 128) >> 8) + c3 * ((s3 + 128) >> 8)) >> 14;   /* what the stages already hold */
-        fbc = sx + ladder_mulr((S << 8) - sx, gx16);                   /* through the lag pole (Q8) */
-        u = ((x * inv14) >> 14) - ((kinv12 * ((fbc + 128) >> 8)) >> 12);  /* the input less the feedback, the loop solved */
-        xin = softclip(u) << 8;                                        /* the first stage's input (Q8) */
-        v1 = ladder_mulr(xin - s0, G16);                               /* each stage is a differential pair: tanh in front of it */
-        y1 = v1 + s0;
-        s0 = y1 + v1;
-        v2 = ladder_mulr((softclip((y1 + 128) >> 8) << 8) - s1, G16);
-        y2 = v2 + s1;
-        s1 = y2 + v2;
-        v3 = ladder_mulr((softclip((y2 + 128) >> 8) << 8) - s2, G16);
-        y3 = v3 + s2;
-        s2 = y3 + v3;
-        v4 = ladder_mulr((softclip((y3 + 128) >> 8) << 8) - s3, G16);
-        y4 = v4 + s3;
-        s3 = y4 + v4;
-        w = ladder_mulr(y4 - sx, gx16);                                /* the lag pole follows the output */
-        sx += w + w;
-        /* HP: the stages are one-pole lows H; (1 - H)^4 = 1 - 4H + 6H^2 - 4H^3 + H^4 on the stages' outputs (linear, the states as they are) */
-        o = hp ? xin - 4 * y1 + 6 * y2 - 4 * y3 + y4 : y4;
-        out[i] = (((o + 128) >> 8) * trim12) >> 12;
-    }
-    f->s[0] = s0;
-    f->s[1] = s1;
-    f->s[2] = s2;
-    f->s[3] = s3;
-    f->s[4] = sx;
+    for (i = 0; i < n; i++)
+        out[i] = ladder_step(k, &f->s[0], &f->s[1], &f->s[2], &f->s[3], &f->s[4], in[i], hp);
 }

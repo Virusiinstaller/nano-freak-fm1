@@ -1364,3 +1364,10 @@ More per-sound slots a NANO track reads (a sound from 2.5.48 or before reads the
 page writes the matrix's CycEnv row from them). `P_GLMODE` is 0 RATE, 1 TIME, 2 SYNC; `P_LSYNC` nonzero = the LFO RATE knob picks
 a note value. Delay TONE is the global `G_DCOLOR` (the delay is always the ping-pong); bend RANGE is a GLOBAL setting (the
 settings record, slot 19, stored xor 12). The A/B sequence pattern's other half and the strip's mode are not saved.
+
+### NANO filter model (2.5.50)
+
+`P_FM4_REL` (OP4's REL slot, free on NANO; default 0) selects the filter model: 0 = the trapezoidal state-variable filter (as before),
+1 = the Minimoog ladder (`firmware/src/ladder.c`, kept from FMini-1). The ladder is 24 dB by itself, so SLOPE is ignored with it; CUT is its
+singing pitch, RES its emphasis, TYPE LP / HP as usual, BP the second stage less the fourth. The page is FILTER 2, fourth knob (MODEL).
+A sound from 2.5.49 or before has 0 there and sounds as it did. The per-voice side store grew from two to three states (the lag pole).

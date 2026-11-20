@@ -235,7 +235,7 @@ static void g_filter(uint16_t acc) {
 /* Second filter page: the transfer curve of Drive (soft saturation in front of the filter) and Clip (hard clip after it), and the slope. */
 static void g_filter2(uint16_t acc) {
   panel_frame("FILTER 2", acc);
-  text_r(PX + PW - 4, PY + 4, v[UI_P] ? "24 DB" : "12 DB", 1, C_TEXT);
+  text_r(PX + PW - 4, PY + 4, v[UI_P + 3] ? "LADDER" : (v[UI_P] ? "SVF 24" : "SVF 12"), 1, C_TEXT);
   int drive = clampi(v[UI_P + 1], 0, 100), clip = clampi(v[UI_P + 2], 0, 100);
   const int x0 = PX + 6, w = PW - 12, top = PY + 22, base = PY + PH - 8, mid = (top + base) / 2, half = (base - top) / 2;
   nf_gfx_vline(x0 + w / 2, top, base - top, C_LINE);

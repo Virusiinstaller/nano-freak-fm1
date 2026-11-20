@@ -31,10 +31,12 @@ enum {
     NI_BDEV, NI_BACT, NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO, NI_BENDRNG,
     NI_SSLOT, NI_PCUR, NI_PCHR,
     NI_BENDSPD, NI_AMPMOD, NI_SM1, NI_SM2, NI_SM3, NI_SM4, NI_CDEST, NI_CDEPTH, NI_LSYNC, NI_FOLD2,
+    NI_FMODEL,
     NI_COUNT
 };
 static const char *const NT_FTYPE[] = {"LPF", "BPF", "HPF"};
 static const char *const NT_SLOPE[] = {"12 DB", "24 DB"};
+static const char *const NT_FMODEL[] = {"SVF", "LADDER"};
 static const char *const NT_OFFON[] = {"OFF", "ON"};
 static const char *const NT_AMPENV[] = {"GATE ONLY", "ENV ON"};
 static const char *const NT_GLMODE[] = {"TIME", "SYNC", "RATE"};
@@ -66,7 +68,7 @@ typedef struct { const char *lb; uint8_t n; const char *const *tx; } nk_t;   /* 
 static const nk_t NK[NI_COUNT] = {
     [NI_WAVE] = {"WAVE", 0, 0}, [NI_TIMBRE] = {"TIMBRE", 0, 0}, [NI_SHAPE] = {"SHAPE", 0, 0}, [NI_FOLD] = {"FOLD", 0, 0}, [NI_POS] = {"POSITION", 0, 0},
     [NI_CUTOFF] = {"CUTOFF", 0, 0}, [NI_RESO] = {"RESO", 0, 0}, [NI_FTYPE] = {"TYPE", 3, NT_FTYPE}, [NI_FAMT] = {"FILT AMT", 0, 0},
-    [NI_FSLOPE] = {"SLOPE", 2, NT_SLOPE}, [NI_FDRIVE] = {"DRIVE", 0, 0}, [NI_FCLIP] = {"CLIP", 0, 0},
+    [NI_FSLOPE] = {"SLOPE", 2, NT_SLOPE}, [NI_FMODEL] = {"MODEL", 2, NT_FMODEL}, [NI_FDRIVE] = {"DRIVE", 0, 0}, [NI_FCLIP] = {"CLIP", 0, 0},
     [NI_RVBMIX] = {"MIX", 0, 0}, [NI_RVBSIZE] = {"SIZE", 0, 0}, [NI_RVBDAMP] = {"DAMP", 0, 0},
     [NI_RVBPRE] = {"PRE-DELAY", 0, 0}, [NI_DLYTONE] = {"TONE", 0, 0}, [NI_DLYMIX] = {"MIX", 0, 0}, [NI_DLYTIME] = {"TIME", 0, 0}, [NI_DLYFB] = {"FEEDBACK", 0, 0},
     [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 3, NT_GLMODE}, [NI_IMPRESS] = {"IMPRESS", 0, 0}, [NI_CHANCE] = {"CHANCE", 0, 0},
@@ -107,7 +109,7 @@ typedef struct { const char *title; uint8_t ui, n; const nsub_t *sub; } ngrp_t;
 static const nsub_t NS_OSC[] = {{"OSCILLATOR", 0, {NI_WAVE, NI_TIMBRE, NI_SHAPE, NI_FOLD}}, {"STRINGS", 1, {NI_POS, NI_FOLD2, NI_NONE, NI_NONE}}};
 static const nsub_t NS_ENV[] = {{"ENVELOPE", 0, {NI_ATTACK, NI_DECAY, NI_SUSTAIN, NI_FAMT}}, {"CYCLING ENV", 1, {NI_RISE, NI_FALL, NI_HOLD, NI_CAMT}},
                                 {"CYCLING MODE", 2, {NI_CMODE, NI_CDEST, NI_CDEPTH, NI_NONE}}, {"AMP ENVELOPE", 3, {NI_AMPMOD, NI_NONE, NI_NONE, NI_NONE}}};
-static const nsub_t NS_FX[] = {{"FILTER", 0, {NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT}}, {"FILTER 2", 1, {NI_FSLOPE, NI_FDRIVE, NI_FCLIP, NI_NONE}},
+static const nsub_t NS_FX[] = {{"FILTER", 0, {NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT}}, {"FILTER 2", 1, {NI_FSLOPE, NI_FDRIVE, NI_FCLIP, NI_FMODEL}},
                                {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE}},
                                {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"PITCH BEND", 5, {NI_BENDRNG, NI_BENDSPD, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_LFO[] = {{"LFO", 0, {NI_LSHAPE, NI_LRATE, NI_LSYNC, NI_LMORPH}}};
@@ -397,6 +399,7 @@ static int32_t na_get(int32_t id)
     case NI_FTYPE: return na_cl(p[P_FTYPE], 0, 2);
     case NI_FAMT: return na_cl(p[P_ED_FLT], 0, 63) * 100 / 63;
     case NI_FSLOPE: return p[P_ED_FX] & 1;
+    case NI_FMODEL: return p[P_FM4_REL] == 1;
     case NI_FDRIVE: return ((p[P_ED_FX] >> 1) & 7) * 100 / 7;
     case NI_FCLIP: return ((p[P_ED_FX] >> 4) & 7) * 100 / 7;
     case NI_RVBMIX: return na_f100(p[P_REV]);
@@ -490,6 +493,7 @@ static void na_set(int32_t id, int32_t v)
     case NI_FTYPE: na_put(P_FTYPE, v); break;
     case NI_FAMT: na_put(P_ED_FLT, (v * 63 + 50) / 100); break;
     case NI_FSLOPE: na_put(P_ED_FX, (t->p[P_ED_FX] & ~1) | v); break;
+    case NI_FMODEL: na_put(P_FM4_REL, v); break;
     case NI_FDRIVE: na_put(P_ED_FX, (t->p[P_ED_FX] & ~(7 << 1)) | (((v * 7 + 50) / 100) << 1)); break;
     case NI_FCLIP: na_put(P_ED_FX, (t->p[P_ED_FX] & ~(7 << 4)) | (((v * 7 + 50) / 100) << 4)); break;
     case NI_RVBMIX: na_put(P_REV, na_f127(v)); break;
@@ -851,7 +855,7 @@ static void na_sync(void)
         if (sp->ui == 0u)
             nf_ui_set(UI_P, na_get(NI_CUTOFF)), nf_ui_set(UI_P + 1, na_get(NI_RESO)), nf_ui_set(UI_P + 2, na_get(NI_FTYPE)), nf_ui_set(UI_P + 3, na_get(NI_FSLOPE));
         else if (sp->ui == 1u)
-            nf_ui_set(UI_P, na_get(NI_FSLOPE)), nf_ui_set(UI_P + 1, na_get(NI_FDRIVE)), nf_ui_set(UI_P + 2, na_get(NI_FCLIP));
+            nf_ui_set(UI_P, na_get(NI_FSLOPE)), nf_ui_set(UI_P + 1, na_get(NI_FDRIVE)), nf_ui_set(UI_P + 2, na_get(NI_FCLIP)), nf_ui_set(UI_P + 3, na_get(NI_FMODEL));
         else if (sp->ui == 2u)
             nf_ui_set(UI_P, na_get(NI_RVBMIX)), nf_ui_set(UI_P + 1, na_get(NI_RVBSIZE)), nf_ui_set(UI_P + 2, na_get(NI_RVBDAMP)), nf_ui_set(UI_P + 3, na_get(NI_RVBPRE));
         else if (sp->ui == 3u)

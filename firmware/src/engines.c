@@ -12,7 +12,7 @@
  * that runs on across notes and switches stays outside (WHEEL's wheels, GRAIN's random numbers).
  * Sized by the largest, PHYS (3 x SYMP's slot); an engine that needs more than ENG_MEM_PART grows it for
  * every part (x NPART of the pool). Zero-initialised pool section: main.c fm1_cstart clears it. */
-#define ENG_MEM_PART 14208u   /* NANO sets it: 12 voices x (320 B + 8 B filter states) + 4 delay lines of 1282 samples; PHYS needs 12888 */
+#define ENG_MEM_PART 14256u   /* NANO sets it: 12 voices x (320 B + 12 B filter states) + 4 delay lines of 1282 samples; PHYS needs 12888 */
 static union {
     uint64_t align;
     uint8_t b[ENG_MEM_PART];
@@ -32,6 +32,8 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #include "../engines/src/eng_noise.c"
 #include "eng_fm6.c"            /* FM6: 6-operator FM, msfa ported (fm6_core.c, Apache-2.0) */
 #include "fm4_convert.c"        /* DIGITAL's tables, and its sounds -> FM6 */
+#include "ladder_tables.h"
+#include "ladder.c"           /* the Minimoog ladder, a filter model of the Nano Freak */
 #include "eng_nano.c"            /* NANO (Nano Freak): the Freak Synthesizer engine, BASIC WAVES first */
 #if FELUCCA_FM4
 #include "eng_digital.c"        /* DIGITAL: four-operator FM (retired; FELUCCA_FM4=1 builds it) */

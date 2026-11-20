@@ -99,11 +99,15 @@ static uint32_t nano_inc_c(uint32_t inc, uint32_t r6, uint64_t cap)
  * 0..7 (x 127 / 7): soft-clips the input (gain 1 to 8, levelled by 1 / (1 + 0.1 (gain - 1))); bits 4-6 CLIP 0..7: gains the output 1 to 7 and
  * clips it at the half scale. (The stored value is -64..63: its low 7 bits.) The
  * second stage's states live beside the voice slots (nano_flst), the first stage's in v->s[0..1] as before. Drive and clip at 0 are bypasses.
- * The output keeps the host's soft knee (a resonant peak saturates there rather than wraps). */
+ * The output keeps the host's soft knee (a resonant peak saturates there rather than wraps).
+ * MODEL (P_FM4_REL, 0 = this filter, 1 = the Minimoog ladder, ladder.c): four one-pole stages with the feedback through the lag pole, 24 dB a
+ * decade by itself, so SLOPE does nothing there; CUT is the singing pitch, RES the emphasis dial. The stages' states: v->s[0..1] and the two of the
+ * side store, the lag pole's the side store's third. LP, HP as the type says; BP is the second stage less the fourth. */
 typedef struct {
     tsvf_t c2;
-    int32_t ic3, ic4, k, k2, dg, dl, cg, type, slope;
+    int32_t ic3, ic4, ic5, k, k2, dg, dl, cg, type, slope, lad;
     int32_t *st;
+    ladder_k_t lk;                                       /* the ladder model's block coefficients (lad = 1) */
 } nano_fx_t;
 
 static void nano_svf_coef(tsvf_t *c, uint32_t inc, int32_t k);
@@ -132,6 +136,12 @@ static void nano_fcoef(tsvf_t *c, nano_fx_t *f, const track_t *t, const voice_t 
     f->st = nano_flst(t, v);
     f->ic3 = f->st[0];
     f->ic4 = f->st[1];
+    f->ic5 = f->st[2];
+    f->lad = p[P_FM4_REL] == 1;
+    if (f->lad) {
+        ladder_coef(&f->lk, 248 + ((cut * 30960) >> 19), res << 16);                        /* the same 20 Hz * 2^(10 cut / 127) as the pitch, MIDI x 16 */
+        f->slope = 0;
+    }
 }
 
 static inline int32_t nano_ftap(const tsvf_t *c, nano_fx_t *f, int32_t x, int32_t *ic1, int32_t *ic2)
@@ -140,6 +150,12 @@ static inline int32_t nano_ftap(const tsvf_t *c, nano_fx_t *f, int32_t x, int32_
     if (f->dg) {
         int32_t u = clamp((x * 2 * f->dg) >> 12, -98304, 98304) >> 3, u2 = (u * u) >> 12, n = u * (110592 + u2), d = 110592 + 9 * u2;
         x = (((n / d) * f->dl) >> 12) << 2;
+    }
+    if (f->lad) {
+        int32_t y = ladder_step(&f->lk, ic1, ic2, &f->ic3, &f->ic4, &f->ic5, clamp(x, -16384, 16383) << 1, (uint32_t)f->type);
+        if (f->cg)
+            y = clamp((y * f->cg) >> 8, -16384, 16384);
+        return soft_knee(y >> 1, 16000) << 1;
     }
     v3 = x - *ic2;
     v1 = (c->a1 * *ic1 + c->a2 * v3) >> 13;
@@ -164,6 +180,7 @@ static inline void nano_fend(const nano_fx_t *f)
 {
     f->st[0] = f->ic3;
     f->st[1] = f->ic4;
+    f->st[2] = f->ic5;
 }
 
 static uint32_t nano_fm_inc(uint32_t inc, uint32_t r6) { return nano_inc_c(inc, r6, 0x50000000u); }
@@ -603,7 +620,7 @@ typedef union {
 #define NANO_SLOTS NVOICE
 #define NANO_PL_V 4
 #define NANO_PL_DL 1282
-#define NANO_FLST_B (NANO_SLOTS * 2 * 4)                    /* the second filter stage's two states a voice */
+#define NANO_FLST_B (NANO_SLOTS * 3 * 4)                    /* the second filter stage's two states a voice, and the ladder's lag pole */
 ENG_MEM_FITS("NANO", sizeof(nano_su_t) * NANO_SLOTS + NANO_FLST_B + NANO_PL_V * NANO_PL_DL * 2);
 
 static nano_su_t *nano_slot(track_t *t, voice_t *v)
@@ -617,11 +634,11 @@ static nano_su_t *nano_slot(track_t *t, voice_t *v)
 
 static int32_t *nano_flst(const track_t *t, const voice_t *v)
 {
-    static int32_t spare[2];
+    static int32_t spare[3];
     uint32_t i = (uint32_t)(v - t->v);
     if (t < &trk[0] || t >= &trk[NPART] || i >= NANO_SLOTS)
         return spare;
-    return (int32_t *)((uint8_t *)ENG_MEM(t - trk) + sizeof(nano_su_t) * NANO_SLOTS) + i * 2;
+    return (int32_t *)((uint8_t *)ENG_MEM(t - trk) + sizeof(nano_su_t) * NANO_SLOTS) + i * 3;
 }
 
 static const uint16_t NANO_CH_FADE[NANO_CH_V] = {18022, 15401, 16056, 16712, 17367};      /* 0.55 0.47 0.49 0.51 0.53, Q15 */
@@ -2521,7 +2538,7 @@ static void nano_note_on(track_t *t, voice_t *v)
     v->ph[1] = v->ph[0];                              /* the slave starts with the master */
     v->ph[2] = v->ph[0] >> 1;                         /* the sub: an octave down, in step with it */
     v->s[0] = v->s[1] = 0;                            /* filter */
-    nano_flst(t, v)[0] = nano_flst(t, v)[1] = 0;      /* and its second stage */
+    nano_flst(t, v)[0] = nano_flst(t, v)[1] = nano_flst(t, v)[2] = 0;      /* and its second stage (or the ladder's) */
     v->s[2] = 0;                                      /* no restart pending */
     v->s[3] = t->p[P_E0] == 2 ? -1 : 0;              /* FM: no DC yet; WAVESHAPER: -1, start from this block's own values */
     if (t->p[P_E0] == 2)
