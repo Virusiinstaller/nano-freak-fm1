@@ -539,6 +539,16 @@ int main(int argc, char **argv)
             if (!(q.L > 0.002 && q.L < 1.5)) bad++;
         }
         CHECK(!bad, "a ladder type is silent or runs away");
+        {                                                         /* the ladder sits at the SVF's level (low-pass, three RES settings) */
+            uint32_t rr; static const int rv[3] = {0, 40, 90};
+            for (rr = 0; rr < 3u; rr++) {
+                prof_t q0, q1;
+                setup_bright(); trk[0].p[P_E6] = (int16_t)rv[rr]; q0 = take();
+                setup_bright(); trk[0].p[P_E6] = (int16_t)rv[rr]; trk[0].p[P_FM4_REL] = 1; q1 = take();
+                printf("LADDER vs SVF level at RES %d: %.3f / %.3f = %.2f\n", rv[rr], q1.L, q0.L, q1.L / (q0.L + 1e-9));
+                CHECK(q1.L > 0.75 * q0.L && q1.L < 1.4 * q0.L, "the ladder's level is off the SVF's at RES %d (%.2f)", rv[rr], q1.L / (q0.L + 1e-9));
+            }
+        }
     }
     return fails ? 1 : 0;
 }

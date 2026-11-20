@@ -1378,3 +1378,8 @@ OSC page K1..K4 (`P_E1`..`P_E4`) all change the sound and the waveform sketch on
 (BASICWAVES), MORPH (WAVETABLE), STRETCH (HARMONIC), DAMP (STRINGS), FOLD on the others; the stored value's meaning is unchanged.
 POLY mode: MODAL (6), PLUCK (9), RINGS (14) and the SAW comb (11, model 1) keep state for four voices, so the part now allocates among four
 voices for them (before, the round robin put every other note on a voice that stayed silent or dry).
+
+### NANO ladder level (2.5.52)
+
+The ladder filter model (`P_FM4_REL` = 1) now has a makeup gain by RES and TYPE, so its low-pass sits at the SVF's level (it was 20 % lower at no
+resonance and 75 % lower at RES 90). No stored value changes.

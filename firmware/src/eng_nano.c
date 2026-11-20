@@ -105,7 +105,7 @@ static uint32_t nano_inc_c(uint32_t inc, uint32_t r6, uint64_t cap)
  * side store, the lag pole's the side store's third. LP, HP as the type says; BP is the second stage less the fourth. */
 typedef struct {
     tsvf_t c2;
-    int32_t ic3, ic4, ic5, k, k2, dg, dl, cg, type, slope, lad;
+    int32_t ic3, ic4, ic5, k, k2, dg, dl, cg, type, slope, lad, lg;
     int32_t *st;
     ladder_k_t lk;                                       /* the ladder model's block coefficients (lad = 1) */
 } nano_fx_t;
@@ -113,6 +113,16 @@ typedef struct {
 static void nano_svf_coef(tsvf_t *c, uint32_t inc, int32_t k);
 static uint32_t nano_isqrt(uint32_t x);
 static int32_t *nano_flst(const track_t *t, const voice_t *v);
+
+/* the ladder's makeup gain, Q8, so it sits at the SVF's level (measured on a saw, a square and the supersaw: rms ladder / SVF, then inverted): the
+ * ladder gives up passband as the resonance rises (the feedback takes it), LP 0.8 at no RES, 0.25 at 90; BP is 0.3; HP is 2 over. */
+static int32_t nano_ladgain(int32_t type, int32_t res)
+{
+    static const int16_t LPG[4] = {320, 474, 1024, 1400}, BPG[4] = {640, 720, 850, 1000}, HPG[4] = {100, 128, 180, 230};
+    const int16_t *g = type == 1 ? BPG : type == 2 ? HPG : LPG;
+    int32_t r = clamp(res, 0, 127), x0 = r < 40 ? 0 : r < 90 ? 40 : 90, x1 = r < 40 ? 40 : r < 90 ? 90 : 127, i = r < 40 ? 0 : r < 90 ? 1 : 2;
+    return g[i] + (((g[i + 1] - g[i]) * (r - x0)) / (x1 - x0));
+}
 
 static void nano_fcoef(tsvf_t *c, nano_fx_t *f, const track_t *t, const voice_t *v, int32_t cut, int32_t res)
 {
@@ -141,6 +151,7 @@ static void nano_fcoef(tsvf_t *c, nano_fx_t *f, const track_t *t, const voice_t 
     if (f->lad) {
         ladder_coef(&f->lk, 248 + ((cut * 30960) >> 19), res << 16);                        /* the same 20 Hz * 2^(10 cut / 127) as the pitch, MIDI x 16 */
         f->slope = 0;
+        f->lg = nano_ladgain(f->type, res);
     }
 }
 
@@ -153,6 +164,7 @@ static inline int32_t nano_ftap(const tsvf_t *c, nano_fx_t *f, int32_t x, int32_
     }
     if (f->lad) {
         int32_t y = ladder_step(&f->lk, ic1, ic2, &f->ic3, &f->ic4, &f->ic5, clamp(x, -16384, 16383) << 1, (uint32_t)f->type);
+        y = clamp((y * f->lg) >> 8, -65535, 65535);
         if (f->cg)
             y = clamp((y * f->cg) >> 8, -16384, 16384);
         return soft_knee(y >> 1, 16000) << 1;
