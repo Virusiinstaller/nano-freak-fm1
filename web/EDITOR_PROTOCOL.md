@@ -1389,3 +1389,9 @@ resonance and 75 % lower at RES 90). No stored value changes.
 `P_GLMODE` now defaults to 1 (TIME) on a new sound, as in the test bed (it was 0, RATE, which is barely audible below knob 60); stored sounds keep
 their value. In POLY mode a note now slides from where the previous note's voice is (before: from whichever free voice last sat nearest in pitch,
 often not at all). MONO, LEGATO and UNISON are unchanged. RATE is the fastest mode: knob 10 or less is instant, 90 or more about 1.7 s an octave.
+
+### NANO arp from one key (2.5.55)
+
+A sound now loads with ARP CHORD (`P_LN1`) = 1 (MAJ) instead of 0, so one held key is the root of a four-note chord and the pattern plays four
+different pitches over it (UP, 1 octave, 4 steps: root, +4, +7, +12). OFF (0) still plays the key alone. The arp page's graphic now draws the keys
+that are held (one key and a chord: four). Stored sounds keep their ARP CHORD value.

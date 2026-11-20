@@ -1040,6 +1040,10 @@ static void na_sync(void)
     case NG_ARP:
         nf_ui_set(UI_P, na_pat), nf_ui_set(UI_P + 1, na_get(NI_ARPRANGE) + 1), nf_ui_set(UI_P + 2, 0), nf_ui_set(UI_P + 3, na_get(NI_ARPLEN) + 1);
         nf_ui_set(UI_P + 4, na_get(NI_SWING)), nf_ui_set(UI_P + 5, na_get(NI_ARPLATCH)), nf_ui_set(UI_P + 6, na_get(NI_ARPTYPE)), nf_ui_set(UI_P + 7, na_get(NI_ARPCHORD));
+        {                                                                           /* the keys the graphic draws: those held (one key and a chord: four) */
+            uint32_t nk = t->nheld;
+            nf_ui_set(UI_ARPN, nk == 1u && na_get(NI_ARPCHORD) > 0 && !na_get(NI_ARPTYPE) ? 4 : (int)(nk > 4u ? 4u : nk));
+        }
         break;
     case NG_SEQ: {
         uint32_t k;

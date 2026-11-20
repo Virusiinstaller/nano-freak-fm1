@@ -92,7 +92,8 @@ static void nano_track_loaded(track_t *t)
     if (t->eng_req != ENGI_NANO)
         return;
     t->p[P_LN0] = 127;
-    t->p[P_LN1] = t->p[P_LN2] = t->p[P_LN3] = t->p[P_LN4] = 0;
+    t->p[P_LN1] = 1;                                    /* ARP CHORD: MAJ, so that one held key (the root) arpeggiates four pitches, as the screen shows; OFF plays the key alone */
+    t->p[P_LN2] = t->p[P_LN3] = t->p[P_LN4] = 0;
     t->nano_ch = 0;
 }
 

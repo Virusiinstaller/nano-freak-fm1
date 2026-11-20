@@ -1913,6 +1913,31 @@ int main(void)
         printf("   SEQ IMPRESS: %u note-ons in 4 bars at Impress 0, %u at Impress 127 (%u of them off the written notes)\n", n[0], n[1], shifted_notes);
         check("SEQ: Impress 0 plays all 64 steps as written", n[0] == 64);
         check("SEQ: Impress 127 after a roll leaves steps out and moves notes by octaves", n[1] < 64 && n[1] > 20 && shifted_notes > 0);
+    {
+        track_t *t = &trk[0];
+        uint32_t s2, i;
+        /* ONE KEY, as a sound loads: the key is the root and the arp plays four different pitches over it (UP, DOWN, UPDOWN; 1 octave) */
+        {
+            static const uint8_t PM[3] = {1, 2, 3};          /* UP, DOWN, UPDOWN (the framework's numbers, as PAT_FW) */
+            uint32_t pi, root, ok = 1;
+            for (pi = 0; pi < 3; pi++) for (root = 48; root <= 72; root += 12) {
+                int seen[8], nseen = 0, st;
+                setup(0, 0, 0, 0, 127);
+                host_preset(t, ENGI_NANO, 0);
+                if (t->p[P_LN1] != 1) ok = 0;
+                t->p[P_AMODE] = PM[pi]; t->p[P_AOCT] = 1; t->p[P_ASWING] = 0; t->p[P_AHOLD] = 0; t->p[P_LN0] = 127 * 3 / 15 + 1;   /* 4 steps */
+                t->nheld = 0; t->arp_phys = 0;
+                arp_add(t, root);
+                for (s2 = 0; s2 < 8; s2++) {
+                    arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+                    for (st = 0, i = 0; i < (uint32_t)nseen; i++) st |= seen[i] == t->arp_note;
+                    if (!st && nseen < 8) seen[nseen++] = t->arp_note;
+                }
+                if (nseen < 4 || (pi == 0 && (seen[0] != (int)root))) ok = 0;
+            }
+            check("ARP ONE KEY: UP / DOWN / UPDOWN, 1 octave, 4 steps play four different pitches built on the key (ARP CHORD MAJ on a load)", ok);
+        }
+    }
     }
 
     /* 5. a sweep: bounded, no DC, no click; a note-off falls silent */
