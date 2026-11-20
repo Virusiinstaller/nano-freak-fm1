@@ -303,6 +303,7 @@ static voice_t *voice_alloc(track_t *t, uint32_t note)
 #if FELUCCA_FMINI_ONLY
 #define GLIDE_SLOW 12u                                  /* FMini-1: the glide moves every 12th block (12x slower than Felucca's) */
 static uint32_t glide_blk[NTRK];                        /* per part: the blocks rendered (track_render) */
+static uint8_t glide_lv[NTRK];                          /* per part: the voice that played last, where the next POLY note slides from (its pitch as it is) */
 #endif
 /* glide: RATE = a fixed speed, TIME = the same time for any interval */
 static void glide_set(track_t *t, voice_t *v, int glide)
@@ -481,11 +482,21 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         t->lfo_fade = 0;
     }
     if (mode == V_POLY) {
+#if FELUCCA_FMINI_ONLY
+        int32_t gfrom = t->v[glide_lv[t - trk]].pitch_cur;     /* before the allocation may take that voice over */
+#endif
         voice_t *v = voice_alloc(t, note);
         t->nmono = 0;                                   /* no stale mono stack after a mode change */
         t->mono_note = 0;
         v->fine = 0;
         voice_start(t, v, note, vel, t->p[P_GLIDE] != 0 && !ENGINES[t->engine]->oneshot);
+#if FELUCCA_FMINI_ONLY
+        if (t->p[P_GLIDE] != 0 && !ENGINES[t->engine]->oneshot && gfrom && gfrom != v->pitch16) {   /* POLY: every note slides from the one before it (where that one is now), not from the free voice's old pitch */
+            v->pitch_cur = gfrom;
+            glide_set(t, v, 1);
+        }
+        glide_lv[t - trk] = (uint8_t)(v - t->v);
+#endif
         return;
     }
     {

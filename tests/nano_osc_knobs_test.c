@@ -205,6 +205,29 @@ int main(void)
             CHECK(worst > 0.5 * first, "%s goes silent or dry on a later note in POLY (the voice rotation passes the four it keeps state for)", tn[ti]);
         }
     }
+    /* GLIDE in POLY: a separate note slides from the previous one (it used to start from whichever free voice sat nearest, often no slide) */
+    {
+        uint32_t vm, q, nn, slid = 0;
+        for (vm = 0; vm < 2u; vm++) {
+            static int32_t bb[CTL]; int32_t seen = 0;
+            fresh(0);
+            CHECK(trk[0].p[P_GLMODE] == 1, "GLIDE does not start in TIME mode");
+            trk[0].p[P_VOICE] = vm ? V_POLY : V_MONO; trk[0].p[P_E0] = 0; trk[0].p[P_GLIDE] = 30; trk[0].p[P_REL] = 30; trk[0].p[P_SUS] = 100;
+            for (nn = 0; nn < 6u; nn++) {                       /* 36, 48, 36, 48 ..: each note should start a long way from its pitch */
+                uint32_t note = 36u + 12u * (nn & 1u), vi;
+                trk_note_on(&trk[0], note, 100);
+                for (q = 0; q < 2205u; q += CTL) track_render(&trk[0], bb, CTL);
+                for (vi = 0; vi < NVOICE; vi++)
+                    if (trk[0].v[vi].active && trk[0].v[vi].note == note && nn && abs(trk[0].v[vi].pitch_cur - trk[0].v[vi].pitch16) > 96) seen++;
+                for (q = 0; q < 28665u; q += CTL) track_render(&trk[0], bb, CTL);   /* the glide finishes while the note is held */
+                trk_note_off(&trk[0], note);
+                for (q = 0; q < 4410u; q += CTL) track_render(&trk[0], bb, CTL);
+            }
+            printf("GLIDE %s: %d of 5 later notes still sliding after 50 ms\n", vm ? "POLY" : "MONO", (int)seen);
+            CHECK(seen >= 4, "%s: a later note does not slide from the one before", vm ? "POLY" : "MONO");
+            slid += (uint32_t)seen;
+        }
+    }
     printf("%u of 60 knob/type pairs without a sound or sketch change\n", nbad);
     return fails ? 1 : 0;
 }

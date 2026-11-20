@@ -1383,3 +1383,9 @@ voices for them (before, the round robin put every other note on a voice that st
 
 The ladder filter model (`P_FM4_REL` = 1) now has a makeup gain by RES and TYPE, so its low-pass sits at the SVF's level (it was 20 % lower at no
 resonance and 75 % lower at RES 90). No stored value changes.
+
+### NANO glide (2.5.53)
+
+`P_GLMODE` now defaults to 1 (TIME) on a new sound, as in the test bed (it was 0, RATE, which is barely audible below knob 60); stored sounds keep
+their value. In POLY mode a note now slides from where the previous note's voice is (before: from whichever free voice last sat nearest in pitch,
+often not at all). MONO, LEGATO and UNISON are unchanged. RATE is the fastest mode: knob 10 or less is instant, 90 or more about 1.7 s an octave.
