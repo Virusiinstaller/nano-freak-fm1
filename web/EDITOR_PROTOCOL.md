@@ -1430,3 +1430,10 @@ number (display only). No stored value changes.
 
 The LFO group has a second page, "MOD DEST A1-A4": K1..K4 pick the destinations of the matrix's four ASSIGN columns, the same four values as page 2 of
 the MATRIX group (no new stored value).
+
+### NANO matrix: OSC K1 and K4 columns (2.5.62)
+
+The matrix grid has ten columns: PITCH, OSC K1, K2, K3, K4, CUTOFF, ASSIGN 1..4. A route is still one of the four slots (`P_M1SRC/DST/AMT`); K1 and K4
+are the destinations `MD_E1 + 1` and `MD_E1 + 4` (P_E1, P_E4). The ASSIGN destination list no longer has OSC K1 and OSC K4 (they are columns now): RESONANCE,
+KEY TRACK, LFO RATE, AMP, PAN, DISTORTION, CHORUS, DELAY, REVERB, VIBRATO (the ASSIGN choice is not saved with a sound). The stored CYCLING MODE DEST
+(`P_FM4_SUS`) keeps its numbers 0..7 (PITCH, K2, K3, CUTOFF, A1..A4) and gains 8 = OSC K1 and 9 = OSC K4; the knob lists them in the grid's order.

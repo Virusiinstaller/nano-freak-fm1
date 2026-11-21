@@ -37,7 +37,7 @@ enum {                        /* integer values */
   UI_SEL_ROW, UI_SEL_COL,     /* selected matrix point */
   UI_STEP,                    /* current sequencer step, -1 when stopped */
   UI_P = 16,                  /* 16 page specific numbers, see nf_ui.c */
-  UI_MX = 32,                 /* 4 x 8 matrix amounts, -100..100 (columns Pitch, Wave, Timbre, Cutoff, A1 to A4) */
+  UI_MX = 32,                 /* 4 x 10 matrix amounts, -100..100 (columns Pitch, K1, K2, K3, K4, Cutoff, A1 to A4) */
   UI_ARPN = 72,               /* how many keys the arpeggiator holds, 0 = none, then the screen shows four as a demo */
   UI_SEQ = 73,                /* the 64 steps of the shown sequence: note (255 = rest) | length code << 8 (0 semiquaver, 1 quaver, 2 crotchet, 3 minim) */
   UI_SEQCUR = 137,            /* step being edited or recorded */
@@ -379,22 +379,22 @@ static void g_lfo(uint16_t acc) {
 
 static void g_matrix(uint16_t acc) {
   static const char *const rows[4] = { "CYC", "ENV", "LFO", "KEY" };
-  static const char *const cols[8] = { "PIT", "OK2", "OK3", "CUT", "A1", "A2", "A3", "A4" };
+  static const char *const cols[10] = { "PIT", "OK1", "OK2", "OK3", "OK4", "CUT", "A1", "A2", "A3", "A4" };
   nf_gfx_fill(PX, 44, PW, 164, C_PANEL);
   nf_gfx_rect(PX, 44, PW, 164, C_LINE);
-  for (int c = 0; c < 8; ++c) text_c(PX + 34 + c * 24 + 11, 50, cols[c], 1, c < 4 ? C_DIM : acc);
+  for (int c = 0; c < 10; ++c) text_c(PX + 24 + c * 20 + 10, 50, cols[c], 1, c < 6 ? C_DIM : acc);
   for (int r = 0; r < 4; ++r) {
     int y = 66 + r * 28;
-    text_c(PX + 18, y + 9, rows[r], 1, C_DIM);
-    for (int c = 0; c < 8; ++c) {
-      int x = PX + 34 + c * 24, a = v[UI_MX + r * 8 + c], off = a >= 1000 || a <= -1000;     /* a route switched off is sent as amount +/- 1000 */
+    text_c(PX + 12, y + 9, rows[r], 1, C_DIM);
+    for (int c = 0; c < 10; ++c) {
+      int x = PX + 24 + c * 20, a = v[UI_MX + r * 10 + c], off = a >= 1000 || a <= -1000;     /* a route switched off is sent as amount +/- 1000 */
       if (off) a = a > 0 ? a - 1000 : a + 1000;
       int sel = r == v[UI_SEL_ROW] && c == v[UI_SEL_COL];
-      nf_gfx_fill(x, y, 22, 24, sel ? nf_gfx_mix(C_PANEL, acc, 60) : C_DARK);
-      nf_gfx_rect(x, y, 22, 24, sel ? acc : C_LINE);
+      nf_gfx_fill(x, y, 19, 24, sel ? nf_gfx_mix(C_PANEL, acc, 60) : C_DARK);
+      nf_gfx_rect(x, y, 19, 24, sel ? acc : C_LINE);
       int m = a < 0 ? -a : a;
-      if (m && !off) nf_gfx_disc(x + 11, y + 12, 1 + m * 9 / 100, a < 0 ? C_NEG : acc);
-      else if (m) nf_gfx_ring(x + 11, y + 12, 1 + m * 9 / 100, C_DIM);       /* off: an outline only */
+      if (m && !off) nf_gfx_disc(x + 9, y + 12, 1 + m * 8 / 100, a < 0 ? C_NEG : acc);
+      else if (m) nf_gfx_ring(x + 9, y + 12, 1 + m * 8 / 100, C_DIM);       /* off: an outline only */
     }
   }
   nf_gfx_text(PX + 4, 196, str[UIS_L0], 1, C_TEXT);

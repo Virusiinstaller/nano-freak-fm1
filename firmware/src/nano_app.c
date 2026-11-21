@@ -42,7 +42,7 @@ static const char *const NT_AMPENV[] = {"GATE ONLY", "ENV ON"};
 static const char *const NT_GLMODE[] = {"TIME", "SYNC", "RATE"};
 static const char *const NT_LSHAPE[] = {"SINE", "TRI", "SAW", "SQUARE", "S&H", "GLIDE"};
 static const char *const NT_CMODE[] = {"ENV", "RUN", "LOOP"};
-static const char *const NT_CDEST[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "A1", "A2", "A3", "A4"};
+static const char *const NT_CDEST[] = {"PITCH", "OSC K1", "OSC K2", "OSC K3", "OSC K4", "CUTOFF", "A1", "A2", "A3", "A4"};
 static const char *const NT_PAT[] = {"UP", "DOWN", "UP/DOWN", "ORDER", "RANDOM", "PATTERN", "AS PLAYED", "CONVERGE", "DIVERGE", "HOLLOW", "JEOPARDY", "CHORD", "BROKEN", "ALTERNATING"};
 static const char *const NT_CHORD[] = {"OFF", "MAJ", "MIN", "7", "MIN7", "MAJ7", "SUS4", "DIM7", "POWER"};
 static const char *const NT_ONOFF[] = {"OFF", "ON"};
@@ -60,10 +60,11 @@ static const char *const NT_THRU[] = {"DIN", "USB", "BLE"};
 static const char *const NT_BACT[] = {"CONNECT", "SCAN", "DISCON.", "FORGET"};
 static const char *const NT_SUPAGE[] = {"OSC", "LAST"};
 static const char *const NT_SURAD[] = {"OFF", "LAST"};
-static const char *const NT_MXCOL[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "ASSIGN 1", "ASSIGN 2", "ASSIGN 3", "ASSIGN 4"};
+/* the matrix columns in the order the grid shows them; a column's number inside (na_mxc, the stored CYC DEST) is NA_MXCOLS: 0..7 as before (PITCH, K2, K3, CUTOFF, A1..A4), then K1 and K4 */
+static const char *const NT_MXCOL[] = {"PITCH", "OSC K1", "OSC K2", "OSC K3", "OSC K4", "CUTOFF", "ASSIGN 1", "ASSIGN 2", "ASSIGN 3", "ASSIGN 4"};
 static const char *const NT_MXROW[] = {"CYC ENV", "ENV", "LFO", "KEY"};
 /* the destinations an ASSIGN column can take: the firmware's modulation destinations that are not a column already */
-static const char *const NT_ASG[] = {"OSC K1", "OSC K4", "RESONANCE", "KEY TRACK", "LFO RATE", "AMP", "PAN", "DISTORTION", "CHORUS", "DELAY", "REVERB", "VIBRATO"};
+static const char *const NT_ASG[] = {"RESONANCE", "KEY TRACK", "LFO RATE", "AMP", "PAN", "DISTORTION", "CHORUS", "DELAY", "REVERB", "VIBRATO"};
 typedef struct { const char *lb; uint8_t n; const char *const *tx; } nk_t;   /* n 0: continuous 0..100 */
 static const nk_t NK[NI_COUNT] = {
     [NI_WAVE] = {"WAVE", 0, 0}, [NI_TIMBRE] = {"TIMBRE", 0, 0}, [NI_SHAPE] = {"SHAPE", 0, 0}, [NI_FOLD] = {"FOLD", 0, 0}, [NI_POS] = {"POSITION", 0, 0},
@@ -82,12 +83,12 @@ static const nk_t NK[NI_COUNT] = {
     [NI_SQSCALE] = {"SCALE", 7, NT_SQSCALE}, [NI_SQOCT] = {"OCTAVES", 3, 0}, [NI_SQSWING] = {"SWING", 0, 0}, [NI_SQSTEP] = {"STEP", 64, 0},
     [NI_SQNOTE] = {"NOTE", 128, 0}, [NI_SQDUR] = {"LENGTH", 4, NT_SQDUR}, [NI_SQREST] = {"TYPE", 2, NT_SQTYPE}, [NI_SQENT] = {"REC LENGTH", 4, NT_SQDUR},
     [NI_SQRESTS] = {"RESTS", 11, 0}, [NI_SQGATE] = {"GATE", 10, 0},
-    [NI_MXCOL] = {"COLUMN", 8, NT_MXCOL}, [NI_MXROW] = {"ROW", 4, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
-    [NI_AS1] = {"A1", 12, NT_ASG}, [NI_AS2] = {"A2", 12, NT_ASG}, [NI_AS3] = {"A3", 12, NT_ASG}, [NI_AS4] = {"A4", 12, NT_ASG},
+    [NI_MXCOL] = {"COLUMN", 10, NT_MXCOL}, [NI_MXROW] = {"ROW", 4, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
+    [NI_AS1] = {"A1", 10, NT_ASG}, [NI_AS2] = {"A2", 10, NT_ASG}, [NI_AS3] = {"A3", 10, NT_ASG}, [NI_AS4] = {"A4", 10, NT_ASG},
     [NI_GBT] = {"BLUETOOTH", 2, NT_ONOFF}, [NI_GBTA] = {"BT AUDIO", 2, NT_ONOFF}, [NI_GROLE] = {"BLE ROLE", 2, NT_ROLE}, [NI_GCLK] = {"CLOCK", 2, NT_CLK},
     [NI_MMODE] = {"ARP OUT", 3, NT_MMODE}, [NI_MCH] = {"OUT CH", 16, 0}, [NI_MPORT] = {"OUT PORT", 8, NT_PORT}, [NI_MKEY] = {"KEY OUT", 2, NT_ONOFF},
     [NI_MLOCAL] = {"LOCAL", 2, NT_ONOFF}, [NI_MCLKO] = {"CLOCK OUT", 2, NT_ONOFF}, [NI_MTHI] = {"THRU IN", 3, NT_THRU}, [NI_MTHO] = {"THRU OUT", 8, NT_PORT},
-    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BENDRNG] = {"RANGE", 25, 0}, [NI_BENDSPD] = {"SPEED", 0, 0}, [NI_AMPMOD] = {"AMP ENV", 2, NT_AMPENV}, [NI_FOLD2] = {"FOLD", 0, 0}, [NI_LSYNC] = {"SYNC", 2, NT_OFFON}, [NI_CDEST] = {"DEST", 8, NT_CDEST}, [NI_CDEPTH] = {"DEPTH", 0, 0}, [NI_SM1] = {"M1", 2, NT_OFFON}, [NI_SM2] = {"M2", 2, NT_OFFON}, [NI_SM3] = {"M3", 2, NT_OFFON}, [NI_SM4] = {"M4", 2, NT_OFFON}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
+    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BENDRNG] = {"RANGE", 25, 0}, [NI_BENDSPD] = {"SPEED", 0, 0}, [NI_AMPMOD] = {"AMP ENV", 2, NT_AMPENV}, [NI_FOLD2] = {"FOLD", 0, 0}, [NI_LSYNC] = {"SYNC", 2, NT_OFFON}, [NI_CDEST] = {"DEST", 10, NT_CDEST}, [NI_CDEPTH] = {"DEPTH", 0, 0}, [NI_SM1] = {"M1", 2, NT_OFFON}, [NI_SM2] = {"M2", 2, NT_OFFON}, [NI_SM3] = {"M3", 2, NT_OFFON}, [NI_SM4] = {"M4", 2, NT_OFFON}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
     [NI_SUBOOT] = {"BOOT SCR", 2, NT_ONOFF}, [NI_SUPAGE] = {"START PG", 2, NT_SUPAGE}, [NI_SURADIO] = {"RADIO", 2, NT_SURAD},
     [NI_SSLOT] = {"SAVE TO", 16, 0}, [NI_PCUR] = {"CURSOR", 10, 0}, [NI_PCHR] = {"LETTER", 38, 0},
 };
@@ -205,12 +206,14 @@ static void na_arp_pat_sync(void)                                               
 /* ---- MATRIX: the 4 x 8 grid (the test bed's without its PRESSURE row: the FM-1 has no pressure) on the firmware's four routing slots (mod.c). A route is one slot: its source is the grid's
  * row, its destination the column; with the four slots taken a new route is refused. An ASSIGN column is a destination of the list. */
 static const uint8_t NA_MXSRC[4] = {MS_CYC, MS_ENV, MS_LFO, MS_KEY};
-static const uint8_t NA_MXDST[4] = {MD_PITCH, MD_E1 + 2, MD_E1 + 3, MD_CUT};   /* (MD_E1 + n is P_En) */
-static const uint8_t NA_ASGD[12] = {MD_E1 + 1, MD_E1 + 4, MD_E1 + 6, MD_E1 + 7, MD_RATE, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_VIB};
-static uint8_t na_as[4] = {2, 4, 5, 0}, na_mxr, na_mxc;               /* the ASSIGN columns' destinations, the selected point */
-static int8_t na_mxkeep[4][8];                                       /* a route switched off keeps its amount here */
-static uint8_t na_mxoff[4];                                          /* bit c: the route is off */
-static uint32_t na_mxdst(uint32_t c) { return c < 4u ? NA_MXDST[c] : NA_ASGD[na_as[c - 4u] % 12u]; }
+static const uint8_t NA_MXDST[4] = {MD_PITCH, MD_E1 + 2, MD_E1 + 3, MD_CUT};   /* (MD_E1 + n is P_En; the columns 8 and 9 are OSC K1 and K4: MD_E1 + 1 and + 4) */
+static const uint8_t NA_MXCOLS[10] = {0, 8, 1, 2, 9, 3, 4, 5, 6, 7};   /* the grid's column -> the column's number */
+static const uint8_t NA_COLSX[10] = {0, 2, 3, 5, 6, 7, 8, 9, 1, 4};    /* its inverse */
+static const uint8_t NA_ASGD[10] = {MD_E1 + 6, MD_E1 + 7, MD_RATE, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_VIB};
+static uint8_t na_as[4] = {0, 2, 3, 1}, na_mxr, na_mxc;               /* the ASSIGN columns' destinations (RESONANCE, LFO RATE, AMP, KEY TRACK), the selected point (a column's number) */
+static int8_t na_mxkeep[4][10];                                       /* a route switched off keeps its amount here */
+static uint16_t na_mxoff[4];                                         /* bit c: the route is off */
+static uint32_t na_mxdst(uint32_t c) { return c < 4u ? NA_MXDST[c] : c < 8u ? NA_ASGD[na_as[c - 4u] % 10u] : c == 8u ? (uint32_t)(MD_E1 + 1) : (uint32_t)(MD_E1 + 4); }
 static int32_t na_mxslot(uint32_t r, uint32_t c)                     /* the slot of the route, or -1 */
 {
     uint32_t k;
@@ -246,12 +249,12 @@ static void na_mxset(uint32_t r, uint32_t c, int32_t pct, int32_t on)  /* 0 for 
         na_put(P_M1SRC + 3u * (uint32_t)k, NA_MXSRC[r]);
         na_put(P_M1DST + 3u * (uint32_t)k, (int32_t)na_mxdst(c));
     }
-    na_mxoff[r] = (uint8_t)(on ? na_mxoff[r] & ~(1u << c) : na_mxoff[r] | (1u << c));
+    na_mxoff[r] = (uint16_t)(on ? na_mxoff[r] & ~(1u << c) : na_mxoff[r] | (1u << c));
     na_mxkeep[r][c] = (int8_t)pct;
     if (!pct) {                                                      /* a route of nothing is a free slot */
         na_put(P_M1SRC + 3u * (uint32_t)k, 0);
         na_put(P_M1DST + 3u * (uint32_t)k, 0);
-        na_mxoff[r] &= (uint8_t)~(1u << c);
+        na_mxoff[r] &= (uint16_t)~(1u << c);
     }
     na_put(P_M1AMT + 3u * (uint32_t)k, on ? pct * 64 / 100 : 0);
 }
@@ -261,13 +264,13 @@ static int8_t na_cyc_d = -1;
 static int16_t na_cyc_a;
 static void na_cyc_sync(track_t *t)
 {
-    na_cyc_d = (int8_t)clamp(t->p[P_FM4_SUS], 0, 7);
+    na_cyc_d = (int8_t)clamp(t->p[P_FM4_SUS], 0, 9);
     na_cyc_a = (int16_t)((na_f100(t->p[P_FM4_DEC]) - 50) * 2);
 }
 static void na_cyc_route(void)
 {
     track_t *t = TSEL;
-    int32_t d = clamp(t->p[P_FM4_SUS], 0, 7), a = (na_f100(t->p[P_FM4_DEC]) - 50) * 2;
+    int32_t d = clamp(t->p[P_FM4_SUS], 0, 9), a = (na_f100(t->p[P_FM4_DEC]) - 50) * 2;
     if (na_cyc_d == d && na_cyc_a == a)
         return;
     if (na_cyc_d >= 0 && na_cyc_d != d)
@@ -416,7 +419,7 @@ static int32_t na_get(int32_t id)
     case NI_SM1: case NI_SM2: case NI_SM3: case NI_SM4: return (p[P_FM3_REL] >> (id - NI_SM1)) & 1;   /* the four mod tracks' smoothing (4 bits of P_FM3_REL) */
     case NI_FOLD2: return na_f100(p[P_LN6]);
     case NI_LSYNC: return p[P_LSYNC] ? 1 : 0;
-    case NI_CDEST: return na_cl(p[P_FM4_SUS], 0, 7);
+    case NI_CDEST: return NA_COLSX[na_cl(p[P_FM4_SUS], 0, 9)];
     case NI_CDEPTH: return na_f100(p[P_FM4_DEC]);
     case NI_AMPMOD: return p[P_FM4_ATK] ? 0 : 1;                /* (stored inverted: 0 = ENVELOPE ON, the default) */
     case NI_GLIDE: return na_f100(p[P_GLIDE]);
@@ -457,7 +460,7 @@ static int32_t na_get(int32_t id)
     case NI_SQENT: return NS_ENT(t);
     case NI_SQRESTS: return NS_RESTS(t);
     case NI_SQGATE: return na_cl((p[P_SGATE] * 100 + 63) / 127 / 10 - 1, 0, 9);
-    case NI_MXCOL: return na_mxc;
+    case NI_MXCOL: return NA_COLSX[na_mxc];
     case NI_MXROW: return na_mxr;
     case NI_MXON: return !((na_mxoff[na_mxr] >> na_mxc) & 1u);
     case NI_MXAMT: return na_mxamt(na_mxr, na_mxc);
@@ -510,7 +513,7 @@ static void na_set(int32_t id, int32_t v)
     case NI_SM1: case NI_SM2: case NI_SM3: case NI_SM4: na_put(P_FM3_REL, (t->p[P_FM3_REL] & ~(1 << (id - NI_SM1))) | (v << (id - NI_SM1))); break;
     case NI_FOLD2: na_put(P_LN6, na_f127(v)); break;
     case NI_LSYNC: na_put(P_LSYNC, v ? 1 : 0); break;
-    case NI_CDEST: na_put(P_FM4_SUS, v); na_cyc_route(); break;
+    case NI_CDEST: na_put(P_FM4_SUS, NA_MXCOLS[na_cl(v, 0, 9)]); na_cyc_route(); break;
     case NI_CDEPTH: na_put(P_FM4_DEC, na_f127(v)); na_cyc_route(); break;
     case NI_AMPMOD: na_put(P_FM4_ATK, v ? 0 : 1); break;
     case NI_GLIDE: na_put(P_GLIDE, na_f127(v)); break;
@@ -584,12 +587,12 @@ static void na_set(int32_t id, int32_t v)
         na_gsel = (uint8_t)(id - NI_SUPATCH);
         na_g_apply(id);
         break;
-    case NI_MXCOL: na_mxc = (uint8_t)v; break;
+    case NI_MXCOL: na_mxc = NA_MXCOLS[na_cl(v, 0, 9)]; break;
     case NI_MXROW: na_mxr = (uint8_t)v; break;
     case NI_MXON: na_mxset(na_mxr, na_mxc, na_mxamt(na_mxr, na_mxc), v); break;
     case NI_MXAMT: na_mxset(na_mxr, na_mxc, v, !((na_mxoff[na_mxr] >> na_mxc) & 1u)); break;
     case NI_AS1: case NI_AS2: case NI_AS3: case NI_AS4: {          /* the routes of that column follow */
-        uint32_t c = (uint32_t)(id - NI_AS1) + 4u, r;
+        uint32_t c = (uint32_t)(id - NI_AS1) + 4u, r;     /* (the ASSIGN columns are the numbers 4..7) */
         int32_t amt[4], on[4];
         for (r = 0; r < 4u; r++) {
             amt[r] = na_mxamt(r, c);
@@ -1094,16 +1097,17 @@ static void na_sync(void)
     case NG_MATRIX: {
         uint32_t r, c;
         for (r = 0; r < 4u; r++)
-            for (c = 0; c < 8u; c++) {
-                int32_t m = na_mxamt(r, c);
-                nf_ui_set(UI_MX + (int)(r * 8u + c), (na_mxoff[r] >> c) & 1u ? (m >= 0 ? m + 1000 : m - 1000) : m);
+            for (c = 0; c < 10u; c++) {                                             /* c: the grid's column */
+                uint32_t cc = NA_MXCOLS[c];
+                int32_t m = na_mxamt(r, cc);
+                nf_ui_set(UI_MX + (int)(r * 10u + c), (na_mxoff[r] >> cc) & 1u ? (m >= 0 ? m + 1000 : m - 1000) : m);
             }
-        nf_ui_set(UI_SEL_ROW, na_mxr), nf_ui_set(UI_SEL_COL, na_mxc);
+        nf_ui_set(UI_SEL_ROW, na_mxr), nf_ui_set(UI_SEL_COL, NA_COLSX[na_mxc]);
         if (sp->ui == 0u) {
             char *h = nf_ui_str(UIS_L0);
             na_str(h, NT_MXROW[na_mxr]);
             na_cat(h, " > ");
-            na_cat(h, NT_MXCOL[na_mxc]);
+            na_cat(h, NT_MXCOL[NA_COLSX[na_mxc]]);
             na_cat(h, " ");
             na_text(NI_MXAMT, b);
             na_cat(h, b);
