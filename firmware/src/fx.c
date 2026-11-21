@@ -1601,7 +1601,7 @@ static void mix_part(track_t *t, uint32_t n SM_DECL)
     uint32_t nr;
 #endif
     mod_begin(t);                                       /* the matrix's per-block values into t->p (mod.c) */
-    T_SPREAD(t) = t->p[P_SPRD] > 0 && (trk_vmode(t) == V_POLY || trk_vmode(t) == V_UNISON);   /* (SPREAD, mix_spread) */
+    T_SPREAD(t) = t->p[P_SPRD] > 0 && ((trk_vmode(t) == V_POLY && t->p[P_VOICE] != V_PARA) || trk_vmode(t) == V_UNISON);   /* (SPREAD, mix_spread) */
 #if FELUCCA_CPU2
     nr = track_render(t, b, n);
     part_cost[(uint32_t)(t - trk) % NTRK] = (uint16_t)(nr * ENG_VCOST[t->engine % NENGINES] + (nr || t->tail ? 60u : 0u));

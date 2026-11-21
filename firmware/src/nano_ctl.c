@@ -194,7 +194,7 @@ static int nano_cc_in(track_t *t, uint32_t cc, uint32_t v)
                 p[P_ED_FX] = (int16_t)((p[P_ED_FX] & ~0x70) | (int32_t)(x << 4));
             break;
         case NC_VOICE:
-            p[P_VOICE] = (int16_t)(v < 32u ? V_MONO : v < 64u ? V_UNISON : V_POLY);
+            p[P_VOICE] = (int16_t)(v < 32u ? V_MONO : v < 64u ? V_UNISON : v < 96u ? V_PARA : V_POLY);
             break;
         case NC_BPM:
             song.g[G_BPM] = (int16_t)(20u + v * 280u / 127u);
@@ -237,7 +237,7 @@ static int32_t nano_ctl_get(const track_t *t, uint32_t k)
     case NC_FXC:
         return ((p[P_ED_FX] >> 4) & 7) * 127 / 7;
     case NC_VOICE:
-        return p[P_VOICE] == V_POLY ? 112 : p[P_VOICE] == V_UNISON ? 48 : 16;
+        return p[P_VOICE] == V_POLY ? 112 : p[P_VOICE] == V_PARA ? 80 : p[P_VOICE] == V_UNISON ? 48 : 16;
     case NC_PLAY:
         return p[P_AMODE] ? 127 : 0;
     case NC_ARPPAT:

@@ -105,7 +105,7 @@ static uint32_t nano_inc_c(uint32_t inc, uint32_t r6, uint64_t cap)
  * side store, the lag pole's the side store's third. LP, HP as the type says; BP is the second stage less the fourth. */
 typedef struct {
     tsvf_t c2;
-    int32_t ic3, ic4, ic5, k, k2, dg, dl, cg, type, slope, lad, lg;
+    int32_t ic3, ic4, ic5, k, k2, dg, dl, cg, type, slope, lad, lg, byp;
     int32_t *st;
     ladder_k_t lk;                                       /* the ladder model's block coefficients (lad = 1) */
 } nano_fx_t;
@@ -147,6 +147,7 @@ static void nano_fcoef(tsvf_t *c, nano_fx_t *f, const track_t *t, const voice_t 
     f->ic3 = f->st[0];
     f->ic4 = f->st[1];
     f->ic5 = f->st[2];
+    f->byp = p[P_VOICE] == V_PARA;                                                         /* PARAPHONIC: the voice leaves unfiltered (nano_para filters the mix) */
     f->lad = p[P_FM4_REL] == 1;
     if (f->lad) {
         ladder_coef(&f->lk, 248 + ((cut * 30960) >> 19), res << 16);                        /* the same 20 Hz * 2^(10 cut / 127) as the pitch, MIDI x 16 */
@@ -158,6 +159,8 @@ static void nano_fcoef(tsvf_t *c, nano_fx_t *f, const track_t *t, const voice_t 
 static inline int32_t nano_ftap(const tsvf_t *c, nano_fx_t *f, int32_t x, int32_t *ic1, int32_t *ic2)
 {
     int32_t v1, v2, v3, y;
+    if (f->byp)
+        return x << 1;
     if (f->dg) {
         int32_t u = clamp((x * 2 * f->dg) >> 12, -98304, 98304) >> 3, u2 = (u * u) >> 12, n = u * (110592 + u2), d = 110592 + 9 * u2;
         x = (((n / d) * f->dl) >> 12) << 2;
@@ -193,6 +196,41 @@ static inline void nano_fend(const nano_fx_t *f)
     f->st[0] = f->ic3;
     f->st[1] = f->ic4;
     f->st[2] = f->ic5;
+}
+
+/* PARAPHONIC (P_VOICE = V_PARA, the test bed's voice mode 2): the voices leave nano_ftap unfiltered, with their own loudness envelopes, and sum into the
+ * part's block; this runs the ONE filter over that sum, its cutoff from the lead (newest, gated first) voice: its envelope, matrix and key tracking, so a
+ * new key re-triggers the filter for the notes already held. The state (both models) lives here, a few words a part; it is cleared when no voice sounds. */
+static int32_t nano_pst[NPART][5];
+
+static void nano_para(track_t *t, int32_t *out, uint32_t n, const voice_t *lead, const vmod_t *m)
+{
+    const int16_t *p = t->p;
+    int32_t *S = nano_pst[(uint32_t)(t - trk) % NPART];
+    int32_t ic1, ic2, cut;
+    uint32_t i;
+    tsvf_t flt;
+    nano_fx_t nfl;
+    if (!lead) {
+        for (i = 0; i < 5u; i++)
+            S[i] = 0;
+        return;
+    }
+    cut = (p[P_E5] << 8) + m->cutoff + (p[P_E7] * (lead->pitch16 - 60 * 16) >> 4);
+    nano_fcoef(&flt, &nfl, t, lead, cut, p[P_E6]);
+    nfl.byp = 0;
+    ic1 = S[0];
+    ic2 = S[1];
+    nfl.ic3 = S[2];
+    nfl.ic4 = S[3];
+    nfl.ic5 = S[4];
+    for (i = 0; i < n; i++)
+        out[i] = nano_ftap(&flt, &nfl, out[i] >> 1, &ic1, &ic2);
+    S[0] = ic1;
+    S[1] = ic2;
+    S[2] = nfl.ic3;
+    S[3] = nfl.ic4;
+    S[4] = nfl.ic5;
 }
 
 static uint32_t nano_fm_inc(uint32_t inc, uint32_t r6) { return nano_inc_c(inc, r6, 0x50000000u); }

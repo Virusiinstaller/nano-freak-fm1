@@ -1395,3 +1395,10 @@ often not at all). MONO, LEGATO and UNISON are unchanged. RATE is the fastest mo
 A sound now loads with ARP CHORD (`P_LN1`) = 1 (MAJ) instead of 0, so one held key is the root of a four-note chord and the pattern plays four
 different pitches over it (UP, 1 octave, 4 steps: root, +4, +7, +12). OFF (0) still plays the key alone. The arp page's graphic now draws the keys
 that are held (one key and a chord: four). Stored sounds keep their ARP CHORD value.
+
+### NANO paraphonic (2.5.56)
+
+`P_VOICE` has a fifth value, 4 = PARA (the VOICE page "PARAPHONIC", CC voice 64..95). Voices are allocated as in POLY, but they leave the oscillator
+unfiltered and sum; one shared filter (SVF or ladder, with SLOPE, DRIVE and CLIP) runs over the sum, its cutoff following the newest voice's filter
+envelope, matrix and key tracking, so a new key re-opens the filter for the notes already held. SPREAD is off in PARA. Stored values are unchanged;
+older firmware reads 4 as POLY.

@@ -147,7 +147,7 @@ static uint32_t trk_nvoice(const track_t *t)
 /* the part's voice mode: P_VOICE, POLY for an engine of hits (engine_t.oneshot: DRUM) */
 static uint32_t trk_vmode(const track_t *t)
 {
-    return ENGINES[t->engine]->oneshot ? V_POLY : (uint32_t)t->p[P_VOICE];
+    return ENGINES[t->engine]->oneshot || t->p[P_VOICE] == V_PARA ? V_POLY : (uint32_t)t->p[P_VOICE];   /* (PARA allocates as POLY) */
 }
 
 /* ------------------------------------------------- the shared voice budget --- */
@@ -859,6 +859,9 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
     bend_fine = (bend - bend16 * 16) * 2367 / 2560;
     uint32_t nr = 0, fade = t->xf_on && t->xf;
     int16_t pe_new[8];
+    const voice_t *lead = 0;                            /* NANO PARAPHONIC: the voice whose modulation the shared filter follows */
+    vmod_t lm = {0};
+    uint32_t para = e == &ENG_NANO && p[P_VOICE] == V_PARA;
     for (i = 0; i < n; i++)
         out[i] = 0;
     if (MOD(t).on && MOD(t).ldep < 32767)                     /* the matrix's DEPTH (mod.c) */
@@ -958,7 +961,13 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
             mod_voice(t, v, &m, v->fine + tune_fine + bend_fine);
         e->render(t, v, T_SPREAD(t) > v->side ? SPREAD_BUF(t) : out, n, &m);   /* (SPREAD: the left ones) */
         nr++;
+        if (para && (!lead || (v->gate != 0) > (lead->gate != 0) || ((v->gate != 0) == (lead->gate != 0) && v->age > lead->age))) {
+            lead = v;
+            lm = m;
+        }
     }
+    if (para)
+        nano_para(t, out, n, lead, &lm);
     if (T_SPREAD(t))
         SPREAD_SUM(out, t);                /* out: every voice; spread_buf: the left ones */
     if (fade) {

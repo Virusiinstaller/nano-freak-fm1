@@ -348,7 +348,11 @@ int main(int argc, char **argv)
         CHECK(TSEL->p[P_VOICE] == V_MONO, "VOICE page 1: MONO");
         nturn(EN_SELECT, 1);
         CHECK(TSEL->p[P_VOICE] == V_UNISON, "page 2: UNISON");
-        nturn(EN_SELECT, 2);
+        nturn(EN_SELECT, 1);
+        CHECK(TSEL->p[P_VOICE] == V_PARA, "page 3: PARAPHONIC");
+        na_sync();
+        CHECK(nf_ui_get(UI_POLY) == 2, "the footer shows PARA (%d)", nf_ui_get(UI_POLY));
+        nturn(EN_SELECT, 1);
         CHECK(TSEL->p[P_VOICE] == V_POLY, "page 4: POLY");
         npress(B_HOME);
     }

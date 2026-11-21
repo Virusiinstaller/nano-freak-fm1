@@ -998,7 +998,7 @@ static void na_sync(void)
     na_str(nf_ui_str(UIS_PRESET), na_name);
     na_strip_ui();
     nf_ui_set(UI_OCT, song.octave);
-    nf_ui_set(UI_POLY, t->p[P_VOICE] == V_MONO ? 0 : t->p[P_VOICE] == V_UNISON ? 1 : t->p[P_VOICE] == V_POLY ? 3 : 0);
+    nf_ui_set(UI_POLY, t->p[P_VOICE] == V_MONO ? 0 : t->p[P_VOICE] == V_UNISON ? 1 : t->p[P_VOICE] == V_PARA ? 2 : t->p[P_VOICE] == V_POLY ? 3 : 0);
     nf_ui_set(UI_PLAY, na_seqmode ? song.playing != 0u : na_arp_on());
     nf_ui_set(UI_TYPE, (int)ty);
     nf_ui_set(UI_NTYPES, 15);
@@ -1339,7 +1339,7 @@ static void na_group(uint32_t g)
         settings_later();
     }
     if (na_grp == NG_VOICE)                                  /* the page is the track's mode */
-        na_sub[NG_VOICE] = TSEL->p[P_VOICE] == V_MONO ? 0u : TSEL->p[P_VOICE] == V_UNISON ? 1u : 3u;
+        na_sub[NG_VOICE] = TSEL->p[P_VOICE] == V_MONO ? 0u : TSEL->p[P_VOICE] == V_UNISON ? 1u : TSEL->p[P_VOICE] == V_PARA ? 2u : 3u;
     na_dirty = 1;
 }
 static void na_buttons(uint32_t pressed)
@@ -1399,7 +1399,7 @@ static void na_buttons(uint32_t pressed)
 static void na_voice_sync(void)                            /* the VOICE page the cursor is on is the track's mode */
 {
     track_t *t = TSEL;
-    uint32_t sb = na_cursub(), want = sb == 0u ? V_MONO : sb == 1u ? V_UNISON : V_POLY;
+    uint32_t sb = na_cursub(), want = sb == 0u ? V_MONO : sb == 1u ? V_UNISON : sb == 2u ? V_PARA : V_POLY;
     if (na_grp != NG_VOICE || t->p[P_VOICE] == (int16_t)want)
         return;
     t->p[P_VOICE] = (int16_t)want;
