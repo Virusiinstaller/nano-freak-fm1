@@ -465,7 +465,7 @@ int main(int argc, char **argv)
             fresh(0);
             trk[0].p[P_E0] = 0; trk[0].p[P_SUS] = 127; trk[0].p[P_DLY] = 0; trk[0].p[P_REV] = 0;
             na_set(NI_CMODE, 1); na_set(NI_CAMT, 100); na_set(NI_RISE, 10); na_set(NI_FALL, 10); na_set(NI_HOLD, 0);
-            if (r) { na_set(NI_CDEST, 8); na_set(NI_CDEPTH, 100); }
+            if (r) { na_set(NI_CDEST, 6); na_set(NI_CDEPTH, 100); }
             kdown(12); render(0.5);
             for (w = 0; w < 20u; w++) { x = rms(w * 1103u, (w + 1u) * 1103u); m += x; m2 += x * x; }
             sd[r] = sqrt(m2 / 20.0 - (m / 20.0) * (m / 20.0)) / (m / 20.0 + 1e-9);
@@ -475,7 +475,7 @@ int main(int argc, char **argv)
         CHECK(sd[1] > sd[0] + 0.15, "CYC ENV -> AMP did not make the level pump");
         {   /* the page's DEST moves the route: A3 off, CUTOFF on */
             uint32_t k, n3 = 0, nc = 0;
-            na_set(NI_CDEST, 5);
+            na_set(NI_CDEST, 3);
             for (k = 0; k < 4u; k++)
                 if (trk[0].p[P_M1SRC + 3u * k] == MS_CYC && trk[0].p[P_M1AMT + 3u * k]) {
                     if (trk[0].p[P_M1DST + 3u * k] == (int16_t)na_mxdst(6)) n3++;

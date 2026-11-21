@@ -264,8 +264,8 @@ int main(int argc, char **argv)
         for (k = 0; k < 4u; k++) t->p[P_M1SRC + 3u * k] = t->p[P_M1DST + 3u * k] = t->p[P_M1AMT + 3u * k] = 0;
         npress(B_EDIT);
         na_sub[NG_MATRIX] = 0;
-        na_as[0] = 0; na_as[1] = 2; na_as[2] = 3; na_as[3] = 1;
-        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 5);                  /* LFO > CUTOFF */
+        na_as[0] = 2; na_as[1] = 4; na_as[2] = 5; na_as[3] = 0;
+        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 3);                  /* LFO > CUTOFF */
         na_set(NI_MXAMT, 50);
         CHECK(t->p[P_M1SRC] == MS_LFO && t->p[P_M1DST] == MD_CUT && t->p[P_M1AMT] == 32, "LFO > CUTOFF 50%% is slot 1 (src %d dst %d amt %d)", t->p[P_M1SRC], t->p[P_M1DST], t->p[P_M1AMT]);
         CHECK(na_get(NI_MXAMT) == 50, "the amount reads back");
@@ -275,34 +275,16 @@ int main(int argc, char **argv)
         CHECK(t->p[P_M1AMT] == 32, "on again: 50%%");
         na_set(NI_MXROW, 1); na_set(NI_MXCOL, 0); na_set(NI_MXAMT, -30);
         CHECK(t->p[P_M1SRC + 3] == MS_ENV && t->p[P_M1DST + 3] == MD_PITCH && t->p[P_M1AMT + 3] == -19, "ENV > PITCH -30%% is slot 2");
-        na_set(NI_MXROW, 0); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
-        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 3); na_set(NI_MXAMT, 20);
-        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 40);
+        na_set(NI_MXROW, 0); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 20);
+        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
+        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 40);
         CHECK(na_get(NI_MXAMT) == 0, "the fifth route is refused");
-        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 3); na_set(NI_MXAMT, 0);
+        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 0);
         CHECK(t->p[P_M1SRC + 9] == 0, "an amount of 0 frees the slot");
-        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 6); na_set(NI_MXAMT, 25);   /* LFO > ASSIGN 1 (RESONANCE) */
+        na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, 25);   /* LFO > ASSIGN 1 (RESONANCE) */
         CHECK(t->p[P_M1DST + 9] == MD_E1 + 6, "ASSIGN 1 is RESONANCE by default");
-        na_set(NI_AS1, 2);                                                 /* LFO RATE */
+        na_set(NI_AS1, 4);                                                 /* LFO RATE */
         CHECK(t->p[P_M1DST + 9] == MD_RATE && na_get(NI_MXAMT) == 25, "ASSIGN 1 changed: the route follows");
-        /* OSC K1 and K4 are matrix columns of their own: K1 and K4 reach P_E1 and P_E4, the stored cycling-envelope DEST keeps its old numbers */
-        {
-            uint32_t k;
-            for (k = 0; k < 4u; k++) { t->p[P_M1SRC + 3u * k] = 0; t->p[P_M1DST + 3u * k] = 0; t->p[P_M1AMT + 3u * k] = 0; }
-            na_set(NI_MXROW, 1); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 50);              /* ENV > OSC K1 */
-            na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, -40);             /* LFO > OSC K4 */
-            CHECK(na_get(NI_MXROW) == 2 && na_get(NI_MXCOL) == 4 && na_get(NI_MXAMT) >= -41 && na_get(NI_MXAMT) <= -39, "the K4 column reads back (%d %d %d)", na_get(NI_MXROW), na_get(NI_MXCOL), na_get(NI_MXAMT));
-            CHECK(t->p[P_M1DST] == MD_E1 + 1 && t->p[P_M1SRC] == MS_ENV, "ENV > OSC K1 is a route to P_E1 (%d)", t->p[P_M1DST]);
-            CHECK(t->p[P_M1DST + 3] == MD_E1 + 4 && t->p[P_M1SRC + 3] == MS_LFO, "LFO > OSC K4 is a route to P_E4 (%d)", t->p[P_M1DST + 3]);
-            na_set(NI_MXROW, 1); na_set(NI_MXCOL, 1);
-            CHECK(na_get(NI_MXAMT) == 50, "K1's route reads back");
-            na_set(NI_MXROW, 1); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 0); na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, 0);
-            na_set(NI_CDEST, 1); na_set(NI_CDEPTH, 100);                                 /* CYCLING MODE > OSC K1 */
-            CHECK(t->p[P_FM4_SUS] == 8 && na_get(NI_CDEST) == 1, "CYC DEST OSC K1 is stored as 8 and read back as the grid's column 1 (%d %d)", t->p[P_FM4_SUS], na_get(NI_CDEST));
-            na_set(NI_CDEST, 5);
-            CHECK(t->p[P_FM4_SUS] == 3, "CYC DEST CUTOFF is still stored as 3 (%d)", t->p[P_FM4_SUS]);
-            na_set(NI_CDEPTH, 50);
-        }
         /* the LFO group's page 2: the same four ASSIGN columns on K1..K4, named on the page */
         {
             int32_t before = na_get(NI_AS2);

@@ -269,23 +269,6 @@ int main(void)
         CHECK(!bad_snd, "%d models are silent", bad_snd);
         CHECK(!same, "%d pairs of models sound the same", same);
     }
-    /* the matrix has OSC K1..K4 as columns: a route from the ENV row to each moves that knob (the sound changes against the same note without it) */
-    {
-        uint32_t col;
-        for (col = 1; col <= 4u; col++) {
-            prof_t p0, p1; uint32_t q;
-            fresh(0); trk[0].p[P_E0] = 0; trk[0].p[P_E1] = 40; trk[0].p[P_E2] = 64; trk[0].p[P_E3] = 64; trk[0].p[P_E4] = 0; trk[0].p[P_E5] = 90; trk[0].p[P_SUS] = 100;
-            for (q = 0; q < 4u; q++) { trk[0].p[P_M1SRC + 3u * q] = 0; trk[0].p[P_M1DST + 3u * q] = 0; trk[0].p[P_M1AMT + 3u * q] = 0; }
-            ny = 0; p0 = take();
-            fresh(0); trk[0].p[P_E0] = 0; trk[0].p[P_E1] = 40; trk[0].p[P_E2] = 64; trk[0].p[P_E3] = 64; trk[0].p[P_E4] = 0; trk[0].p[P_E5] = 90; trk[0].p[P_SUS] = 100;
-            for (q = 0; q < 4u; q++) { trk[0].p[P_M1SRC + 3u * q] = 0; trk[0].p[P_M1DST + 3u * q] = 0; trk[0].p[P_M1AMT + 3u * q] = 0; }
-            na_set(NI_MXROW, 1); na_set(NI_MXCOL, (int32_t)col); na_set(NI_MXAMT, 100);
-            ny = 0; p1 = take();
-            printf("   matrix ENV > OSC K%u: level %.3f -> %.3f, bright %.3f -> %.3f, pitch %.0f -> %.0f\n", col, p0.L, p1.L, p0.B, p1.B, p0.P, p1.P);
-            CHECK(fabs(p1.L - p0.L) / (p0.L + 1e-9) > 0.02 || fabs(p1.B - p0.B) / (p0.B + 1e-9) > 0.02 || fabs(p1.P - p0.P) / (p0.P + 1e-9) > 0.01,
-                  "a route to OSC K%u changes nothing", col);
-        }
-    }
     /* the sketch sits on the zero line (its mean is nil) and keeps its scale: turning a knob that makes the sound softer lowers the peaks */
     {
         uint32_t kk; int8_t s0[120]; int worst = 0;
