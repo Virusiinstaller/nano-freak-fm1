@@ -1413,3 +1413,9 @@ length round-trips. Stored values are unchanged (a stored `P_LN0` still means `1
 With ARP CHORD (`P_LN1`) above 0, every pattern except ORDER and AS PLAYED reads only the newest held key, as the root: the pattern (over the chord and
 RANGE) sits on it, and a new key moves the whole pattern there. ORDER and AS PLAYED still play the held keys as pressed. ARP CHORD 0 plays the held
 keys in every pattern, as before. Before, the chord was built only while exactly one key was held. No stored value changes.
+
+### NANO waveform sketch (2.5.59)
+
+The oscillator page's waveform picture is now centred on the zero line (its mean taken out) and drawn at a fixed scale per oscillator type instead of
+being stretched to its own peak, so a knob that makes the sound louder or softer raises or lowers the peaks. A wave that would outgrow the box is scaled
+down to fit. Display only: no stored value or sound changes.

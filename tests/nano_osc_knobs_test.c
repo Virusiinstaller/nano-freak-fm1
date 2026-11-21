@@ -153,7 +153,7 @@ int main(void)
                 fresh(0);
                 trk[0].p[P_E0] = NOSC[ty].ty; trk[0].p[P_E1] = ty == 0u ? 127 : 64; trk[0].p[P_E2] = 64; trk[0].p[P_E3] = NOSC[ty].ty == 11 ? 127 : 64; trk[0].p[P_E4] = ty == 14u ? 64 : 0;
                 trk[0].p[P_E5] = 127; trk[0].p[P_E6] = 0; trk[0].p[P_E7] = 64; trk[0].p[P_SUS] = 100; trk[0].p[P_ATK] = 0; trk[0].p[P_ED_FX] = 0;
-                trk[0].p[P_E0 + k] = pass ? 127 : 0;
+                trk[0].p[P_E0 + k] = pass ? (NOSC[ty].ty == 13 && k == 2u ? 64 : 127) : 0;   /* (V.ANALOG SHAPE: the sync square fills the whole period above ~80, a flat line the sketch centres away) */
                 goto_page(B_HOME, 0); nframe(); nframe();
                 grab_sketch(pass ? skB : skA);
                 CHECK(!strcmp(nf_ui_str(UIS_L0 + 3), K4L[ty]), "%s: K4 is labelled %s, not %s", NOSC[ty].name, nf_ui_str(UIS_L0 + 3), K4L[ty]);
@@ -227,6 +227,23 @@ int main(void)
             CHECK(seen >= 4, "%s: a later note does not slide from the one before", vm ? "POLY" : "MONO");
             slid += (uint32_t)seen;
         }
+    }
+    /* the sketch sits on the zero line (its mean is nil) and keeps its scale: turning a knob that makes the sound softer lowers the peaks */
+    {
+        uint32_t kk; int8_t s0[120]; int worst = 0;
+        for (ty = 0; ty < 15u; ty++)
+            for (kk = 0; kk < 5u; kk++) {
+                int sum = 0, pk = 0;
+                fresh(0);
+                trk[0].p[P_E0] = NOSC[ty].ty; trk[0].p[P_E1] = 64; trk[0].p[P_E2] = 64; trk[0].p[P_E3] = 64; trk[0].p[P_E4] = 0;
+                if (kk) trk[0].p[P_E0 + kk] = (int16_t)(kk * 30);
+                goto_page(B_HOME, 0); nframe(); nframe();
+                grab_sketch(s0);
+                for (i = 0; i < 120u; i++) { sum += s0[i]; if (abs(s0[i]) > pk) pk = abs(s0[i]); }
+                if (abs(sum / 120) > worst) worst = abs(sum / 120);
+                CHECK(abs(sum / 120) <= 3, "%s: the sketch is not centred on zero (mean %d)", NOSC[ty].name, sum / 120);
+            }
+        printf("   sketch centring: the largest mean offset is %d of 127\n", worst);
     }
     printf("%u of 60 knob/type pairs without a sound or sketch change\n", nbad);
     return fails ? 1 : 0;

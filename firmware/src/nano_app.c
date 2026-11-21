@@ -949,8 +949,21 @@ static void na_wave_sketch(void)
             v[i] = nw_fold(v[i] * (1 + t->p[P_E4] / 20)) >> 0;
         pk = v[i] > pk ? v[i] : -v[i] > pk ? -v[i] : pk;
     }
-    for (i = 0; i < NW_LEN; i++)
-        w[i] = (int8_t)(v[i] * 127 / pk);
+    {                                                    /* centred on the zero line (the mean taken out), at a fixed scale per type: a knob that makes the sound louder or softer moves the peaks up or down */
+        static const int32_t REF[15] = {40000, 33000, 130000, 115000, 57000, 31000, 131072, 32768, 32768, 40000, 44000, 70000, 32768, 33000, 67000};
+        int32_t mean = 0, ref = REF[na_type() % 15u];
+        for (i = 0; i < NW_LEN; i++)
+            mean += v[i];
+        mean /= NW_LEN;
+        pk = 1;
+        for (i = 0; i < NW_LEN; i++) {                   /* (a wave that outgrows the box is scaled down to fit, never clipped, so it stays centred) */
+            int32_t d = v[i] - mean;
+            pk = d > pk ? d : -d > pk ? -d : pk;
+        }
+        ref = pk > ref ? pk : ref;
+        for (i = 0; i < NW_LEN; i++)
+            w[i] = (int8_t)(((int64_t)(v[i] - mean) * 127) / ref);
+    }
 }
 
 /* everything the painter shows, for the page the cursor is on */
