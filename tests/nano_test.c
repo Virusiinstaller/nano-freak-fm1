@@ -1672,6 +1672,7 @@ int main(void)
             int seq[24], rests = 0, in_set = 1;
             setup(0, 0, 0, 0, 127);
             host_preset(t, ENGI_NANO, 0);
+            t->p[P_LN1] = 0;                                  /* ARP CHORD off: the keys themselves are the list */
             t->p[P_AMODE] = 15;
             t->p[P_AOCT] = 1;
             t->p[P_ASWING] = 0;
@@ -1697,6 +1698,7 @@ int main(void)
             uint32_t cnt1, cnt2, ok = 1;
             setup(0, 0, 0, 0, 127);
             host_preset(t, ENGI_NANO, 0);
+            t->p[P_LN1] = 0;                                  /* ARP CHORD off: the keys themselves are the list */
             t->p[P_AMODE] = 14;
             t->p[P_AOCT] = 2;
             t->p[P_ASWING] = 0;
@@ -1936,6 +1938,33 @@ int main(void)
                 if (nseen < 4 || (pi == 0 && (seen[0] != (int)root))) ok = 0;
             }
             check("ARP ONE KEY: UP / DOWN / UPDOWN, 1 octave, 4 steps play four different pitches built on the key (ARP CHORD MAJ on a load)", ok);
+
+        /* a second key moves the whole pattern to it (the newest key is the root); ORDER and AS PLAYED play the keys themselves */
+        {
+            static const uint8_t MODES[4] = {AM_UP, AM_ORD, AM_RND, AM_ASPL};
+            uint32_t mi, ok2 = 1;
+            for (mi = 0; mi < 4; mi++) {
+                uint32_t bad_old = 0, bad_new = 0, only_keys = 1, got67 = 0;
+                setup(0, 0, 0, 0, 127);
+                host_preset(t, ENGI_NANO, 0);
+                t->p[P_AMODE] = MODES[mi]; t->p[P_AOCT] = 1; t->p[P_ASWING] = 0; t->p[P_AHOLD] = 0; t->p[P_LN0] = 127;   /* 16 steps */
+                t->nheld = 0; t->arp_phys = 0;
+                arp_add(t, 60);
+                arp_add(t, 67);
+                for (s2 = 0; s2 < 24; s2++) {
+                    arp_tick(t, div_samples((uint32_t)t->p[P_ARATE]));
+                    if (!t->arp_note) continue;
+                    if (t->arp_note != 60 && t->arp_note != 67) only_keys = 0;
+                    if (t->arp_note == 71 || t->arp_note == 74 || t->arp_note == 79) got67 = 1;
+                    if (t->arp_note == 64 || t->arp_note == 72) bad_old = 1;   /* the MAJ chord on 60 (E, C+1) */
+                    if (t->arp_note < 67 && t->arp_note != 60) bad_new = 1;
+                }
+                if (MODES[mi] == AM_ORD || MODES[mi] == AM_ASPL) { if (!only_keys || got67) ok2 = 0; }
+                else if (bad_old || !got67 || bad_new) ok2 = 0;
+                if (!ok2) printf("   mode %u: only_keys %u got67 %u bad_old %u bad_new %u\n", MODES[mi], only_keys, got67, bad_old, bad_new);
+            }
+            check("ARP ROOT: a second key moves the whole pattern to it (UP, RANDOM); ORDER and AS PLAYED play the keys as pressed", ok2);
+        }
         }
     }
     }

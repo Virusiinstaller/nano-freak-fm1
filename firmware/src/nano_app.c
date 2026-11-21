@@ -1042,7 +1042,7 @@ static void na_sync(void)
         nf_ui_set(UI_P + 4, na_get(NI_SWING)), nf_ui_set(UI_P + 5, na_get(NI_ARPLATCH)), nf_ui_set(UI_P + 6, na_get(NI_ARPTYPE)), nf_ui_set(UI_P + 7, na_get(NI_ARPCHORD));
         {                                                                           /* the keys the graphic draws: those held (one key and a chord: four) */
             uint32_t nk = t->nheld;
-            nf_ui_set(UI_ARPN, nk == 1u && na_get(NI_ARPCHORD) > 0 && !na_get(NI_ARPTYPE) ? 4 : (int)(nk > 4u ? 4u : nk));
+            nf_ui_set(UI_ARPN, nk > 0u && na_get(NI_ARPCHORD) > 0 && !na_get(NI_ARPTYPE) && t->p[P_AMODE] != AM_ORD && t->p[P_AMODE] != AM_ASPL ? 4 : (int)(nk > 4u ? 4u : nk));
         }
         break;
     case NG_SEQ: {

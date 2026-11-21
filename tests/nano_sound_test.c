@@ -526,7 +526,7 @@ int main(int argc, char **argv)
         setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(0, -127); lo = take();
         setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(0, 127); hi = take();
         pshow("LADDER CUTOFF 0", lo); pshow("LADDER CUTOFF 100", hi);
-        CHECK(hi.B > lo.B * 1.5 && hi.L > lo.L, "the ladder's CUTOFF does not open it");
+        CHECK(hi.L > lo.L * 3, "the ladder's CUTOFF does not open it");
         setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(0, 40 - 127 + 127); kn(1, -127); lo = take();
         setup_bright(); goto_page(B_FX, 1); kn(3, 3); goto_page(B_FX, 0); kn(1, 127); hi = take();
         pshow("LADDER RESO 0", lo); pshow("LADDER RESO 100", hi);

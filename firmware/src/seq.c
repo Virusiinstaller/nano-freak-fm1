@@ -450,12 +450,17 @@ static uint32_t arp_list(const track_t *t, uint32_t *list, uint32_t *cnt)
                 list[j] = list[j - 1];
                 list[j - 1] = x;
             }
-    if (NANO_T(t) && n == 1u && nano_achord(t) && !nano_atype(t)) {   /* ARP CHORD: one key, the pattern runs over a chord on it */
-        uint32_t root = list[0];
-        for (i = 0; i < 4u; i++)
-            list[i] = (uint32_t)clamp((int32_t)root + NANO_RC[nano_achord(t) - 1u][i], 0, 127);
-        n = 4u;
-        *cnt = 4u;
+    if (NANO_T(t) && n && nano_achord(t) && t->p[P_AMODE] != AM_ORD && t->p[P_AMODE] != AM_ASPL) {   /* ARP CHORD: only the newest key is read, as the ROOT: the whole pattern sits on it (ORDER and AS PLAYED use the keys) */
+        uint32_t root = last;
+        if (nano_atype(t)) {                                    /* TYPE chord: each step is the root of a chord: the list is the root alone */
+            list[0] = root;
+            n = 1u;
+        } else {
+            for (i = 0; i < 4u; i++)
+                list[i] = (uint32_t)clamp((int32_t)root + NANO_RC[nano_achord(t) - 1u][i], 0, 127);
+            n = 4u;
+        }
+        *cnt = n;
     }
     for (o = 0; o < (uint32_t)t->p[P_AOCT]; o++)
         for (i = 0; i < n && len < 64u; i++)
