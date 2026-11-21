@@ -1694,6 +1694,8 @@ static void na_draw(void)
     uint32_t sig = 0x811C9DC5u, i;
     if (na_dirty)
         na_sync();
+    else if (na_grp == NG_SEQ)                                /* the playing step moves on its own: not a change na_sync is told about */
+        nf_ui_set(UI_STEP, song.playing && na_seqmode ? (int)(TSEL->seq_idx % (uint32_t)clamp(TSEL->p[P_SLEN], 1, NSTEP)) : -1);
     for (i = 0; i < (uint32_t)UI_COUNT; i++)
         sig = (sig ^ (uint32_t)nf_ui_get((int)i)) * 16777619u;
     for (i = 0; i < (uint32_t)UIS_COUNT; i++) {

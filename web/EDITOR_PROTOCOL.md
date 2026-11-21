@@ -1437,3 +1437,8 @@ the MATRIX group (no new stored value).
 pages) now starts with OSC K1, OSC K2, OSC K3 and OSC K4 (P_E1 to P_E4), followed by RESONANCE, KEY TRACK, LFO RATE, AMP, PAN, DISTORTION, CHORUS, DELAY,
 REVERB, VIBRATO. The ASSIGN choice is not saved with a sound; the defaults are RESONANCE, LFO RATE, AMP and OSC K1. A route to OSC K2 or K3 through an
 ASSIGN column is the same route as the K2 / K3 column (they share the destination).
+
+### NANO sequencer playhead (2.5.64)
+
+The highlighted step on the SEQ pages now follows the playing step every screen frame. Before, it was set only when something else made the screen refresh
+(a key or knob), so it stayed where it was while the sequence ran. Display only.

@@ -141,6 +141,18 @@ int main(int argc, char **argv)
         npress(B_PLAY);
         CHECK(transport_req == 1, "PLAY starts the sequencer in SEQ");
         transport_req = 0;
+        /* the highlighted step follows the sequencer between key presses (no change is announced to na_sync) */
+        {
+            uint32_t stp;
+            song.playing = 1; na_dirty = 0;
+            for (stp = 0; stp < 16u; stp += 5u) {
+                t->seq_idx = (uint16_t)stp;
+                ui.force = 1; na_draw();
+                CHECK(nf_ui_get(UI_STEP) == (int)stp, "the playing step %u is highlighted without a key press (%d)", stp, nf_ui_get(UI_STEP));
+            }
+            song.playing = 0; ui.force = 1; na_draw();
+            CHECK(nf_ui_get(UI_STEP) == -1, "stopped: no step is highlighted (%d)", nf_ui_get(UI_STEP));
+        }
         npress(B_ARP);
         npress(B_HOME);
     }
