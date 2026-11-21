@@ -228,6 +228,47 @@ int main(void)
             slid += (uint32_t)seen;
         }
     }
+    /* KNOB 1 as a MODEL (the test bed's nf_model_index / nf_model_name): each oscillator that has models names the one K1 picks, at the same cut-offs
+     * as the test bed (int(K1/127 x n), chords x 1.02), K1 at its top still plays the last model, and every model sounds different from the others */
+    {
+        static const char *const SW[4] = {"SAW", "SQUARE", "TRI", "SINE"}, *const BS[2] = {"SQUARE", "SAW"}, *const SA[3] = {"SYNC", "COMB", "CS80"},
+            *const RG[5] = {"MODAL", "SYMPA", "STRING", "FM", "QUANT"}, *const CH[11] = {"OCT", "5", "SUS4", "MIN", "MIN7", "MIN9", "MIN11", "69", "MAJ9", "MAJ7", "MAJ"},
+            *const WT[16] = {"SINSAW", "SINSQR", "PWM", "SYNC", "FORMNT", "VOWELS", "ORGAN", "COMB", "FM 1", "FM 2", "FOLD", "SKEW", "REZ", "DIGI", "PARTL", "EVODD"};
+        static const struct { uint32_t ty; int n; const char *const *nm; float sc; } MD[6] = {{7, 4, SW, 1.0f}, {10, 2, BS, 1.0f}, {11, 3, SA, 1.0f}, {12, 16, WT, 1.0f}, {5, 11, CH, 1.02f}, {14, 5, RG, 1.0f}};
+        uint32_t mdi; int bad_label = 0, bad_snd = 0, same = 0;
+        for (mdi = 0; mdi < 6u; mdi++) {
+            int m, k, first[16]; prof_t pr[16]; uint32_t nsame = 0;
+            for (m = 0; m < MD[mdi].n; m++) first[m] = -1;
+            for (k = 0; k < 128; k++) {
+                int idx = (int)((float)k / 127.0f * MD[mdi].sc * (float)MD[mdi].n);
+                const char *got;
+                idx = idx < 0 ? 0 : idx >= MD[mdi].n ? MD[mdi].n - 1 : idx;
+                if (first[idx] < 0) first[idx] = k;
+                fresh(0); trk[0].p[P_E0] = (int16_t)MD[mdi].ty; trk[0].p[P_E1] = (int16_t)k;
+                goto_page(B_HOME, 0); nframe(); nframe(); na_sync();
+                got = nf_ui_str(UIS_V0);
+                if (strcmp(got, MD[mdi].nm[idx])) { if (bad_label++ < 8) printf("FAIL: type %u K1 %d names '%s', the test bed '%s'\n", MD[mdi].ty, k, got, MD[mdi].nm[idx]); }
+            }
+            for (m = 0; m < MD[mdi].n; m++) {
+                int kk = first[m] + 1 > 127 ? 127 : first[m] + 1;
+                setup_bright(); trk[0].p[P_E0] = (int16_t)MD[mdi].ty; trk[0].p[P_E1] = (int16_t)kk; trk[0].p[P_E2] = 64; trk[0].p[P_E3] = 64; trk[0].p[P_E4] = 100; trk[0].p[P_E5] = 127;
+                ny = 0; pr[m] = take();
+                if (pr[m].L < 1e-3) { bad_snd++; printf("FAIL: type %u model %s (K1 %d) is silent\n", MD[mdi].ty, MD[mdi].nm[m], kk); }
+            }
+            { int topk; prof_t pt; setup_bright(); trk[0].p[P_E0] = (int16_t)MD[mdi].ty; trk[0].p[P_E1] = 127; trk[0].p[P_E2] = 64; trk[0].p[P_E3] = 64; trk[0].p[P_E4] = 100; trk[0].p[P_E5] = 127;
+              ny = 0; pt = take(); topk = pt.L > 1e-3;
+              if (!topk) { bad_snd++; printf("FAIL: type %u K1 127 is silent (the last model, %s)\n", MD[mdi].ty, MD[mdi].nm[MD[mdi].n - 1]); } }
+            for (m = 0; m < MD[mdi].n; m++)
+                for (k = m + 1; k < MD[mdi].n; k++) {
+                    double dl = fabs(pr[m].L - pr[k].L) / (pr[m].L + pr[k].L + 1e-9), db = fabs(pr[m].B - pr[k].B) / (pr[m].B + pr[k].B + 1e-9), dp = fabs(pr[m].P - pr[k].P) / (pr[m].P + pr[k].P + 1e-9);
+                    if (MD[mdi].ty != 5u && dl < 0.01 && db < 0.01 && dp < 0.005) {   /* (the chords' voicings can share a level and a brightness) */ same++; nsame++; printf("   type %u: models %s and %s sound alike (level %.3f/%.3f bright %.3f/%.3f pitch %.0f/%.0f)\n", MD[mdi].ty, MD[mdi].nm[m], MD[mdi].nm[k], pr[m].L, pr[k].L, pr[m].B, pr[k].B, pr[m].P, pr[k].P); }
+                }
+            printf("   type %2u: %2d models, labels checked at all 128 K1 values, %u pairs alike\n", MD[mdi].ty, MD[mdi].n, nsame);
+        }
+        CHECK(!bad_label, "%d K1 values are named differently from the test bed", bad_label);
+        CHECK(!bad_snd, "%d models are silent", bad_snd);
+        CHECK(!same, "%d pairs of models sound the same", same);
+    }
     /* the sketch sits on the zero line (its mean is nil) and keeps its scale: turning a knob that makes the sound softer lowers the peaks */
     {
         uint32_t kk; int8_t s0[120]; int worst = 0;

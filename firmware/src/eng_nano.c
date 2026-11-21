@@ -2471,7 +2471,7 @@ static __attribute__((noinline)) void nano_render_ri(track_t *t, voice_t *v, int
     const int16_t *p = t->p;
     nano_su_t *U = nano_slot(t, v);
     nano_ri_t *S;
-    int32_t tmp[CTL], acc[CTL], gn[NANO_MODES], model = (p[P_E1] * 5) / 127, hq, bq, dq, pq, i, mi, ic1 = v->s[0], ic2 = v->s[1];
+    int32_t tmp[CTL], acc[CTL], gn[NANO_MODES], model = p[P_E1] >= 127 ? 4 : (p[P_E1] * 5) / 127, hq, bq, dq, pq, i, mi, ic1 = v->s[0], ic2 = v->s[1];
     int32_t cut = (p[P_E5] << 8) + m->cutoff;
     uint32_t f0 = m->inc;
     tsvf_t flt;

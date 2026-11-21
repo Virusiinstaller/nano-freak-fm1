@@ -1419,3 +1419,9 @@ keys in every pattern, as before. Before, the chord was built only while exactly
 The oscillator page's waveform picture is now centred on the zero line (its mean taken out) and drawn at a fixed scale per oscillator type instead of
 being stretched to its own peak, so a knob that makes the sound louder or softer raises or lowers the peaks. A wave that would outgrow the box is scaled
 down to fit. Display only: no stored value or sound changes.
+
+### NANO oscillator models on K1 (2.5.60)
+
+K1 picks a model on SUPERWAVE (4), WAVETABLE (16 tables), CHORDS (11), BASS (2), SAW (3) and STRINGS (5), with the test bed's cut-offs. Fix: STRINGS at
+K1 = 127 was silent (model index 5, out of range); it now plays QUANT, the last model, as the test bed. The page now shows the model's name in place of the
+number (display only). No stored value changes.

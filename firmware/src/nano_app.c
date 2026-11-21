@@ -625,6 +625,25 @@ static void na_cat(char *d, const char *s)
 }
 
 /* the text of control id's value */
+/* KNOB 1 picks a model on some oscillators; the page names it in place of the number (the test bed's nf_model_name, upper case): same cut-offs as the engines. */
+static const char *na_model_name(uint32_t ty, int32_t k1)
+{
+    static const char *const SW[4] = {"SAW", "SQUARE", "TRI", "SINE"}, *const BS[2] = {"SQUARE", "SAW"}, *const SA[3] = {"SYNC", "COMB", "CS80"},
+                                *const RG[5] = {"MODAL", "SYMPA", "STRING", "FM", "QUANT"},
+                                *const CH[11] = {"OCT", "5", "SUS4", "MIN", "MIN7", "MIN9", "MIN11", "69", "MAJ9", "MAJ7", "MAJ"},
+                                *const WT[16] = {"SINSAW", "SINSQR", "PWM", "SYNC", "FORMNT", "VOWELS", "ORGAN", "COMB", "FM 1", "FM 2", "FOLD", "SKEW", "REZ", "DIGI", "PARTL", "EVODD"};
+    int32_t k = clamp(k1, 0, 127), i;
+    switch (ty) {
+    case 7: return SW[k >= 96 ? 3 : k >> 5];
+    case 10: return BS[k >= 64];
+    case 11: i = k * 3 / 127; return SA[i > 2 ? 2 : i];
+    case 12: i = k * 16 / 127; return WT[i > 15 ? 15 : i];
+    case 5: i = k * 1122 / 12700; return CH[i > 10 ? 10 : i];     /* the test bed names the nearest chord: x 1.02 x 11 */
+    case 14: i = k * 5 / 127; return RG[i > 4 ? 4 : i];
+    default: return 0;
+    }
+}
+
 static void na_text(int32_t id, char *out)
 {
     const nk_t *k = &NK[id];
@@ -922,7 +941,7 @@ static int32_t na_wave_at(uint32_t ty, uint32_t ph, uint32_t i, const int16_t *p
     }
     default: {                                             /* STRINGS: E1 the model (modal, sympathetic, string, FM, quantized), E2 the structure, E3 the brightness, E4 the damping */
         static const uint16_t SYM[5] = {256, 128, 384, 512, 768}, QNT[5] = {256, 323, 384, 512, 768};
-        int32_t model = a * 5 / 128, env = nw_decay(i, d, 3000), n;
+        int32_t model = a >= 127 ? 4 : a * 5 / 127, env = nw_decay(i, d, 3000), n;
         y = 0;
         if (model == 3) {
             y = nano_sin824(ph + (uint32_t)nano_sin824(ph * 2u) * (uint32_t)(b * 20861 / 40) + (uint32_t)nano_sin824(ph * 3u) * (uint32_t)(c * 20861 / 90));
@@ -1004,6 +1023,8 @@ static void na_sync(void)
             nf_ui_set(UI_N0 + (int)i, -1);
         } else {
             na_text(id, nf_ui_str(UIS_V0 + (int)i));
+            if (na_grp == NG_OSC && sb == 0u && i == 0u && na_model_name(NOSC[ty].ty, t->p[P_E1]))
+                na_str(nf_ui_str(UIS_V0), na_model_name(NOSC[ty].ty, t->p[P_E1]));
             nf_ui_set(UI_N0 + (int)i, NK[id].n ? 0 : na_get(id));
         }
     }
