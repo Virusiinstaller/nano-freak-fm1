@@ -63,7 +63,7 @@ static const char *const NT_SURAD[] = {"OFF", "LAST"};
 static const char *const NT_MXCOL[] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "ASSIGN 1", "ASSIGN 2", "ASSIGN 3", "ASSIGN 4"};
 static const char *const NT_MXROW[] = {"CYC ENV", "ENV", "LFO", "KEY"};
 /* the destinations an ASSIGN column can take: the firmware's modulation destinations that are not a column already */
-static const char *const NT_ASG[] = {"OSC K1", "OSC K4", "RESONANCE", "KEY TRACK", "LFO RATE", "AMP", "PAN", "DISTORTION", "CHORUS", "DELAY", "REVERB", "VIBRATO"};
+static const char *const NT_ASG[] = {"OSC K1", "OSC K2", "OSC K3", "OSC K4", "RESONANCE", "KEY TRACK", "LFO RATE", "AMP", "PAN", "DISTORTION", "CHORUS", "DELAY", "REVERB", "VIBRATO"};
 typedef struct { const char *lb; uint8_t n; const char *const *tx; } nk_t;   /* n 0: continuous 0..100 */
 static const nk_t NK[NI_COUNT] = {
     [NI_WAVE] = {"WAVE", 0, 0}, [NI_TIMBRE] = {"TIMBRE", 0, 0}, [NI_SHAPE] = {"SHAPE", 0, 0}, [NI_FOLD] = {"FOLD", 0, 0}, [NI_POS] = {"POSITION", 0, 0},
@@ -83,7 +83,7 @@ static const nk_t NK[NI_COUNT] = {
     [NI_SQNOTE] = {"NOTE", 128, 0}, [NI_SQDUR] = {"LENGTH", 4, NT_SQDUR}, [NI_SQREST] = {"TYPE", 2, NT_SQTYPE}, [NI_SQENT] = {"REC LENGTH", 4, NT_SQDUR},
     [NI_SQRESTS] = {"RESTS", 11, 0}, [NI_SQGATE] = {"GATE", 10, 0},
     [NI_MXCOL] = {"COLUMN", 8, NT_MXCOL}, [NI_MXROW] = {"ROW", 4, NT_MXROW}, [NI_MXON] = {"ON", 2, NT_ONOFF}, [NI_MXAMT] = {"AMOUNT", 0, 0},
-    [NI_AS1] = {"A1", 12, NT_ASG}, [NI_AS2] = {"A2", 12, NT_ASG}, [NI_AS3] = {"A3", 12, NT_ASG}, [NI_AS4] = {"A4", 12, NT_ASG},
+    [NI_AS1] = {"A1", 14, NT_ASG}, [NI_AS2] = {"A2", 14, NT_ASG}, [NI_AS3] = {"A3", 14, NT_ASG}, [NI_AS4] = {"A4", 14, NT_ASG},
     [NI_GBT] = {"BLUETOOTH", 2, NT_ONOFF}, [NI_GBTA] = {"BT AUDIO", 2, NT_ONOFF}, [NI_GROLE] = {"BLE ROLE", 2, NT_ROLE}, [NI_GCLK] = {"CLOCK", 2, NT_CLK},
     [NI_MMODE] = {"ARP OUT", 3, NT_MMODE}, [NI_MCH] = {"OUT CH", 16, 0}, [NI_MPORT] = {"OUT PORT", 8, NT_PORT}, [NI_MKEY] = {"KEY OUT", 2, NT_ONOFF},
     [NI_MLOCAL] = {"LOCAL", 2, NT_ONOFF}, [NI_MCLKO] = {"CLOCK OUT", 2, NT_ONOFF}, [NI_MTHI] = {"THRU IN", 3, NT_THRU}, [NI_MTHO] = {"THRU OUT", 8, NT_PORT},
@@ -206,11 +206,11 @@ static void na_arp_pat_sync(void)                                               
  * row, its destination the column; with the four slots taken a new route is refused. An ASSIGN column is a destination of the list. */
 static const uint8_t NA_MXSRC[4] = {MS_CYC, MS_ENV, MS_LFO, MS_KEY};
 static const uint8_t NA_MXDST[4] = {MD_PITCH, MD_E1 + 2, MD_E1 + 3, MD_CUT};   /* (MD_E1 + n is P_En) */
-static const uint8_t NA_ASGD[12] = {MD_E1 + 1, MD_E1 + 4, MD_E1 + 6, MD_E1 + 7, MD_RATE, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_VIB};
-static uint8_t na_as[4] = {2, 4, 5, 0}, na_mxr, na_mxc;               /* the ASSIGN columns' destinations, the selected point */
+static const uint8_t NA_ASGD[14] = {MD_E1 + 1, MD_E1 + 2, MD_E1 + 3, MD_E1 + 4, MD_E1 + 6, MD_E1 + 7, MD_RATE, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_VIB};
+static uint8_t na_as[4] = {4, 6, 7, 0}, na_mxr, na_mxc;               /* the ASSIGN columns' destinations, the selected point */
 static int8_t na_mxkeep[4][8];                                       /* a route switched off keeps its amount here */
 static uint8_t na_mxoff[4];                                          /* bit c: the route is off */
-static uint32_t na_mxdst(uint32_t c) { return c < 4u ? NA_MXDST[c] : NA_ASGD[na_as[c - 4u] % 12u]; }
+static uint32_t na_mxdst(uint32_t c) { return c < 4u ? NA_MXDST[c] : NA_ASGD[na_as[c - 4u] % 14u]; }
 static int32_t na_mxslot(uint32_t r, uint32_t c)                     /* the slot of the route, or -1 */
 {
     uint32_t k;

@@ -1430,3 +1430,10 @@ number (display only). No stored value changes.
 
 The LFO group has a second page, "MOD DEST A1-A4": K1..K4 pick the destinations of the matrix's four ASSIGN columns, the same four values as page 2 of
 the MATRIX group (no new stored value).
+
+### NANO ASSIGN destinations: OSC K1 to K4 (2.5.63)
+
+(2.5.62 briefly added OSC K1 and K4 matrix columns; it was reverted.) The matrix keeps its eight columns. The ASSIGN list (A1 to A4, on the MATRIX and LFO
+pages) now starts with OSC K1, OSC K2, OSC K3 and OSC K4 (P_E1 to P_E4), followed by RESONANCE, KEY TRACK, LFO RATE, AMP, PAN, DISTORTION, CHORUS, DELAY,
+REVERB, VIBRATO. The ASSIGN choice is not saved with a sound; the defaults are RESONANCE, LFO RATE, AMP and OSC K1. A route to OSC K2 or K3 through an
+ASSIGN column is the same route as the K2 / K3 column (they share the destination).

@@ -264,7 +264,7 @@ int main(int argc, char **argv)
         for (k = 0; k < 4u; k++) t->p[P_M1SRC + 3u * k] = t->p[P_M1DST + 3u * k] = t->p[P_M1AMT + 3u * k] = 0;
         npress(B_EDIT);
         na_sub[NG_MATRIX] = 0;
-        na_as[0] = 2; na_as[1] = 4; na_as[2] = 5; na_as[3] = 0;
+        na_as[0] = 4; na_as[1] = 6; na_as[2] = 7; na_as[3] = 0;
         na_set(NI_MXROW, 2); na_set(NI_MXCOL, 3);                  /* LFO > CUTOFF */
         na_set(NI_MXAMT, 50);
         CHECK(t->p[P_M1SRC] == MS_LFO && t->p[P_M1DST] == MD_CUT && t->p[P_M1AMT] == 32, "LFO > CUTOFF 50%% is slot 1 (src %d dst %d amt %d)", t->p[P_M1SRC], t->p[P_M1DST], t->p[P_M1AMT]);
@@ -283,8 +283,22 @@ int main(int argc, char **argv)
         CHECK(t->p[P_M1SRC + 9] == 0, "an amount of 0 frees the slot");
         na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, 25);   /* LFO > ASSIGN 1 (RESONANCE) */
         CHECK(t->p[P_M1DST + 9] == MD_E1 + 6, "ASSIGN 1 is RESONANCE by default");
-        na_set(NI_AS1, 4);                                                 /* LFO RATE */
+        na_set(NI_AS1, 6);                                                 /* LFO RATE */
         CHECK(t->p[P_M1DST + 9] == MD_RATE && na_get(NI_MXAMT) == 25, "ASSIGN 1 changed: the route follows");
+        /* every oscillator knob can be an ASSIGN destination: A1..A4 each take OSC K1..K4 and the route reaches P_E1..P_E4 */
+        {
+            uint32_t col, opt, q;
+            for (col = 0; col < 4u; col++)
+                for (opt = 0; opt < 4u; opt++) {
+                    for (q = 0; q < 4u; q++) { t->p[P_M1SRC + 3u * q] = 0; t->p[P_M1DST + 3u * q] = 0; t->p[P_M1AMT + 3u * q] = 0; }
+                    na_set((int32_t)(NI_AS1 + col), (int32_t)opt);
+                    na_set(NI_MXROW, 1); na_set(NI_MXCOL, (int32_t)(4u + col)); na_set(NI_MXAMT, 50);
+                    CHECK(t->p[P_M1DST] == MD_E1 + 1 + (int32_t)opt, "A%u = OSC K%u routes to P_E%u (%d)", col + 1, opt + 1, opt + 1, t->p[P_M1DST]);
+                    { char nm[16]; na_text((int32_t)(NI_AS1 + col), nm); CHECK(nm[0] == 'O' && nm[4] == 'K' && nm[5] == (char)('1' + opt), "A%u names OSC K%u ('%s')", col + 1, opt + 1, nm); }
+                }
+            for (q = 0; q < 4u; q++) { t->p[P_M1SRC + 3u * q] = 0; t->p[P_M1DST + 3u * q] = 0; t->p[P_M1AMT + 3u * q] = 0; }
+            na_set(NI_AS1, 4); na_set(NI_AS2, 6); na_set(NI_AS3, 7); na_set(NI_AS4, 0);
+        }
         /* the LFO group's page 2: the same four ASSIGN columns on K1..K4, named on the page */
         {
             int32_t before = na_get(NI_AS2);
