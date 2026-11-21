@@ -536,7 +536,7 @@ static void na_set(int32_t id, int32_t v)
         if (na_arp_on())
             na_put(P_AMODE, NANO_APAT[v]);
         break;
-    case NI_ARPLEN: na_put(P_LN0, (v * 127 + 7) / 15); break;
+    case NI_ARPLEN: na_put(P_LN0, (v * 127 + 14) / 15); break;
     case NI_SWING: na_put(P_ASWING, v); break;
     case NI_ARPLATCH: na_put(P_AHOLD, v); break;
     case NI_ARPTYPE: na_put(P_LN2, v); break;

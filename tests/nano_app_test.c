@@ -341,6 +341,11 @@ int main(int argc, char **argv)
         CHECK(!na_arp_on(), "PLAY again: off");
         CHECK(na_pat == 1, "the pattern is kept while it is off");
     }
+    /* the arpeggiator LENGTH: every one of its 16 values reads back as set (an odd one used to fall to the one below, so 1 could not be left) */
+    {
+        int32_t lv;
+        for (lv = 0; lv < 16; lv++) { na_set(NI_ARPLEN, lv); CHECK(na_get(NI_ARPLEN) == lv, "ARP LENGTH %d reads back %d", lv + 1, na_get(NI_ARPLEN) + 1); }
+    }
     /* VOICE pages are the track's voice mode */
     {
         npress(B_SCL);

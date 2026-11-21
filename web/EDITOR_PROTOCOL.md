@@ -1402,3 +1402,8 @@ that are held (one key and a chord: four). Stored sounds keep their ARP CHORD va
 unfiltered and sum; one shared filter (SVF or ladder, with SLOPE, DRIVE and CLIP) runs over the sum, its cutoff following the newest voice's filter
 envelope, matrix and key tracking, so a new key re-opens the filter for the notes already held. SPREAD is off in PARA. Stored values are unchanged;
 older firmware reads 4 as POLY.
+
+### NANO arp length fix (2.5.57)
+
+The LENGTH knob stored `P_LN0` so that every odd length (2, 4, ... 16) read back as the length below; from 1 the knob could not be raised. Now every
+length round-trips. Stored values are unchanged (a stored `P_LN0` still means `1 + P_LN0 * 15 / 127` steps).
