@@ -1425,3 +1425,8 @@ down to fit. Display only: no stored value or sound changes.
 K1 picks a model on SUPERWAVE (4), WAVETABLE (16 tables), CHORDS (11), BASS (2), SAW (3) and STRINGS (5), with the test bed's cut-offs. Fix: STRINGS at
 K1 = 127 was silent (model index 5, out of range); it now plays QUANT, the last model, as the test bed. The page now shows the model's name in place of the
 number (display only). No stored value changes.
+
+### NANO LFO page 2: ASSIGN A1 to A4 (2.5.61)
+
+The LFO group has a second page, "MOD DEST A1-A4": K1..K4 pick the destinations of the matrix's four ASSIGN columns, the same four values as page 2 of
+the MATRIX group (no new stored value).

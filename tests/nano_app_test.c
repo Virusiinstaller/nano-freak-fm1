@@ -285,6 +285,22 @@ int main(int argc, char **argv)
         CHECK(t->p[P_M1DST + 9] == MD_E1 + 6, "ASSIGN 1 is RESONANCE by default");
         na_set(NI_AS1, 4);                                                 /* LFO RATE */
         CHECK(t->p[P_M1DST + 9] == MD_RATE && na_get(NI_MXAMT) == 25, "ASSIGN 1 changed: the route follows");
+        /* the LFO group's page 2: the same four ASSIGN columns on K1..K4, named on the page */
+        {
+            int32_t before = na_get(NI_AS2);
+            npress(B_HOME); npress(B_LFO);
+            CHECK(na_cursub() == 0u && nf_ui_get(UI_NSUB) == 2, "LFO has two pages (%d)", nf_ui_get(UI_NSUB));
+            nturn(EN_SELECT, 1);
+            CHECK(na_grp == NG_LFO && na_cursub() == 1u, "SELECT opens the LFO's page 2");
+            nturn(EN_K2, 1);
+            CHECK(na_get(NI_AS2) != before, "K2 on the LFO's page 2 changes ASSIGN 2 (%d -> %d)", before, na_get(NI_AS2));
+            na_sync();
+            CHECK(nf_ui_str(UIS_V1)[0] != 0 && nf_ui_str(UIS_L1)[0] == 'A', "the page names A2 and its destination ('%s' '%s')", nf_ui_str(UIS_L1), nf_ui_str(UIS_V1));
+            draw();
+            dump(dir, n++);
+            nturn(EN_SELECT, -1);
+            CHECK(na_cursub() == 0u, "SELECT back to the LFO page");
+        }
         nturn(EN_SELECT, 1);
         draw();
         dump(dir, n++);

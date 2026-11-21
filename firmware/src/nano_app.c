@@ -112,7 +112,7 @@ static const nsub_t NS_ENV[] = {{"ENVELOPE", 0, {NI_ATTACK, NI_DECAY, NI_SUSTAIN
 static const nsub_t NS_FX[] = {{"FILTER", 0, {NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT}}, {"FILTER 2", 1, {NI_FSLOPE, NI_FDRIVE, NI_FCLIP, NI_FMODEL}},
                                {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE}},
                                {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"PITCH BEND", 5, {NI_BENDRNG, NI_BENDSPD, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_NONE, NI_NONE}}};
-static const nsub_t NS_LFO[] = {{"LFO", 0, {NI_LSHAPE, NI_LRATE, NI_LSYNC, NI_LMORPH}}};
+static const nsub_t NS_LFO[] = {{"LFO", 0, {NI_LSHAPE, NI_LRATE, NI_LSYNC, NI_LMORPH}}, {"MOD DEST A1-A4", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};   /* (page 2: the matrix's four ASSIGN columns, as on the MATRIX group's page 2) */
 static const nsub_t NS_VOICE[] = {{"MONO", 0, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}, {"UNISON", 1, {NI_UDETUNE, NI_NONE, NI_NONE, NI_NONE}},
                                   {"PARAPHONIC", 2, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}, {"POLY", 3, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_ARP[] = {{"ARPEGGIO", 0, {NI_ARPRATE, NI_ARPRANGE, NI_ARPPAT, NI_ARPLEN}}, {"ARP TIMING", 1, {NI_SWING, NI_ARPLATCH, NI_NONE, NI_NONE}},

@@ -699,7 +699,9 @@ void nf_ui_paint_band(uint16_t *band, int y0, int rows) {
   for (int i = 0; i < v[UI_NSUB] && i < 8; ++i)
     nf_gfx_fill(NF_W - 8 - (v[UI_NSUB] - i) * 9, 31, 6, 6, i == sub ? acc : C_LINE);
 
-  if (g == 4) {
+  if (g == 3 && sub == 1) {
+    g_assign(acc);                                    /* the LFO group's page 2: the ASSIGN columns A1 to A4 */
+  } else if (g == 4) {
     if (sub == 1) g_assign(acc); else g_matrix(acc);
   } else {
     cards(acc);
