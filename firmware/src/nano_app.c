@@ -1456,7 +1456,7 @@ static uint32_t nano_strip_key(uint32_t k, uint32_t down)
     if (k < 24u || k > 26u)
         return 0;
     if (k == 24u) {
-        if (down) {
+        if (down && !fm1_in.buttons) {                   /* (only F5 alone: never with a panel button, FX included, held or ghosting) */
             na_strip_mode = (uint8_t)((na_strip_mode + 1u) % 3u);
             nb_up = nb_dn = 0;
             nb_t = 0;

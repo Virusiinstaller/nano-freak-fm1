@@ -416,5 +416,27 @@ int main(int argc, char **argv)
         CHECK(nf_ui_get(UI_STRIP) == 3 && nf_ui_get(UI_STRIPV) == 0, "CHANCE is not shown as 0 %% (%d)", nf_ui_get(UI_STRIPV));
         na_strip_mode = 0; nb_v = 0;
     }
+    /* only F5 cycles the strip mode; the FX button and its pages never do */
+    {
+        uint32_t i;
+        na_strip_mode = 0;
+        npress(B_FX);
+        for (i = 0; i < 8; i++) {
+            nturn(EN_SELECT, 1);
+            CHECK(na_strip_mode == 0, "FX / SELECT changed the strip mode (%d)", na_strip_mode);
+        }
+        nano_strip_key(25, 1); nano_strip_key(25, 0); nano_strip_key(26, 1); nano_strip_key(26, 0);
+        CHECK(na_strip_mode == 0, "the up/down keys changed the strip mode");
+        nano_strip_key(24, 1); nano_strip_key(24, 0);
+        CHECK(na_strip_mode == 1, "F5 did not go BEND -> IMPRESS");
+        nano_strip_key(24, 1); nano_strip_key(24, 0);
+        CHECK(na_strip_mode == 2, "F5 did not go IMPRESS -> CHANCE");
+        fm1_in.buttons |= 1u << panel.btn[B_FX];
+        nano_strip_key(24, 1); nano_strip_key(24, 0);
+        fm1_in.buttons = 0;
+        CHECK(na_strip_mode == 2, "F5 with FX held changed the mode");
+        nano_strip_key(24, 1); nano_strip_key(24, 0);
+        CHECK(na_strip_mode == 0, "F5 did not go CHANCE -> BEND");
+    }
     return fails ? 1 : 0;
 }

@@ -1442,3 +1442,7 @@ ASSIGN column is the same route as the K2 / K3 column (they share the destinatio
 
 The highlighted step on the SEQ pages now follows the playing step every screen frame. Before, it was set only when something else made the screen refresh
 (a key or knob), so it stayed where it was while the sequence ran. Display only.
+
+## 2.5.65 — strip mode key
+
+F5 (bottom row, second from the right, left of the +/- keys) is the only key that cycles BEND / IMPRESS / CHANCE, and only while no panel button (FX included) is held. The FX button and its pages never change the strip mode. No protocol change.
