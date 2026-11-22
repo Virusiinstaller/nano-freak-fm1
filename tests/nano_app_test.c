@@ -69,16 +69,16 @@ int main(int argc, char **argv)
                     int32_t id = sp->k[k];
                     uint32_t before = 0, after = 0;
                     if (id == NI_NONE || id == NI_MXON || id == NI_SQPAT) continue;       /* (MXON: a route is needed, tested below) */
-                    before = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3];
+                    before = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt;
                     for (i = 0; i < P_COUNT; i++) before = before * 31u + (uint32_t)TSEL->p[i];
                     for (i = 0; i < G_COUNT; i++) before = before * 31u + (uint32_t)song.g[i];
                     nturn(EN_K1 + k, 3);
-                    after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3];
+                    after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt;
                     for (i = 0; i < P_COUNT; i++) after = after * 31u + (uint32_t)TSEL->p[i];
                     for (i = 0; i < G_COUNT; i++) after = after * 31u + (uint32_t)song.g[i];
                     if (before == after) {                       /* (at its top: the other way) */
                         nturn(EN_K1 + k, -3);
-                        after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3];
+                        after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt;
                         for (i = 0; i < P_COUNT; i++) after = after * 31u + (uint32_t)TSEL->p[i];
                         for (i = 0; i < G_COUNT; i++) after = after * 31u + (uint32_t)song.g[i];
                     }
@@ -434,39 +434,38 @@ int main(int argc, char **argv)
         npress(B_HOME);
     }
     printf("%s (%d pictures)\n", fails ? "nano_app_test FAIL" : "nano_app_test ok", n);
-    /* the footer's strip indicator: the mode F5 picked and its amount */
+    /* the footer's strip indicator: the bend, always */
     {
-        na_strip_mode = 0; nb_v = 32768 / 2; draw();
+        nb_v = 32768 / 2; draw();
         CHECK(nf_ui_get(UI_STRIP) == 1 && nf_ui_get(UI_STRIPV) == (GI(NI_BENDRNG) ^ 12) * 5, "BEND is not shown with half of the range (%d)", nf_ui_get(UI_STRIPV));
         nb_v = -32768; draw();
         CHECK(nf_ui_get(UI_STRIPV) == -(GI(NI_BENDRNG) ^ 12) * 10, "a full down bend is not minus the range (%d)", nf_ui_get(UI_STRIPV));
-        na_strip_mode = 1; TSEL->p[P_LN3] = 127; draw();
-        CHECK(nf_ui_get(UI_STRIP) == 2 && nf_ui_get(UI_STRIPV) == 100, "IMPRESS is not shown as 100 %% (%d)", nf_ui_get(UI_STRIPV));
-        na_strip_mode = 2; TSEL->p[P_LN4] = 0; draw();
-        CHECK(nf_ui_get(UI_STRIP) == 3 && nf_ui_get(UI_STRIPV) == 0, "CHANCE is not shown as 0 %% (%d)", nf_ui_get(UI_STRIPV));
-        na_strip_mode = 0; nb_v = 0;
+        nb_v = 0;
     }
-    /* only F5 cycles the strip mode; the FX button and its pages never do */
+    /* F5 does nothing (and plays nothing); up / down are the bend; IMPRESS / CHANCE are the FX page's four knobs */
     {
         uint32_t i;
-        na_strip_mode = 0;
+        int16_t l3 = TSEL->p[P_LN3], l4 = TSEL->p[P_LN4];
+        CHECK(nano_strip_key(24, 1) == 1, "F5 is a note");
+        nano_strip_key(24, 0);
+        nano_strip_key(25, 1);
+        CHECK(nb_up == 1, "the up key does not bend");
+        nano_strip_key(25, 0);
+        CHECK(TSEL->p[P_LN3] == l3 && TSEL->p[P_LN4] == l4, "a strip key changed IMPRESS / CHANCE");
         npress(B_FX);
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < 8; i++)
             nturn(EN_SELECT, 1);
-            CHECK(na_strip_mode == 0, "FX / SELECT changed the strip mode (%d)", na_strip_mode);
-        }
-        nano_strip_key(25, 1); nano_strip_key(25, 0); nano_strip_key(26, 1); nano_strip_key(26, 0);
-        CHECK(na_strip_mode == 0, "the up/down keys changed the strip mode");
-        nano_strip_key(24, 1); nano_strip_key(24, 0);
-        CHECK(na_strip_mode == 1, "F5 did not go BEND -> IMPRESS");
-        nano_strip_key(24, 1); nano_strip_key(24, 0);
-        CHECK(na_strip_mode == 2, "F5 did not go IMPRESS -> CHANCE");
-        fm1_in.buttons |= 1u << panel.btn[B_FX];
-        nano_strip_key(24, 1); nano_strip_key(24, 0);
-        fm1_in.buttons = 0;
-        CHECK(na_strip_mode == 2, "F5 with FX held changed the mode");
-        nano_strip_key(24, 1); nano_strip_key(24, 0);
-        CHECK(na_strip_mode == 0, "F5 did not go CHANCE -> BEND");
+        CHECK(na_grp == NG_FX, "FX left");
+        na_sub[NG_FX] = 6; na_dirty = 1; draw();
+        CHECK(!strcmp(NK[NI_IMPRESS].lb, "IMP STR") && !strcmp(NK[NI_CHANCE].lb, "CH STR") && !strcmp(NK[NI_CHAMT].lb, "CH AMT") && !strcmp(NK[NI_IMPAMT].lb, "IMP AMT"), "knob names");
+        CHECK(nf_ui_get(UI_P + 2) == na_get(NI_CHAMT) && nf_ui_get(UI_P + 3) == na_get(NI_IMPAMT), "the page does not show the AMT knobs");
+        nturn(EN_K3, -1); nturn(EN_K4, -1);
+        CHECK(na_get(NI_CHAMT) < 100 && na_get(NI_IMPAMT) < 100, "K3 / K4 do not move CH AMT / IMP AMT");
+        na_set(NI_IMPRESS, 100); na_set(NI_IMPAMT, 50);
+        CHECK(nv_imp_eff(TSEL) >= 62 && nv_imp_eff(TSEL) <= 64, "IMP AMT 50 does not halve the strength (%d)", (int)nv_imp_eff(TSEL));
+        na_set(NI_IMPAMT, 0);
+        CHECK(nv_imp_eff(TSEL) == 0, "IMP AMT 0 leaves some impress");
+        na_set(NI_IMPAMT, 100); na_set(NI_CHAMT, 100); na_set(NI_IMPRESS, 0);
     }
     {   /* the CCs nano_ctl.c's table leaves reach their controls (2.5.71) */
         static const struct { uint8_t cc, id, v; int32_t want; } C[] = {

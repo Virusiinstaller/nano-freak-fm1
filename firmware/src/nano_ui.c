@@ -333,14 +333,14 @@ static void g_delay(uint16_t acc) {                        /* the echoes: spacin
 
 static void g_spice(uint16_t acc) {
   panel_frame("IMPRESS AND CHANCE", acc);
-  const char *name[2] = { "IMPRESS", "CHANCE" };
-  for (int i = 0; i < 2; ++i) {
-    int y = PY + 24 + i * 28, val = clampi(v[UI_P + i], 0, 100);
-    nf_gfx_text(PX + 10, y + 3, name[i], 1, C_TEXT);
+  const char *name[4] = { "IMP STR", "CH STR", "CH AMT", "IMP AMT" };
+  for (int i = 0; i < 4; ++i) {
+    int y = PY + 22 + i * 22, val = clampi(v[UI_P + i], 0, 100);
+    nf_gfx_text(PX + 10, y + 3, name[i], 1, i < 2 ? C_TEXT : acc);
     nf_gfx_rect(PX + 70, y, 140, 14, C_LINE);
-    nf_gfx_fill(PX + 71, y + 1, 138 * val / 100, 12, acc);
+    nf_gfx_fill(PX + 71, y + 1, 138 * val / 100, 12, i < 2 ? acc : C_TEXT);
   }
-  text_c(PX + PW / 2, PY + PH - 11, "F5 KEY, THEN THE BEND BUTTONS", 1, C_DIM);
+  text_c(PX + PW / 2, PY + PH - 11, "AMT SETS HOW MUCH PLAYS", 1, C_DIM);
 }
 
 static int lfo_y(int shape, int ph, int cyc) {          /* -100..100 */

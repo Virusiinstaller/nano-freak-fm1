@@ -33,6 +33,7 @@ enum {
     NI_BENDSPD, NI_AMPMOD, NI_CDEST, NI_CDEPTH, NI_LSYNC, NI_FOLD2,
     NI_FMODEL,
     NI_L2SHAPE, NI_L2RATE, NI_L2SYNC, NI_L2MORPH,                  /* LFO 2 (2.5.66) */
+    NI_CHAMT, NI_IMPAMT,                                           /* CH AMT, IMP AMT (2.5.72) */
     NI_COUNT
 };
 static const char *const NT_FTYPE[] = {"LPF", "BPF", "HPF"};
@@ -72,7 +73,7 @@ static const nk_t NK[NI_COUNT] = {
     [NI_FSLOPE] = {"SLOPE", 2, NT_SLOPE}, [NI_FMODEL] = {"MODEL", 2, NT_FMODEL}, [NI_FDRIVE] = {"DRIVE", 0, 0}, [NI_FCLIP] = {"CLIP", 0, 0},
     [NI_RVBMIX] = {"MIX", 0, 0}, [NI_RVBSIZE] = {"SIZE", 0, 0}, [NI_RVBDAMP] = {"DAMP", 0, 0},
     [NI_RVBPRE] = {"PRE-DELAY", 0, 0}, [NI_DLYTONE] = {"TONE", 0, 0}, [NI_DLYMIX] = {"MIX", 0, 0}, [NI_DLYTIME] = {"TIME", 0, 0}, [NI_DLYFB] = {"FEEDBACK", 0, 0},
-    [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 3, NT_GLMODE}, [NI_IMPRESS] = {"IMPRESS", 0, 0}, [NI_CHANCE] = {"CHANCE", 0, 0},
+    [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 3, NT_GLMODE}, [NI_IMPRESS] = {"IMP STR", 0, 0}, [NI_CHANCE] = {"CH STR", 0, 0}, [NI_CHAMT] = {"CH AMT", 0, 0}, [NI_IMPAMT] = {"IMP AMT", 0, 0},
     [NI_ATTACK] = {"ATTACK", 0, 0}, [NI_DECAY] = {"DECAY", 0, 0}, [NI_SUSTAIN] = {"SUSTAIN", 0, 0},
     [NI_RISE] = {"RISE", 0, 0}, [NI_FALL] = {"FALL", 0, 0}, [NI_HOLD] = {"HOLD", 0, 0}, [NI_CAMT] = {"AMOUNT", 0, 0}, [NI_CMODE] = {"MODE", 3, NT_CMODE},
     [NI_LSHAPE] = {"SHAPE", 6, NT_LSHAPE}, [NI_LRATE] = {"RATE", 0, 0}, [NI_LMORPH] = {"MORPH", 0, 0}, [NI_UDETUNE] = {"DETUNE", 0, 0},
@@ -113,7 +114,7 @@ static const nsub_t NS_ENV[] = {{"ENVELOPE", 0, {NI_ATTACK, NI_DECAY, NI_SUSTAIN
                                 {"CYCLING MODE", 2, {NI_CMODE, NI_CDEST, NI_CDEPTH, NI_NONE}}, {"AMP ENVELOPE", 3, {NI_AMPMOD, NI_NONE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_FX[] = {{"FILTER", 0, {NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT}}, {"FILTER 2", 1, {NI_FSLOPE, NI_FDRIVE, NI_FCLIP, NI_FMODEL}},
                                {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE}},
-                               {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"PITCH BEND", 5, {NI_BENDRNG, NI_BENDSPD, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_NONE, NI_NONE}}};
+                               {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"PITCH BEND", 5, {NI_BENDRNG, NI_BENDSPD, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_CHAMT, NI_IMPAMT}}};
 static const nsub_t NS_LFO[] = {{"LFO 1", 0, {NI_LSHAPE, NI_LRATE, NI_LSYNC, NI_LMORPH}}, {"LFO 1 DEST A1-A4", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}},
                                 {"LFO 2", 2, {NI_L2SHAPE, NI_L2RATE, NI_L2SYNC, NI_L2MORPH}}, {"LFO 2 DEST A1-A4", 3, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};   /* (page 2: the matrix's four ASSIGN columns, as on the MATRIX group's page 2) */
 static const nsub_t NS_VOICE[] = {{"MONO", 0, {NI_NONE, NI_NONE, NI_NONE, NI_NONE}}, {"UNISON", 1, {NI_UDETUNE, NI_NONE, NI_NONE, NI_NONE}},
@@ -425,6 +426,8 @@ static int32_t na_get(int32_t id)
     case NI_GLMODE: return p[P_GLMODE] == 1 ? 0 : p[P_GLMODE] == 2 ? 1 : 2;     /* the page's TIME SYNC RATE <- P_GLMODE's 1 2 0 */
     case NI_IMPRESS: return na_f100(p[P_LN3]);
     case NI_CHANCE: return na_f100(p[P_LN4]);
+    case NI_CHAMT: return nano_ch_amt;
+    case NI_IMPAMT: return nano_imp_amt;
     case NI_ATTACK: return na_f100(p[P_ATK]);
     case NI_DECAY: return na_f100(p[P_DEC]);
     case NI_SUSTAIN: return na_f100(p[P_SUS]);
@@ -522,6 +525,8 @@ static void na_set(int32_t id, int32_t v)
     case NI_GLMODE: na_put(P_GLMODE, v == 0 ? 1 : v == 1 ? 2 : 0); break;
     case NI_IMPRESS: na_put(P_LN3, na_f127(v)); break;
     case NI_CHANCE: na_put(P_LN4, na_f127(v)); break;
+    case NI_CHAMT: nano_ch_amt = (uint8_t)na_cl(v, 0, 100); break;
+    case NI_IMPAMT: nano_imp_amt = (uint8_t)na_cl(v, 0, 100); break;
     case NI_ATTACK: na_put(P_ATK, na_f127(v)); break;
     case NI_DECAY: na_put(P_DEC, na_f127(v)); na_put(P_REL, na_f127(v)); break;
     case NI_SUSTAIN: na_put(P_SUS, na_f127(v)); break;
@@ -1077,7 +1082,7 @@ static void na_sync(void)
         else if (sp->ui == 4u)
             nf_ui_set(UI_P, na_get(NI_GLIDE)), nf_ui_set(UI_P + 1, na_get(NI_GLMODE));
         else
-            nf_ui_set(UI_P, na_get(NI_IMPRESS)), nf_ui_set(UI_P + 1, na_get(NI_CHANCE));
+            nf_ui_set(UI_P, na_get(NI_IMPRESS)), nf_ui_set(UI_P + 1, na_get(NI_CHANCE)), nf_ui_set(UI_P + 2, na_get(NI_CHAMT)), nf_ui_set(UI_P + 3, na_get(NI_IMPAMT));
         break;
     case NG_LFO:
         if (sp->ui == 2u)                                    /* LFO 2's page (and its DEST page, which shows none of these) */
@@ -1458,11 +1463,10 @@ static void na_voice_sync(void)                            /* the VOICE page the
     motion_capture(t, P_VOICE, t->p[P_VOICE]);
 }
 
-/* ---- the touch strip's three keys (the FM-1's last three: F5, up, down). F5 cycles what the other two do: BEND (hold to bend the pitch, release to
- * return: RANGE and SPEED on FX > PITCH BEND), IMPRESS or CHANCE (hold to step the amount, 4 % every 110 ms). seq.c keyboard_block hands the keys here. */
-static uint8_t na_strip_mode, nb_up, nb_dn;
+/* ---- the touch strip's two keys (the FM-1's last two: up, down): the pitch bend, always on (hold to bend, release to return: RANGE and SPEED on
+ * FX > PITCH BEND). F5 (key 24) does nothing and plays nothing. Impress and Chance are the FX > IMPRESS / CHANCE page's. seq.c keyboard_block hands the keys here. */
+static uint8_t nb_up, nb_dn;
 static int32_t nb_v;                                     /* the bend, -32768..32768 (Q15 of the range) */
-static uint32_t nb_t;                                    /* samples since the amount last stepped */
 static uint32_t nano_strip_key(uint32_t k, uint32_t down)
 {
 #if BOARD_SMK37
@@ -1471,40 +1475,23 @@ static uint32_t nano_strip_key(uint32_t k, uint32_t down)
 #else
     if (k < 24u || k > 26u)
         return 0;
-    if (k == 24u) {
-        if (down && !fm1_in.buttons) {                   /* (only F5 alone: never with a panel button, FX included, held or ghosting) */
-            na_strip_mode = (uint8_t)((na_strip_mode + 1u) % 3u);
-            nb_up = nb_dn = 0;
-            nb_t = 0;
-        }
-    } else if (k == 25u) {
+    if (k == 25u)
         nb_up = (uint8_t)down;
-    } else {
+    else if (k == 26u)
         nb_dn = (uint8_t)down;
-    }
     return 1;
 #endif
 }
 static void nano_strip_tick(void)                        /* once a block */
 {
 #if !BOARD_SMK37
-    int32_t tgt = na_strip_mode == 0u ? (nb_up && !nb_dn ? 32768 : nb_dn && !nb_up ? -32768 : 0) : 0;
+    int32_t tgt = nb_up && !nb_dn ? 32768 : nb_dn && !nb_up ? -32768 : 0;
     uint32_t ti = (uint32_t)song.sel % NTRK;
     if (nb_v != tgt) {
         /* the whole stroke takes 50 ms + (100 - SPEED) x 8 ms (the test bed's ramp) */
         int32_t ms = 50 + (127 - trk[ti].p[P_FM3_SUS]) * 800 / 127, st = (int32_t)(32768u * CTL * 1000u / (44100u * (uint32_t)ms));
         nb_v += clamp(tgt - nb_v, -st, st);
         midi_bend_target[ti] = (int32_t)(((int64_t)nb_v * (int32_t)(GI(NI_BENDRNG) ^ 12) * 256) >> 15);
-    }
-    if (na_strip_mode && (nb_up != nb_dn)) {
-        nb_t += CTL;
-        if (nb_t >= 4851u) {                             /* 110 ms */
-            int16_t *q = &trk[ti].p[na_strip_mode == 1u ? P_LN3 : P_LN4];   /* (written here, in the audio block: not through na_put) */
-            nb_t = 0;
-            *q = (int16_t)clamp(*q + (nb_up ? 5 : -5), 0, 127);
-        }
-    } else {
-        nb_t = 0;
     }
 #endif
 }
@@ -1515,10 +1502,8 @@ static void na_strip_ui(void)
 #if BOARD_SMK37
     nf_ui_set(UI_STRIP, 0);
 #else
-    const track_t *t = &trk[(uint32_t)song.sel % NTRK];
-    nf_ui_set(UI_STRIP, 1 + (int)na_strip_mode);
-    nf_ui_set(UI_STRIPV, na_strip_mode == 0u ? (int)(((int64_t)nb_v * (GI(NI_BENDRNG) ^ 12) * 10) >> 15)
-                                              : na_f100(t->p[na_strip_mode == 1u ? P_LN3 : P_LN4]));
+    nf_ui_set(UI_STRIP, 1);
+    nf_ui_set(UI_STRIPV, (int)(((int64_t)nb_v * (GI(NI_BENDRNG) ^ 12) * 10) >> 15));
 #endif
 }
 

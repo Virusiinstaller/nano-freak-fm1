@@ -1472,3 +1472,7 @@ The SAW oscillator's K2 and K3 were labelled PARAM 1 / PARAM 2. They now carry t
 ## 2.5.71 — more MIDI CCs
 
 The test bed's CCs that the firmware dropped now reach their controls (applied on the main loop, like a knob turn; no CC echo): 22 cycling env destination, 25 cycling env depth, 27 amp env, 68 octave (-3..+3), 69 glide mode, 70 bend range, 80 seq pattern, 84 record length, 85 random, 86 random scale, 87 rests, 88 random octaves, 89 REC, 95/96 reverb size/damp, 98-101 ASSIGN 1-4, 104 matrix amount (64 = 0), 107/108/109 matrix row/column/on, 111/117/118 delay time/feedback/tone, 112-115 Bluetooth, BT audio, BLE role, clock source, 116 mutate. 0..127 spreads over the control's steps (percent controls: 0..100). Not handled: 78 and 92 (arp sync; the firmware has none). Stored values do not change.
+
+## 2.5.72 — Impress / Chance: the strip is bend only, the page has four knobs
+
+The touch strip's two right-most keys (+/-) are the pitch bend, always. F5 no longer cycles anything (it plays nothing either); the strip no longer steps Impress or Chance. FX > IMPRESS / CHANCE has four knobs: K1 IMP STR and K2 CH STR (the former IMPRESS and CHANCE: P_LN3 and P_LN4, CC 2 and 3, unchanged), K3 CH AMT and K4 IMP AMT (0..100 %, default 100, live: not stored, a load sets 100). The strength that reaches the ARP or the SEQ that plays is STRENGTH x AMT / 100 (a change of the effective Chance rolls). No stored value changes meaning; the AMT knobs have no CC.

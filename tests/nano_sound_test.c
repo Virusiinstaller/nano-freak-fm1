@@ -386,7 +386,7 @@ int main(int argc, char **argv)
         double p0, p1, p2;
         fresh(0);
         trk[0].p[P_E0] = 0; trk[0].p[P_SUS] = 127; trk[0].p[P_VOICE] = V_MONO;
-        na_strip_mode = 0; GI(NI_BENDRNG) = (uint8_t)(12 ^ 12);
+        GI(NI_BENDRNG) = (uint8_t)(12 ^ 12);
         kdown(12); render(0.6); p0 = pitch(4000, ny);
         kdown(25); render(1.2); p1 = pitch(ny / 2, ny);
         kup(25); render(1.8); p2 = pitch(ny * 3 / 4, ny);
@@ -394,9 +394,6 @@ int main(int argc, char **argv)
         CHECK(p1 > p0 * 1.9 && p1 < p0 * 2.1, "strip up did not bend one octave");
         CHECK(p2 > p0 * 0.94 && p2 < p0 * 1.06, "the bend did not return");
         kup(12); render(0.3);
-        na_strip_mode = 1; { int16_t i0 = trk[0].p[P_LN3]; kdown(25); render(0.5); kup(25); render(0.1);
-        printf("strip IMPRESS up: %d -> %d\n", i0, trk[0].p[P_LN3]); CHECK(trk[0].p[P_LN3] > i0 + 10, "strip up did not raise IMPRESS"); }
-        na_strip_mode = 0;
     }
     /* GLIDE SYNC: at 120 BPM the knob at 127 is 1/1: the glide takes two seconds (TIME's is longer, RATE is the quick slide) */
     {

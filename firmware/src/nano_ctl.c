@@ -7,8 +7,9 @@
  *   P_LN0  ARP LENGTH   0..127 -> 1..16 steps (the loop of the pattern; AS PLAYED: the keys it remembers); 127 = 16
  *   P_LN1  ARP CHORD    0 off, 1..8 Maj Min 7 Min7 Maj7 Sus4 Dim7 Power (above 8: off)
  *   P_LN2  ARP TYPE     0 mono, 1 chord (each step of the pattern plays the chord on its note)
- *   P_LN3  IMPRESS      0..127: how much of the Chance variation is heard (0: the pattern as written, bit for bit)
- *   P_LN4  CHANCE       0..127: how hard the next roll is; a change of the value rolls
+ *   P_LN3  IMP STR      0..127: how much of the Chance variation is heard (0: the pattern as written, bit for bit)
+ *   P_LN4  CH STR       0..127: how hard the next roll is; a change of the value rolls
+ *   (IMP AMT / CH AMT, nano_imp_amt / nano_ch_amt: percent of the strength that reaches the playing ARP / SEQ; not stored, 100 on a load)
  *   P_SLDEPTH / P_SLPAT / P_LN7  LFO 2: RATE, SHAPE + SYNC, MORPH (core.h L2_*, voice.c track_lfo2_tick)
  * Impress and Chance vary the gate (a gate that comes out at nothing leaves the step out), the velocity (a little) and, from
  * 60 % Impress, the octave of a step: one status per step, shared by the arp and the sequencer (the test bed's nf_var.h).
@@ -48,7 +49,12 @@ static void nv_roll(uint32_t chance)
         nv_s[i] = (int8_t)(clamp(g, -31, 31) * 4 + o);
     }
 }
-static int32_t nv_imp(const track_t *t) { return NANO_T(t) ? (int32_t)(t->p[P_LN3] & 127) : 0; }
+/* IMP AMT / CH AMT (percent, live, not stored: a load leaves 100): how much of the strength (P_LN3 / P_LN4) is applied to the ARP or the SEQ
+ * that plays. The effective strength is STRENGTH x AMT / 100. */
+static volatile uint8_t nano_imp_amt = 100, nano_ch_amt = 100;
+static int32_t nv_imp_eff(const track_t *t) { return (int32_t)(t->p[P_LN3] & 127) * (int32_t)nano_imp_amt / 100; }
+static int32_t nv_ch_eff(const track_t *t) { return (int32_t)(t->p[P_LN4] & 127) * (int32_t)nano_ch_amt / 100; }
+static int32_t nv_imp(const track_t *t) { return NANO_T(t) ? nv_imp_eff(t) : 0; }
 /* the gate of step i (a share of the step, /128) from the written one; under 5 the step is left out */
 static int32_t nv_gate(const track_t *t, uint32_t i, int32_t base)
 {
@@ -82,9 +88,10 @@ static uint32_t nv_patt(const track_t *t, uint32_t i)
 /* once a block (voice.c track_render) for a NANO part: a new CHANCE rolls the dice */
 static void nano_poll(track_t *t)
 {
-    if ((uint8_t)t->p[P_LN4] != t->nano_ch) {
-        t->nano_ch = (uint8_t)t->p[P_LN4];
-        nv_roll((uint32_t)(t->p[P_LN4] & 127));
+    int32_t c = nv_ch_eff(t);
+    if ((uint8_t)c != t->nano_ch) {                     /* (a new strength or amount rolls) */
+        t->nano_ch = (uint8_t)c;
+        nv_roll((uint32_t)c);
     }
 }
 /* the performance parameters of a NANO track as a load leaves them (ui.c apply_preset_to, tests/hostsim.c host_preset) */
@@ -97,6 +104,7 @@ static void nano_track_loaded(track_t *t)
     t->p[P_LN2] = t->p[P_LN3] = t->p[P_LN4] = 0;
     t->p[P_L2RATE] = 64; t->p[P_L2WAVE] = L2_WAVE(0, 0); t->p[P_L2MORPH] = 127;   /* LFO 2: RATE 50 %, SINE, FREE, MORPH 0 */
     t->nano_ch = 0;
+    nano_imp_amt = nano_ch_amt = 100;
 }
 
 /* the main audio block (seq.c): n samples went by */
