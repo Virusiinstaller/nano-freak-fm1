@@ -37,7 +37,7 @@ enum {                        /* integer values */
   UI_SEL_ROW, UI_SEL_COL,     /* selected matrix point */
   UI_STEP,                    /* current sequencer step, -1 when stopped */
   UI_P = 16,                  /* 16 page specific numbers, see nf_ui.c */
-  UI_MX = 32,                 /* 4 x 8 matrix amounts, -100..100 (columns Pitch, Wave, Timbre, Cutoff, A1 to A4) */
+  UI_MX = 32,                 /* 5 x 8 matrix amounts (rows CYC, ENV, LFO, LFO 2, KEY), -100..100 (columns Pitch, Wave, Timbre, Cutoff, A1 to A4) */
   UI_ARPN = 72,               /* how many keys the arpeggiator holds, 0 = none, then the screen shows four as a demo */
   UI_SEQ = 73,                /* the 64 steps of the shown sequence: note (255 = rest) | length code << 8 (0 semiquaver, 1 quaver, 2 crotchet, 3 minim) */
   UI_SEQCUR = 137,            /* step being edited or recorded */
@@ -358,7 +358,7 @@ static int lfo_y(int shape, int ph, int cyc) {          /* -100..100 */
 static void g_lfo(uint16_t acc) {
   static const char *const names[6] = { "SINE", "TRIANGLE", "SAW", "SQUARE", "SAMPLE+HOLD", "RANDOM" };
   int shape = clampi(v[UI_P], 0, 5), morph = clampi(v[UI_P + 3], 0, 100);
-  panel_frame("LFO", acc);
+  panel_frame(v[UI_SUB] == 2 ? "LFO 2" : "LFO 1", acc);
   text_r(PX + PW - 4, PY + 4, names[shape], 1, C_TEXT);
   const int x0 = PX + 8, w = PW - 16, mid = PY + 56, amp = 28;
   nf_gfx_hline(x0, mid, w, C_LINE);
@@ -373,28 +373,28 @@ static void g_lfo(uint16_t acc) {
     if (i) nf_gfx_line(px, py, x0 + i, y, acc);
     px = x0 + i; py = y;
   }
-  nf_gfx_text(PX + 34, PY + 4, v[UI_P + 2] ? "SYNCED" : "FREE", 1, C_DIM);
+  nf_gfx_text(PX + 50, PY + 4, v[UI_P + 2] ? "SYNCED" : "FREE", 1, C_DIM);
   if (morph) { char t[16] = { 'M', 'O', 'R', 'P', 'H', ' ' }; int_str(t + 6, morph); nf_gfx_text(PX + 4, PY + PH - 12, t, 1, C_DIM); }
 }
 
 static void g_matrix(uint16_t acc) {
-  static const char *const rows[4] = { "CYC", "ENV", "LFO", "KEY" };
+  static const char *const rows[5] = { "CYC", "ENV", "LFO", "LF2", "KEY" };
   static const char *const cols[8] = { "PIT", "OK2", "OK3", "CUT", "A1", "A2", "A3", "A4" };
   nf_gfx_fill(PX, 44, PW, 164, C_PANEL);
   nf_gfx_rect(PX, 44, PW, 164, C_LINE);
   for (int c = 0; c < 8; ++c) text_c(PX + 34 + c * 24 + 11, 50, cols[c], 1, c < 4 ? C_DIM : acc);
-  for (int r = 0; r < 4; ++r) {
-    int y = 66 + r * 28;
-    text_c(PX + 18, y + 9, rows[r], 1, C_DIM);
+  for (int r = 0; r < 5; ++r) {
+    int y = 62 + r * 24;
+    text_c(PX + 18, y + 6, rows[r], 1, C_DIM);
     for (int c = 0; c < 8; ++c) {
       int x = PX + 34 + c * 24, a = v[UI_MX + r * 8 + c], off = a >= 1000 || a <= -1000;     /* a route switched off is sent as amount +/- 1000 */
       if (off) a = a > 0 ? a - 1000 : a + 1000;
       int sel = r == v[UI_SEL_ROW] && c == v[UI_SEL_COL];
-      nf_gfx_fill(x, y, 22, 24, sel ? nf_gfx_mix(C_PANEL, acc, 60) : C_DARK);
-      nf_gfx_rect(x, y, 22, 24, sel ? acc : C_LINE);
+      nf_gfx_fill(x, y, 22, 20, sel ? nf_gfx_mix(C_PANEL, acc, 60) : C_DARK);
+      nf_gfx_rect(x, y, 22, 20, sel ? acc : C_LINE);
       int m = a < 0 ? -a : a;
-      if (m && !off) nf_gfx_disc(x + 11, y + 12, 1 + m * 9 / 100, a < 0 ? C_NEG : acc);
-      else if (m) nf_gfx_ring(x + 11, y + 12, 1 + m * 9 / 100, C_DIM);       /* off: an outline only */
+      if (m && !off) nf_gfx_disc(x + 11, y + 10, 1 + m * 8 / 100, a < 0 ? C_NEG : acc);
+      else if (m) nf_gfx_ring(x + 11, y + 10, 1 + m * 8 / 100, C_DIM);       /* off: an outline only */
     }
   }
   nf_gfx_text(PX + 4, 196, str[UIS_L0], 1, C_TEXT);
@@ -699,7 +699,7 @@ void nf_ui_paint_band(uint16_t *band, int y0, int rows) {
   for (int i = 0; i < v[UI_NSUB] && i < 8; ++i)
     nf_gfx_fill(NF_W - 8 - (v[UI_NSUB] - i) * 9, 31, 6, 6, i == sub ? acc : C_LINE);
 
-  if (g == 3 && sub == 1) {
+  if (g == 3 && (sub == 1 || sub == 3)) {
     g_assign(acc);                                    /* the LFO group's page 2: the ASSIGN columns A1 to A4 */
   } else if (g == 4) {
     if (sub == 1) g_assign(acc); else g_matrix(acc);

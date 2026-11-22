@@ -9,6 +9,7 @@
  *   P_LN2  ARP TYPE     0 mono, 1 chord (each step of the pattern plays the chord on its note)
  *   P_LN3  IMPRESS      0..127: how much of the Chance variation is heard (0: the pattern as written, bit for bit)
  *   P_LN4  CHANCE       0..127: how hard the next roll is; a change of the value rolls
+ *   P_SLDEPTH / P_SLPAT / P_LN7  LFO 2: RATE, SHAPE + SYNC, MORPH (core.h L2_*, voice.c track_lfo2_tick)
  * Impress and Chance vary the gate (a gate that comes out at nothing leaves the step out), the velocity (a little) and, from
  * 60 % Impress, the octave of a step: one status per step, shared by the arp and the sequencer (the test bed's nf_var.h).
  *
@@ -94,6 +95,7 @@ static void nano_track_loaded(track_t *t)
     t->p[P_LN0] = 127;
     t->p[P_LN1] = 1;                                    /* ARP CHORD: MAJ, so that one held key (the root) arpeggiates four pitches, as the screen shows; OFF plays the key alone */
     t->p[P_LN2] = t->p[P_LN3] = t->p[P_LN4] = 0;
+    t->p[P_L2RATE] = 64; t->p[P_L2WAVE] = L2_WAVE(0, 0); t->p[P_L2MORPH] = 127;   /* LFO 2: RATE 50 %, SINE, FREE, MORPH 0 */
     t->nano_ch = 0;
 }
 

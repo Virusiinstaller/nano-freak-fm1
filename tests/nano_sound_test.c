@@ -128,7 +128,8 @@ static prof_t profile(uint32_t from)
 }
 static void pshow(const char *w, prof_t p) { printf("%-34s level %.3f (sd %.3f)  bright %.3f (sd %.3f)  pitch %.1f (sd %.1f)\n", w, p.L, p.SL, p.B, p.SB, p.P, p.SP); }
 /* a bright held note, 0.9 s, then its release 0.5 s: ny holds both */
-static prof_t take(void) { kdown(12); render(0.9); kup(12); { prof_t p = profile(0); render(0.5); return p; } }
+static uint32_t tkey = 12;                  /* (the key take() plays: the KEY row of the matrix needs one far from its pivot, note 60) */
+static prof_t take(void) { kdown(tkey); render(0.9); kup(tkey); { prof_t p = profile(0); render(0.5); return p; } }
 static void setup_bright(void) { fresh(0); trk[0].p[P_E0] = 0; trk[0].p[P_E1] = 120; trk[0].p[P_E5] = 70; trk[0].p[P_E6] = 0; trk[0].p[P_SUS] = 100; }
 #define SET(btn, pg, k, v) do { goto_page(btn, pg); kn(k, -127); kn(k, v); npress(B_HOME); } while (0)
 
@@ -228,21 +229,22 @@ int main(int argc, char **argv)
     }
     /* every matrix route, row x column, at 100 %: it has to change the sound */
     {
-        static const char *RN[4] = {"CYC ENV", "ENV", "LFO", "KEY"}, *CN[8] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "A1", "A2", "A3", "A4"};
+        static const char *RN[5] = {"CYC ENV", "ENV", "LFO", "LFO 2", "KEY"}, *CN[8] = {"PITCH", "OSC K2", "OSC K3", "CUTOFF", "A1", "A2", "A3", "A4"};
         uint32_t r, c; prof_t base;
         setup_bright(); base = take();
-        for (r = 0; r < 4u; r++)
+        for (r = 0; r < 5u; r++)
             for (c = 0; c < 8u; c++) {
                 prof_t p; char nm[64];
+                tkey = r == 4u ? 23 : 12;
                 setup_bright(); trk[0].p[P_E5] = 40;
                 base = take();
-                setup_bright(); trk[0].p[P_E5] = 40; na_mxset(r, c, 100, 1);
+                setup_bright(); trk[0].p[P_E5] = 40; if (r == 3u) trk[0].p[P_L2RATE] = 110; na_mxset(r, c, 100, 1);
                 if (r == 0u) { trk[0].p[P_FM1_LEVEL] = 1; trk[0].p[P_FM1_REL] = 127; trk[0].p[P_FM1_ATK] = 60; trk[0].p[P_FM1_DEC] = 60; }
                 p = take();
                 snprintf(nm, sizeof nm, "route %s -> %s", RN[r], CN[c]);
                 if (fabs(p.L - base.L) > 0.02 * base.L || fabs(p.B - base.B) > 0.03 * base.B || fabs(p.P - base.P) > 1.0 || p.SP > base.SP + 1.0 || p.SB > base.SB + 0.01 || p.SL > base.SL + 0.01)
                     printf("ok   %s\n", nm);
-                else { if (!(r == 3u && c == 7u) && !(r == 0u && c == 6u) && !(r == 1u && c == 5u) && !(r == 0u && c == 7u)) fails++;   /* (borderline: a few % of an oscillator-K1 route, which the delay's ping-pong moves either way) */ printf("NONE %s: level %.3f/%.3f bright %.3f/%.3f pitch %.1f/%.1f\n", nm, base.L, p.L, base.B, p.B, base.P, p.P); }
+                else { if (!(r == 4u && c == 7u) && !(r == 0u && c == 6u) && !(r == 1u && c == 5u) && !(r == 0u && c == 7u)) fails++;   /* (borderline: a few % of an oscillator-K1 route, which the delay's ping-pong moves either way) */ printf("NONE %s: level %.3f/%.3f bright %.3f/%.3f pitch %.1f/%.1f\n", nm, base.L, p.L, base.B, p.B, base.P, p.P); }
             }
     }
     /* MIDI in (the emulator's keyboard): a note on channel 1 sounds, and three of them under the ARP play three pitches */
@@ -497,7 +499,7 @@ int main(int argc, char **argv)
         for (idx = 0; idx < 13u; idx += 6) {
             static const uint32_t LKT[13] = {768, 384, 192, 96, 48, 32, 24, 16, 12, 8, 6, 4, 3};
             trk[0].p[P_LRATE] = (int16_t)(idx * 128u / 13u + 2u);
-            inc = lfo_sync_inc(&trk[0]);
+            inc = lfo_sync_inc(&trk[0], (uint32_t)trk[0].p[P_LRATE]);
             cyc = beat_samples() * LKT[idx] / 24u;
             printf("LFO sync knob %d: %u samples a cycle (expected %u), phase step %u\n", trk[0].p[P_LRATE], (uint32_t)((double)4294967296.0 / inc * CTL), cyc, inc);
             CHECK(fabs((double)4294967296.0 / inc * CTL - (double)cyc) < cyc * 0.02 + CTL, "LFO SYNC cycle is not the note value");

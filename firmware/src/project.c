@@ -63,7 +63,7 @@
  * 68 + 4 x (104 + 2 + 576) + chain + motion = 3268; the patches at PROJ_FM6_OFF (3312): 44 spare, room for 11 more
  * track parameters. 1.5 took seven of them (no format change, FUN10 as it was): the INSERT (P_ITYPE .. P_IMIX, 96..100),
  * ANALOG's filter TYPE (P_FTYPE, 101) and ENV SYNC (P_ESYNC, 102), before the engine values (P_COUNT 111, P_E0 103; 16
- * spare, room for 4). 1.12's MODE (P_SMODE, 103) took one more (P_COUNT 112, P_E0 104; a byte a track: 12 spare, room for 3). A FUN10 of
+ * spare, room for 4). 1.12's MODE (P_SMODE, 103) took one more (P_COUNT 112, P_E0 104; a byte a track: 12 spare, room for 3). Nano 2.5.66's LFO 2 lives in P_SLDEPTH, P_SLPAT and P_LN7 (a NANO track does not use them): 9 bytes are spare, room for 2 more, not 3.
  * 1.2 .. 1.4 (104) loads by count: the INSERT OFF, TYPE LP, ENV SYNC OFF (as they
  * played), its engine values and their motion moved up by seven.
  * Firmware 1.2 .. 1.4 refuses a FUN10 of more parameters than its own (np > P_COUNT): a 1.5 project shows EMPTY there. FUN9 / FUN8 / FUN7 load as before (their 64 records of 4 bytes read by proj_motion_v9, every

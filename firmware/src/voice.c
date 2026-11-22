@@ -64,14 +64,14 @@ static uint32_t lfo_rate_inc(const track_t *t)         /* RATE's step: the table
 {
     return ENGINES[t->engine] == &ENG_NANO ? NANO_LFO_INC[t->p[P_LRATE] & 127] : LFO_INC[t->p[P_LRATE] & 127];
 }
-static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t)   /* (not inlined: its divides stay out of
+static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t, uint32_t rate)   /* (not inlined: its divides stay out of
                                                                            * the audio ISR's loop over the tracks) */
 {
     uint32_t cyc, q, r;
     if (ENGINES[t->engine] == &ENG_NANO) {              /* Nano Freak: SYNC on, the RATE knob picks the note value (the test bed's DIV_BEATS), 8 bars .. 1/32,
                                                          * in 1/24 beats; the matrix's moves of RATE do not count */
         static const uint16_t LK[13] = {768, 384, 192, 96, 48, 32, 24, 16, 12, 8, 6, 4, 3};
-        cyc = beat_samples() * LK[(uint32_t)clamp(t->p[P_LRATE] * 13 >> 7, 0, 12)] / 24u;
+        cyc = beat_samples() * LK[(uint32_t)clamp((int32_t)rate * 13 >> 7, 0, 12)] / 24u;
     } else {
         cyc = div_samples(LSYNC_DIV[(uint32_t)t->p[P_LSYNC] % NELEM(LSYNC_DIV)]);
     }
@@ -81,6 +81,47 @@ static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t)   /* (n
     return q * CTL + (r * CTL + CTL) / cyc;
 }
 
+
+/* LFO 2 (Nano 2.5.66): a second per-part LFO, a matrix source (mod.c MS_LFO2). RATE P_L2RATE (SYNC: a note value, as LFO 1's),
+ * SHAPE + SYNC (core.h L2_*), MORPH into the next shape. Bipolar, free running; its own S&H generator. Touches only its
+ * own part's state, so it runs in track_render on either core */
+static int32_t lfo2_sh(const track_t *t) { return t->lfo2_rnd ? (int32_t)(t->lfo2_rnd >> 16) - 32768 : 0; }
+static int32_t lfo2_wave1(const track_t *t, uint32_t ph, int32_t w)
+{
+    switch (w) {
+    case 5:
+        return (int32_t)t->lfo2_prev + (((lfo2_sh(t) - (int32_t)t->lfo2_prev) * (int32_t)(ph >> 17)) >> 15);
+    case 1:
+        return osc_tri(ph + 0x40000000u);
+    case 2:
+        return (int32_t)(ph >> 16) - 32768;
+    case 3:
+        return ph < 0x80000000u ? 32767 : -32767;
+    case 4:
+        return lfo2_sh(t);
+    default:
+        return osc_sine(ph);
+    }
+}
+static void track_lfo2_tick(track_t *t)
+{
+    uint32_t old = t->lfo2_ph, w = L2_SHAPE(t), m = L2_MORPH(t);
+    int32_t y;
+    t->lfo2_ph += L2_SYNC(t) ? lfo_sync_inc(t, (uint32_t)t->p[P_L2RATE]) : NANO_LFO_INC[(uint32_t)t->p[P_L2RATE] & 127u];
+    if (t->lfo2_ph < old) {                             /* a cycle ends: the next S&H value */
+        uint32_t s = t->lfo2_rnd ? t->lfo2_rnd : 0x9E3779B9u;
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        t->lfo2_prev = (int16_t)lfo2_sh(t);
+        t->lfo2_rnd = s;
+    }
+    y = lfo2_wave1(t, t->lfo2_ph, (int32_t)w);
+    if (m)
+        y += (lfo2_wave1(t, t->lfo2_ph, w == 5u ? 0 : (int32_t)w + 1) - y) * (int32_t)m / 127;
+    t->lfo2_val = y;
+}
+
 #if FELUCCA_CPU2
 /* the LFO's block, in two: its phase on the part's own core, in track_render (at the RATE the matrix may have moved,
  * mod.c), and the rest after the parts (fx.c mix_block, part by part as before: lfo_rand's shared generator is drawn
@@ -88,7 +129,7 @@ static __attribute__((noinline)) uint32_t lfo_sync_inc(const track_t *t)   /* (n
 static void track_lfo_adv(track_t *t)
 {
     uint32_t old = t->lfo_ph;
-    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t) : lfo_rate_inc(t);
+    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t, (uint32_t)t->p[P_LRATE]) : lfo_rate_inc(t);
     t->lfo_wrap = t->lfo_ph < old;
 }
 static void track_lfo_end(track_t *t)
@@ -115,7 +156,7 @@ static void track_lfo_tick(track_t *t)                  /* (both at once: the te
 static void track_lfo_tick(track_t *t)                  /* (one core: the whole block in track_render, as up to 1.6) */
 {
     uint32_t old = t->lfo_ph;
-    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t) : lfo_rate_inc(t);
+    t->lfo_ph += t->p[P_LSYNC] ? lfo_sync_inc(t, (uint32_t)t->p[P_LRATE]) : lfo_rate_inc(t);
     if (t->lfo_ph < old) {
         t->lfo_prev = (int16_t)mod_sh(t);               /* mod.c SLEW: it glides on from there */
         t->lfo_rnd = lfo_rand(t);
@@ -873,6 +914,8 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
             pe_new[i] = t->p[P_E0 + i];
             t->p[P_E0 + i] = t->pe_old[i];
         }
+    if (e == &ENG_NANO)
+        track_lfo2_tick(t);
 #if FELUCCA_CPU2
     track_lfo_adv(t);                                   /* (the rest of its block after the parts: fx.c mix_block) */
 #else

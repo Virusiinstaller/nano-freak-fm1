@@ -1446,3 +1446,9 @@ The highlighted step on the SEQ pages now follows the playing step every screen 
 ## 2.5.65 — strip mode key
 
 F5 (bottom row, second from the right, left of the +/- keys) is the only key that cycles BEND / IMPRESS / CHANCE, and only while no panel button (FX included) is held. The FX button and its pages never change the strip mode. No protocol change.
+
+## 2.5.66 — LFO 2
+
+- A second LFO per part. It is stored in three common parameters a NANO track does not use, so `P_COUNT`, `P_E0` and the project format are unchanged: `P_SLDEPTH` (RATE, 0..127), `P_SLPAT` (SHAPE 0..5 and SYNC: 1 + shape + 6 x sync) and `P_LN7` (127 - MORPH). The slicer stays OFF (`P_SLCR` is never touched). A sound saved before 2.5.66 holds the old defaults in them until it is loaded: its LFO 2 then reads RATE 100 %, SINE, FREE, MORPH 0.
+- New matrix source `MS_LFO2` (12, appended after `MS_CYC`): bipolar, free running, no FADE or DEPTH.
+- Nano screens: LFO has four pages: LFO 1, LFO 1 DEST A1-A4, LFO 2, LFO 2 DEST A1-A4 (both DEST pages edit the same four ASSIGN destinations). The matrix grid has five rows: CYC ENV, ENV, LFO, LFO 2, KEY (KEY moved from row 3 to row 4); `UI_MX` holds 5 x 8 amounts (32..71).

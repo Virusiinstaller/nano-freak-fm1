@@ -288,10 +288,10 @@ int main(int argc, char **argv)
         na_set(NI_MXROW, 1); na_set(NI_MXCOL, 0); na_set(NI_MXAMT, -30);
         CHECK(t->p[P_M1SRC + 3] == MS_ENV && t->p[P_M1DST + 3] == MD_PITCH && t->p[P_M1AMT + 3] == -19, "ENV > PITCH -30%% is slot 2");
         na_set(NI_MXROW, 0); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 20);
-        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
+        na_set(NI_MXROW, 4); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 20);
         na_set(NI_MXROW, 2); na_set(NI_MXCOL, 1); na_set(NI_MXAMT, 40);
         CHECK(na_get(NI_MXAMT) == 0, "the fifth route is refused");
-        na_set(NI_MXROW, 3); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 0);
+        na_set(NI_MXROW, 4); na_set(NI_MXCOL, 2); na_set(NI_MXAMT, 0);
         CHECK(t->p[P_M1SRC + 9] == 0, "an amount of 0 frees the slot");
         na_set(NI_MXROW, 2); na_set(NI_MXCOL, 4); na_set(NI_MXAMT, 25);   /* LFO > ASSIGN 1 (RESONANCE) */
         CHECK(t->p[P_M1DST + 9] == MD_E1 + 6, "ASSIGN 1 is RESONANCE by default");
@@ -313,9 +313,9 @@ int main(int argc, char **argv)
         }
         /* the LFO group's page 2: the same four ASSIGN columns on K1..K4, named on the page */
         {
-            int32_t before = na_get(NI_AS2);
-            npress(B_HOME); npress(B_LFO);
-            CHECK(na_cursub() == 0u && nf_ui_get(UI_NSUB) == 2, "LFO has two pages (%d)", nf_ui_get(UI_NSUB));
+            int32_t before = na_get(NI_AS2), lr0, rp0, fold0;
+            npress(B_HOME); npress(B_LFO); draw();
+            CHECK(na_cursub() == 0u && nf_ui_get(UI_NSUB) == 4, "LFO has four pages (%d)", nf_ui_get(UI_NSUB));
             nturn(EN_SELECT, 1);
             CHECK(na_grp == NG_LFO && na_cursub() == 1u, "SELECT opens the LFO's page 2");
             nturn(EN_K2, 1);
@@ -324,8 +324,38 @@ int main(int argc, char **argv)
             CHECK(nf_ui_str(UIS_V1)[0] != 0 && nf_ui_str(UIS_L1)[0] == 'A', "the page names A2 and its destination ('%s' '%s')", nf_ui_str(UIS_L1), nf_ui_str(UIS_V1));
             draw();
             dump(dir, n++);
-            nturn(EN_SELECT, -1);
+            nturn(EN_SELECT, 1);
+            CHECK(na_cursub() == 2u, "SELECT opens LFO 2's page");
+            lr0 = na_get(NI_LRATE); rp0 = na_get(NI_RVBPRE); fold0 = trk[song.sel].p[P_LN6];
+            nturn(EN_K2, 5);
+            CHECK(trk[song.sel].p[P_L2RATE] != 64 && na_get(NI_L2RATE) > 0, "K2 on LFO 2 sets its rate (%d)", trk[song.sel].p[P_L2RATE]);
+            nturn(EN_K1, 2); nturn(EN_K3, 1); nturn(EN_K4, 3);
+            na_sync(); draw();
+            CHECK(nf_ui_get(UI_P) == na_get(NI_L2SHAPE) && nf_ui_get(UI_P + 1) == na_get(NI_L2RATE) && nf_ui_get(UI_P + 2) == na_get(NI_L2SYNC) && nf_ui_get(UI_P + 3) == na_get(NI_L2MORPH), "the page shows LFO 2's four values");
+            CHECK(na_get(NI_L2SYNC) == 1 && na_get(NI_L2SHAPE) > 0 && na_get(NI_L2MORPH) > 0, "LFO 2 K1 shape, K3 sync, K4 morph (%d %d %d)", na_get(NI_L2SHAPE), na_get(NI_L2SYNC), na_get(NI_L2MORPH));
+            CHECK(na_get(NI_LSYNC) == 0 && na_get(NI_LRATE) == lr0, "LFO 1 is untouched by LFO 2's pages");
+            CHECK(na_get(NI_RVBPRE) == rp0 && trk[song.sel].p[P_LN6] == fold0 && trk[song.sel].p[P_SLCR] == 0, "LFO 2 stores its values over the reverb PRE-DELAY, the Strings FOLD or the slicer");
+            dump(dir, n++);
+            nturn(EN_SELECT, 1);
+            CHECK(na_cursub() == 3u, "SELECT opens LFO 2's DEST page");
+            before = na_get(NI_AS3);
+            nturn(EN_K3, 1);
+            CHECK(na_get(NI_AS3) != before, "K3 on LFO 2's DEST page changes ASSIGN 3");
+            draw();
+            dump(dir, n++);
+            nturn(EN_SELECT, -1); nturn(EN_SELECT, -1); nturn(EN_SELECT, -1);
             CHECK(na_cursub() == 0u, "SELECT back to the LFO page");
+            na_set(NI_AS3, 7);
+        }
+        /* the matrix's LFO 2 row (row 3) is a slot with source LFO2 */
+        {
+            track_t *t = TSEL;
+            na_set(NI_MXROW, 3); na_set(NI_MXCOL, 3); na_set(NI_MXAMT, 50);
+            CHECK(t->p[P_M1SRC] == MS_LFO2 || t->p[P_M2SRC] == MS_LFO2 || t->p[P_M3SRC] == MS_LFO2 || t->p[P_M4SRC] == MS_LFO2, "LFO 2 > CUTOFF has no slot with the LFO2 source");
+            CHECK(na_get(NI_MXAMT) == 50 && na_get(NI_MXROW) == 3, "the LFO 2 row reads back");
+            na_grp = NG_MATRIX; na_sub[NG_MATRIX] = 0; na_dirty = 1; na_sync();
+            CHECK(nf_ui_get(UI_MX + 3 * 8 + 3) == 50 && nf_ui_get(UI_MX + 4 * 8 + 3) == 0, "the painter's grid has LFO 2 on row 3 and KEY on row 4");
+            na_set(NI_MXAMT, 0);
         }
         nturn(EN_SELECT, 1);
         draw();

@@ -20,8 +20,8 @@
  * One number for the FM-1 and the SMK-37 builds: one release carries the four packages. */
 #define FMINI_VER_MAJ 2u
 #define FMINI_VER_MIN 5u
-#define FMINI_VER_PATCH 65u
-#define FMINI_VERSION "v2.5.65"
+#define FMINI_VER_PATCH 66u
+#define FMINI_VERSION "v2.5.66"
 extern volatile uint8_t fm_vel_sens;   /* seq.c: the preset's VELOCITY SENS. (2.5.5): 0 OFF, the sound at 127 whatever the
                                          * velocity (MIDI OUT keeps it); 1 ON, the velocity is the loudness (FMini-1) */
 extern volatile uint8_t fm_bend_mode;   /* seq.c: the PITCH BEND range of the preset, 0 +-2, 1 +-12, 2 +2 -12, 3 +2 -24 (FMini-1) */
@@ -328,6 +328,9 @@ typedef struct track {
     int32_t lfo_fade;            /* Q15 ramp after note-on */
     uint32_t lfo_rnd;
     int16_t lfo_prev;            /* the S&H value of the cycle before (mod.c SLEW glides from it to lfo_rnd's) */
+    uint32_t lfo2_ph, lfo2_rnd;  /* LFO 2 (NANO): phase and S&H draw (its own generator: the shared one stays as it was) */
+    int32_t lfo2_val;            /* Q15, bipolar */
+    int16_t lfo2_prev;
     /* keyboard / arp input: held notes in press order */
     uint8_t held[16];
     uint8_t nheld;
@@ -383,7 +386,7 @@ typedef struct track {
     int8_t seq_dir;              /* the way the SEQ's order goes: +1 up, -1 down (PING; seq.c seq_next_in) */
 #else
     int8_t seq_dir;              /* the way the SEQ's order goes: +1 up, -1 down (PING; seq.c seq_next_in) */
-    uint8_t rsv_sz[13];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[11];          /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
@@ -405,6 +408,19 @@ typedef struct track {
     uint16_t cyc_hold;
     uint8_t cyc_st, cyc_trig, arp_vel, nano_ch, rsv_nano[2];
 } track_t;
+
+/* Nano 2.5.66: LFO 2 is kept in three common parameters a NANO track does not use (the project format has no room for a new one;
+ * the SLICER stays OFF, P_SLCR is never touched): RATE in P_SLDEPTH (0..127), SHAPE 0..5 + SYNC in P_SLPAT (1 + shape + 6 x sync,
+ * 1..12: its range 1..16), MORPH in P_LN7 as 127 - MORPH (a sound written before has the DRUM default 127: MORPH 0). nano_track_loaded
+ * gives them their values on a load */
+#define P_L2RATE P_SLDEPTH
+#define P_L2WAVE P_SLPAT
+#define P_L2MORPH P_LN7
+#define L2_SHAPE(t) ((uint32_t)((t)->p[P_L2WAVE] - 1) % 6u)
+#define L2_SYNC(t) (((uint32_t)((t)->p[P_L2WAVE] - 1) / 6u) & 1u)
+#define L2_MORPH(t) ((uint32_t)(127 - (t)->p[P_L2MORPH]) & 127u)
+#define L2_WAVE(shape, sync) ((int16_t)(1 + (shape) + 6 * ((sync) ? 1 : 0)))
+
 /* the audio ISR indexes trk[] with a multiply by a small immediate and a shift while the size is a multiple of 16; 1.5's
  * new track parameters (the INSERT, the filter TYPE, ENV SYNC) and state would make it no multiple (the constant
  * loaded first: +3 % on the ISR's static cost, target_budget.py): one pad, rsv_sz, keeps it */
