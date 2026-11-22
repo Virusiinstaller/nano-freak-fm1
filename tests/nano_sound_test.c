@@ -451,11 +451,7 @@ int main(int argc, char **argv)
         na_set(NI_SQPAT, 1);
         CHECK(trk[0].p[P_FM2_DEC] == 40, "B lost its Random position");
         na_set(NI_SQPAT, 0);
-        na_set(NI_SM2, 1); na_set(NI_SM4, 1);
-        CHECK(na_get(NI_SM1) == 0 && na_get(NI_SM2) == 1 && na_get(NI_SM3) == 0 && na_get(NI_SM4) == 1, "MOD SMOOTH toggles");
-        na_set(NI_SM2, 0);
-        CHECK(na_get(NI_SM2) == 0 && na_get(NI_SM4) == 1, "MOD SMOOTH toggle off");
-        printf("A/B and MOD SMOOTH ok (A %u..)\n", a0);
+        printf("A/B ok (A %u..)\n", a0);
     }
 
     /* CYC ENV -> AMP (the matrix's A3): a looping cycling envelope at 100 % makes the loudness pump */

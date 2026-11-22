@@ -30,7 +30,7 @@ enum {
     NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK, NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY, NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO, NI_MINCH,   /* GLOBAL: (with the six below and NI_BENDRNG, these are na_g[]) */
     NI_BDEV, NI_BACT, NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO, NI_BENDRNG,
     NI_SSLOT, NI_PCUR, NI_PCHR,
-    NI_BENDSPD, NI_AMPMOD, NI_SM1, NI_SM2, NI_SM3, NI_SM4, NI_CDEST, NI_CDEPTH, NI_LSYNC, NI_FOLD2,
+    NI_BENDSPD, NI_AMPMOD, NI_CDEST, NI_CDEPTH, NI_LSYNC, NI_FOLD2,
     NI_FMODEL,
     NI_L2SHAPE, NI_L2RATE, NI_L2SYNC, NI_L2MORPH,                  /* LFO 2 (2.5.66) */
     NI_COUNT
@@ -89,7 +89,7 @@ static const nk_t NK[NI_COUNT] = {
     [NI_GBT] = {"BLUETOOTH", 2, NT_ONOFF}, [NI_GBTA] = {"BT AUDIO", 2, NT_ONOFF}, [NI_GROLE] = {"BLE ROLE", 2, NT_ROLE}, [NI_GCLK] = {"CLOCK", 2, NT_CLK},
     [NI_MMODE] = {"ARP OUT", 3, NT_MMODE}, [NI_MCH] = {"OUT CH", 16, 0}, [NI_MPORT] = {"OUT PORT", 8, NT_PORT}, [NI_MKEY] = {"KEY OUT", 2, NT_ONOFF},
     [NI_MLOCAL] = {"LOCAL", 2, NT_ONOFF}, [NI_MCLKO] = {"CLOCK OUT", 2, NT_ONOFF}, [NI_MTHI] = {"THRU IN", 3, NT_THRU}, [NI_MTHO] = {"THRU OUT", 8, NT_PORT},
-    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BENDRNG] = {"RANGE", 25, 0}, [NI_BENDSPD] = {"SPEED", 0, 0}, [NI_AMPMOD] = {"AMP ENV", 2, NT_AMPENV}, [NI_FOLD2] = {"FOLD", 0, 0}, [NI_LSYNC] = {"SYNC", 2, NT_OFFON}, [NI_CDEST] = {"DEST", 8, NT_CDEST}, [NI_CDEPTH] = {"DEPTH", 0, 0}, [NI_SM1] = {"M1", 2, NT_OFFON}, [NI_SM2] = {"M2", 2, NT_OFFON}, [NI_SM3] = {"M3", 2, NT_OFFON}, [NI_SM4] = {"M4", 2, NT_OFFON}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
+    [NI_MINCH] = {"IN CH", 16, 0}, [NI_BENDRNG] = {"RANGE", 25, 0}, [NI_BENDSPD] = {"SPEED", 0, 0}, [NI_AMPMOD] = {"AMP ENV", 2, NT_AMPENV}, [NI_FOLD2] = {"FOLD", 0, 0}, [NI_LSYNC] = {"SYNC", 2, NT_OFFON}, [NI_CDEST] = {"DEST", 8, NT_CDEST}, [NI_CDEPTH] = {"DEPTH", 0, 0}, [NI_BDEV] = {"DEVICE", 8, 0}, [NI_BACT] = {"ACTION", 4, NT_BACT}, [NI_SUPATCH] = {"POWER-ON", 18, 0},
     [NI_SUBOOT] = {"BOOT SCR", 2, NT_ONOFF}, [NI_SUPAGE] = {"START PG", 2, NT_SUPAGE}, [NI_SURADIO] = {"RADIO", 2, NT_SURAD},
     [NI_SSLOT] = {"SAVE TO", 16, 0}, [NI_PCUR] = {"CURSOR", 10, 0}, [NI_PCHR] = {"LETTER", 38, 0},
 };
@@ -122,8 +122,7 @@ static const nsub_t NS_ARP[] = {{"ARPEGGIO", 0, {NI_ARPRATE, NI_ARPRANGE, NI_ARP
                                 {"ARP TYPE", 2, {NI_ARPTYPE, NI_ARPCHORD, NI_NONE, NI_NONE}}};
 static const nsub_t NS_MX[] = {{"MATRIX", 0, {NI_MXCOL, NI_MXROW, NI_MXON, NI_MXAMT}}, {"ASSIGN", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};
 static const nsub_t NS_SEQ[] = {{"SEQUENCE", 0, {NI_ARPRATE, NI_SQPAT, NI_SQRND, NI_SQMUT}}, {"SEQ LENGTH", 1, {NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING}},
-                                {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}},
-                                {"MOD SMOOTH", 4, {NI_SM1, NI_SM2, NI_SM3, NI_SM4}}};
+                                {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}}};
 static const nsub_t NS_PRE[] = {{"BROWSE", 0, {NI_PBANK, NI_PSLOT, NI_NONE, NI_NONE}}, {"SAVE", 1, {NI_SSLOT, NI_PCUR, NI_PCHR, NI_NONE}}};
 static const nsub_t NS_GLO[] = {{"BLUETOOTH", 0, {NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK}}, {"MIDI OUT", 1, {NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY}},
                                 {"MIDI ROUTING", 2, {NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO}}, {"MIDI IN", 3, {NI_MINCH, NI_GCLK, NI_NONE, NI_NONE}},
@@ -417,7 +416,6 @@ static int32_t na_get(int32_t id)
     case NI_DLYFB: return na_cl(song.g[G_DFDBK], 0, 120) * 100 / 120;
     case NI_BENDRNG: return GI(NI_BENDRNG) ^ 12;               /* semitones 0..24 (stored xor 12: a settings record without it reads as 12) */
     case NI_BENDSPD: return na_f100(p[P_FM3_SUS]);
-    case NI_SM1: case NI_SM2: case NI_SM3: case NI_SM4: return (p[P_FM3_REL] >> (id - NI_SM1)) & 1;   /* the four mod tracks' smoothing (4 bits of P_FM3_REL) */
     case NI_FOLD2: return na_f100(p[P_LN6]);
     case NI_LSYNC: return p[P_LSYNC] ? 1 : 0;
     case NI_CDEST: return na_cl(p[P_FM4_SUS], 0, 7);
@@ -515,7 +513,6 @@ static void na_set(int32_t id, int32_t v)
     case NI_DLYFB: song.g[G_DFDBK] = (int16_t)(v * 120 / 100); break;
     case NI_BENDRNG: GI(NI_BENDRNG) = (uint8_t)(v ^ 12); na_g_save(); break;
     case NI_BENDSPD: na_put(P_FM3_SUS, na_f127(v)); break;
-    case NI_SM1: case NI_SM2: case NI_SM3: case NI_SM4: na_put(P_FM3_REL, (t->p[P_FM3_REL] & ~(1 << (id - NI_SM1))) | (v << (id - NI_SM1))); break;
     case NI_FOLD2: na_put(P_LN6, na_f127(v)); break;
     case NI_LSYNC: na_put(P_LSYNC, v ? 1 : 0); break;
     case NI_CDEST: na_put(P_FM4_SUS, v); na_cyc_route(); break;
@@ -1101,7 +1098,6 @@ static void na_sync(void)
         nf_ui_set(UI_P + 12, na_get(NI_SQOCT) + 1), nf_ui_set(UI_P + 13, na_get(NI_SQMUT));
         for (k = 0; k < NSTEP; k++)
             nf_ui_set(UI_SEQ + (int)k, (int)(nano_sq_note(&t->step[k]) | (uint32_t)(t->step[k].acc & 3u) << 8));
-        nf_ui_set(UI_P + 4, na_get(NI_SM1)), nf_ui_set(UI_P + 5, na_get(NI_SM2)), nf_ui_set(UI_P + 6, na_get(NI_SM3)), nf_ui_set(UI_P + 7, na_get(NI_SM4));
         nf_ui_set(UI_SEQCUR, na_cur), nf_ui_set(UI_SEQREC, na_rec);
         nf_ui_set(UI_STEP, song.playing && na_seqmode ? (int)(t->seq_idx % (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP)) : -1);
         break;

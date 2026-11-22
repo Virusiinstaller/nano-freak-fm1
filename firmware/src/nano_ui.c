@@ -648,18 +648,6 @@ static void g_seqedit(uint16_t acc) {                      /* one step: its numb
   text_r(PX + PW - 4, PY + PH - 11, seq_len_name[d], 1, C_DIM);
 }
 
-static void g_smooth(uint16_t acc) {
-  panel_frame("MOD TRACK SMOOTHING", acc);
-  for (int i = 0; i < 4; ++i) {
-    int x = PX + 10 + i * 54, on = v[UI_P + 4 + i];
-    char t[4] = { 'M', (char)('1' + i), 0 };
-    nf_gfx_fill(x, PY + 28, 48, 34, on ? acc : C_DARK);
-    nf_gfx_rect(x, PY + 28, 48, 34, on ? acc : C_LINE);
-    text_c(x + 24, PY + 34, t, 1, on ? C_DARK : C_DIM);
-    text_c(x + 24, PY + 47, on ? "ON" : "OFF", 1, on ? C_DARK : C_DIM);
-  }
-}
-
 /* ------------------------------------------------------------------ screen -- */
 
 static void cards(uint16_t acc) {
@@ -719,7 +707,7 @@ void nf_ui_paint_band(uint16_t *band, int y0, int rows) {
       case 7: g_voice(acc); break;
       case 8: if (sub == 0) g_radio(acc); else if (sub <= 3) g_midi(acc); else g_list(sub == 4 ? "BLE DEVICES" : "START-UP", acc); break;
       case 9: g_list(sub == 0 ? "PRESETS" : "SAVE PRESET", acc); break;
-      default: if (sub == 0) g_seq(acc); else if (sub == 1) g_seqlen(acc); else if (sub == 2) g_seqedit(acc); else if (sub == 3) g_seqrand(acc); else g_smooth(acc); break;
+      default: if (sub == 0) g_seq(acc); else if (sub == 1) g_seqlen(acc); else if (sub == 2) g_seqedit(acc); else g_seqrand(acc); break;
     }
   }
 

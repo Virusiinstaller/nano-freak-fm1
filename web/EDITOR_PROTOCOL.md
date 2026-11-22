@@ -1452,3 +1452,7 @@ F5 (bottom row, second from the right, left of the +/- keys) is the only key tha
 - A second LFO per part. It is stored in three common parameters a NANO track does not use, so `P_COUNT`, `P_E0` and the project format are unchanged: `P_SLDEPTH` (RATE, 0..127), `P_SLPAT` (SHAPE 0..5 and SYNC: 1 + shape + 6 x sync) and `P_LN7` (127 - MORPH). The slicer stays OFF (`P_SLCR` is never touched). A sound saved before 2.5.66 holds the old defaults in them until it is loaded: its LFO 2 then reads RATE 100 %, SINE, FREE, MORPH 0.
 - New matrix source `MS_LFO2` (12, appended after `MS_CYC`): bipolar, free running, no FADE or DEPTH.
 - Nano screens: LFO has four pages: LFO 1, LFO 1 DEST A1-A4, LFO 2, LFO 2 DEST A1-A4 (both DEST pages edit the same four ASSIGN destinations). The matrix grid has five rows: CYC ENV, ENV, LFO, LFO 2, KEY (KEY moved from row 3 to row 4); `UI_MX` holds 5 x 8 amounts (32..71).
+
+## 2.5.67 — MOD SMOOTH removed
+
+The SEQ group's MOD SMOOTH page (four toggles, bits 0..3 of `P_FM3_REL`) is gone: it never had a sound effect. `P_FM3_REL` is unused again; sounds that stored bits there play as before.
