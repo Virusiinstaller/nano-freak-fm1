@@ -468,5 +468,27 @@ int main(int argc, char **argv)
         nano_strip_key(24, 1); nano_strip_key(24, 0);
         CHECK(na_strip_mode == 0, "F5 did not go CHANCE -> BEND");
     }
+    {   /* the CCs nano_ctl.c's table leaves reach their controls (2.5.71) */
+        static const struct { uint8_t cc, id, v; int32_t want; } C[] = {
+            {22, NI_CDEST, 127, 7}, {25, NI_CDEPTH, 127, 100}, {27, NI_AMPMOD, 0, 0}, {27, NI_AMPMOD, 127, 1}, {69, NI_GLMODE, 127, 2},
+            {70, NI_BENDRNG, 127, 24}, {85, NI_SQRND, 127, 99}, {88, NI_SQOCT, 127, 2}, {111, NI_DLYTIME, 127, 100}, {117, NI_DLYFB, 0, 0},
+            {95, NI_RVBSIZE, 127, 100}, {96, NI_RVBDAMP, 0, 0}, {98, NI_AS1, 127, 13}, {112, NI_GBT, 127, 1}, {115, NI_GCLK, 127, 1},
+            {107, NI_MXROW, 127, 4}, {108, NI_MXCOL, 127, 7} };
+        unsigned k;
+        for (k = 0; k < sizeof C / sizeof C[0]; k++) {
+            fm_cc_rx[C[k].cc] = C[k].v; fm_cc_pend[C[k].cc >> 5] |= 1u << (C[k].cc & 31u);
+            na_cc_apply();
+            CHECK(na_get(C[k].id) == C[k].want, "CC %u: control %u is %d, want %d", C[k].cc, C[k].id, (int)na_get(C[k].id), (int)C[k].want);
+        }
+        fm_cc_rx[68] = 127; fm_cc_pend[2] |= 1u << 4; na_cc_apply();
+        CHECK(song.octave == 3, "CC 68 octave %d", song.octave);
+        fm_cc_rx[68] = 0; fm_cc_pend[2] |= 1u << 4; na_cc_apply();
+        CHECK(song.octave == -3, "CC 68 octave low %d", song.octave);
+        fm_cc_rx[89] = 127; fm_cc_pend[2] |= 1u << 25; na_cc_apply();
+        CHECK(na_rec == 1, "CC 89 REC");
+        fm_cc_rx[89] = 0; fm_cc_pend[2] |= 1u << 25; na_cc_apply();
+        CHECK(na_rec == 0, "CC 89 REC off");
+        CHECK(fm_cc_pend[0] == 0 && fm_cc_pend[2] == 0, "pending flags not consumed");
+    }
     return fails ? 1 : 0;
 }

@@ -1522,6 +1522,68 @@ static void na_strip_ui(void)
 #endif
 }
 
+/* MIDI CCs the control tables carry but nano_ctl.c's table does not: midi_control.c notes the last value in fm_cc_rx[] and a bit in
+ * fm_cc_pend[]; this applies them on the main loop through na_set (the same path as a knob). Not here: 78 and 92 (arp sync: the
+ * firmware has no arp sync), they stay unhandled. cc 68 octave, 89 REC, 104 matrix amount (64 = 0) are special; the rest spread 0..127
+ * over the control's n steps (n 0 = percent). */
+static const struct { uint8_t cc, id; } NA_CC[] = {
+    {22, NI_CDEST}, {25, NI_CDEPTH}, {27, NI_AMPMOD}, {69, NI_GLMODE}, {70, NI_BENDRNG}, {80, NI_SQPAT}, {84, NI_SQENT},
+    {85, NI_SQRND}, {86, NI_SQSCALE}, {87, NI_SQRESTS}, {88, NI_SQOCT}, {116, NI_SQMUT}, {111, NI_DLYTIME}, {117, NI_DLYFB},
+    {118, NI_DLYTONE}, {95, NI_RVBSIZE}, {96, NI_RVBDAMP}, {98, NI_AS1}, {99, NI_AS2}, {100, NI_AS3}, {101, NI_AS4},
+    {104, NI_MXAMT}, {107, NI_MXROW}, {108, NI_MXCOL}, {109, NI_MXON}, {112, NI_GBT}, {113, NI_GBTA}, {114, NI_GROLE}, {115, NI_GCLK},
+    {68, NI_COUNT}, {89, NI_COUNT + 1},
+};
+static void na_cc_one(uint32_t i, int32_t cc)
+{
+    uint32_t id = NA_CC[i].id, n;
+    int32_t v;
+    if (id == NI_COUNT) {                                     /* octave -3..+3 */
+        song.octave = (int8_t)((cc * 7) >> 7) - 3;
+        na_dirty = 1;
+        return;
+    }
+    if (id == NI_COUNT + 1u) {                                /* REC, like the button */
+        if ((cc >= 64) != (na_rec != 0u)) {
+            na_rec = (uint8_t)(cc >= 64);
+            if (na_rec && !na_seqmode) {
+                na_seqmode = 1;
+                na_put(P_AMODE, 0);
+                na_grp = NG_SEQ;
+            }
+            na_dirty = 1;
+        }
+        return;
+    }
+    n = NK[id].n;
+    if (id == NI_MXAMT)
+        v = na_cl((cc - 64) * 100 / 64, -100, 100);
+    else if (n == 0u)
+        v = (cc * 100 + 63) / 127;
+    else
+        v = (cc * (int32_t)n) >> 7;
+    na_set((int32_t)id, v);
+    na_dirty = 1;
+}
+static void na_cc_apply(void)
+{
+    uint32_t w, b, pend, i;
+    for (w = 0; w < 4u; w++) {
+        if (!fm_cc_pend[w])
+            continue;
+        fm1_irq_off();
+        pend = fm_cc_pend[w];
+        fm_cc_pend[w] = 0;
+        fm1_irq_on();
+        for (b = 0; b < 32u; b++) {
+            if (!((pend >> b) & 1u))
+                continue;
+            for (i = 0; i < sizeof NA_CC / sizeof NA_CC[0]; i++)
+                if (NA_CC[i].cc == (w << 5) + b)
+                    na_cc_one(i, fm_cc_rx[(w << 5) + b]);
+        }
+    }
+}
+
 static void na_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), k;
@@ -1533,6 +1595,7 @@ static void na_input(void)
     midi_seen = 0;
     fm1_irq_on();
     midi_pc_poll();                                         /* Program Change: a preset */
+    na_cc_apply();                                          /* the CCs nano_ctl.c's table leaves */
     settings_later_poll();
     song.sel = 0;
     na_buttons(pressed);
