@@ -18,7 +18,11 @@
  * sequencer's step 0), BPM and the track's + the global SWING as the sequencer has them (seq.c
  * step_samples); sample exact. With the SLICER OFF and no ramp left, the signal is not touched. */
 #define SL_NPAT 16
+#if FELUCCA_FMINI_ONLY
+#define SL_LEN 256u                     /* the Nano Freak never uses the SLICER or the FX layer (perform.c borrows this buffer): a token size, 2 KB of the pool instead of 32 */
+#else
 #define SL_LEN 4096u                    /* recording, 22.05 kHz samples a track: 186 ms, 8 KB */
+#endif
 #define SL_RAMP_LOG2 7
 #define SL_RAMP (1 << SL_RAMP_LOG2)     /* 128 samples, 2.9 ms */
 #define SL_SLOPE (32768 / SL_RAMP)

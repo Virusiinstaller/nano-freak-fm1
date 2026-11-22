@@ -62,7 +62,7 @@ enum { PF_R8, PF_R16, PF_R32, PF_REV, PF_LPF, PF_HPF, PF_TAPE, PF_FRZ, PF_OUP, P
 #define PB_TAPE 32000u                        /* TAPE STOP takes 1 beat, at most this (it lags a quarter of it) */
 #define PB_FREC 4096u                         /* FREEZE: frames it records (186 ms) */
 #define PB_GRAIN 2048u                        /* .. its two overlapping grains, samples (46 ms) */
-#define HB_MASK 4095u                         /* OCT UP / DN: the delay's frames (of the loop's 8192) */
+#define HB_MASK (PB_FRAMES / 2u - 1u)                         /* OCT UP / DN: the delay's frames (of the loop's 8192) */
 #define HB_BASE 128u                          /* .. the taps' shortest delay, samples; the sweep: 2048 */
 #define HB_FB 269                             /* .. KNOB 4 (0 .. 100) -> the shimmer, Q15: 0 .. 0.82 */
 #define PF_TOP (63 << 8)                      /* filter cutoff index, Q8 (PF_SVF): the LPF's open end */

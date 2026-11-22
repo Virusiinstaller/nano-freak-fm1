@@ -1456,3 +1456,7 @@ F5 (bottom row, second from the right, left of the +/- keys) is the only key tha
 ## 2.5.67 — MOD SMOOTH removed
 
 The SEQ group's MOD SMOOTH page (four toggles, bits 0..3 of `P_FM3_REL`) is gone: it never had a sound effect. `P_FM3_REL` is unused again; sounds that stored bits there play as before.
+
+## 2.5.68 — pool: the SLICER / FX-layer buffer shrunk
+
+The Nano Freak never uses the SLICER or the FX hold layer, which share one 32 KB pool buffer (`sl_buf`). In the product build (`FELUCCA_FMINI_ONLY`) it is now 2 KB (`SL_LEN` 256): 30 KB of the pool freed (headroom about 40 KB). No stored value or protocol change; a SLICER or FX-layer command sent by the editor to a Nano build has no useful effect.
