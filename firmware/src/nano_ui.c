@@ -347,14 +347,13 @@ static void g_widen(uint16_t acc) {                        /* the Haas widener: 
 
 static void g_spice(uint16_t acc) {
   panel_frame("IMPRESS AND CHANCE", acc);
-  const char *name[4] = { "IMP STR", "CH STR", "CH AMT", "IMP AMT" };
+  const char *name[4] = { "IMP STR", "CH STR", "CH AMT", "IMP AMT" };      /* STR: how strong the variation; AMT: how much of it plays on the ARP / SEQ */
   for (int i = 0; i < 4; ++i) {
-    int y = PY + 22 + i * 22, val = clampi(v[UI_P + i], 0, 100);
+    int y = PY + 20 + i * 18, val = clampi(v[UI_P + i], 0, 100);
     nf_gfx_text(PX + 10, y + 3, name[i], 1, i < 2 ? C_TEXT : acc);
-    nf_gfx_rect(PX + 70, y, 140, 14, C_LINE);
-    nf_gfx_fill(PX + 71, y + 1, 138 * val / 100, 12, i < 2 ? acc : C_TEXT);
+    nf_gfx_rect(PX + 70, y, 140, 12, C_LINE);
+    nf_gfx_fill(PX + 71, y + 1, 138 * val / 100, 10, i < 2 ? acc : C_TEXT);
   }
-  text_c(PX + PW / 2, PY + PH - 11, "AMT SETS HOW MUCH PLAYS", 1, C_DIM);
 }
 
 static int lfo_y(int shape, int ph, int cyc) {          /* -100..100 */

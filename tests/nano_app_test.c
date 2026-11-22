@@ -541,5 +541,14 @@ int main(int argc, char **argv)
         CHECK(na_wd[0] == 55 && na_wd[1] == 77 && na_wd[2] == 0 && na_wd[3] == 12, "the widener settings are not in the settings record");
         na_set(NI_WDWID, 0);
     }
+    {   /* the pictures the site and the README show (assets/site): the firmware's own painter */
+        na_mxset(0, 0, 50, 1); na_mxset(2, 2, -40, 1); na_mxset(3, 4, 30, 1); na_mxset(4, 3, 70, 1);
+        na_grp = NG_MATRIX; na_sub[NG_MATRIX] = 0; na_dirty = 1; na_sync(); draw(); dump(dir, 920);
+        na_grp = NG_LFO; na_sub[NG_LFO] = 0; na_dirty = 1; na_sync(); draw(); dump(dir, 921);
+        na_grp = NG_LFO; na_sub[NG_LFO] = 2; na_dirty = 1; na_sync(); draw(); dump(dir, 922);
+        na_grp = NG_FX; na_sub[NG_FX] = 7; na_dirty = 1; na_sync(); draw(); dump(dir, 901);
+        na_mxset(0, 0, 0, 1); na_mxset(2, 2, 0, 1); na_mxset(3, 4, 0, 1); na_mxset(4, 3, 0, 1);
+        na_grp = NG_OSC;
+    }
     return fails ? 1 : 0;
 }
