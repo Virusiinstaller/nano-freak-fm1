@@ -1747,6 +1747,47 @@ static uint32_t mix_split(void)
 }
 #endif
 
+/* the stereo widener (Nano Freak 2.5.73): a Haas delay on the dry stereo mix. The mono sum of the mix is delayed (1..50 ms) and low-passed (TONE), and
+ * replaces WIDTH of one side (L or R). The reverb, delay and chorus come from the sends, after it. WIDTH 0 = bypassed bit for bit. Set from nano_app.c. */
+#define WD_LEN 2304u
+static int16_t wd_buf[WD_LEN] __attribute__((section(".pool")));
+static volatile uint8_t fx_wd_w;                        /* WIDTH 0..128 (0 off) */
+static volatile uint8_t fx_wd_side;                     /* 0: the left side is the delayed one, 1: the right */
+static volatile uint16_t fx_wd_n = 882, fx_wd_k = 2900; /* the delay in samples; the low-pass (Q12) */
+static uint32_t wd_pos;
+static int32_t wd_lp;
+static uint8_t wd_on;
+static void fx_widen(uint32_t n)
+{
+    uint32_t i, dn = fx_wd_n;
+    int32_t w = fx_wd_w, k = fx_wd_k, lp = wd_lp;
+    if (!w) {
+        wd_on = 0;
+        return;
+    }
+    if (!wd_on) {                                       /* (it was off: no old echo) */
+        for (i = 0; i < WD_LEN; i++)
+            wd_buf[i] = 0;
+        wd_pos = 0;
+        lp = 0;
+        wd_on = 1;
+    }
+    dn = dn < 1u ? 1u : dn > WD_LEN - 1u ? WD_LEN - 1u : dn;
+    for (i = 0; i < n; i++) {
+        int32_t l = mix_l[i], r = mix_r[i], d;
+        uint32_t rd = wd_pos >= dn ? wd_pos - dn : wd_pos + WD_LEN - dn;
+        wd_buf[wd_pos] = (int16_t)clamp((l + r) >> 1, -32767, 32767);
+        d = wd_buf[rd];
+        wd_pos = wd_pos + 1u == WD_LEN ? 0u : wd_pos + 1u;
+        lp += ((d - lp) * k) >> 12;
+        if (fx_wd_side)
+            mix_r[i] = (r * (128 - w) + lp * w) >> 7;
+        else
+            mix_l[i] = (l * (128 - w) + lp * w) >> 7;
+    }
+    wd_lp = lp;
+}
+
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
@@ -1782,6 +1823,7 @@ static void mix_block(int32_t *out, uint32_t n)
     for (i = 0; i < NPART; i++)                         /* (one core: as 1.6) */
         mix_part(&trk[i], n);
 #endif
+    fx_widen(n);
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);
     fx_buses(send_c, send_d, send_r, wet, n);

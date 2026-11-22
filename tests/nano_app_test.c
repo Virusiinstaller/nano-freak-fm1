@@ -69,16 +69,16 @@ int main(int argc, char **argv)
                     int32_t id = sp->k[k];
                     uint32_t before = 0, after = 0;
                     if (id == NI_NONE || id == NI_MXON || id == NI_SQPAT) continue;       /* (MXON: a route is needed, tested below) */
-                    before = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt;
+                    before = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt + 17u * na_wd[0] + 19u * na_wd[1] + 23u * na_wd[2] + 29u * na_wd[3];
                     for (i = 0; i < P_COUNT; i++) before = before * 31u + (uint32_t)TSEL->p[i];
                     for (i = 0; i < G_COUNT; i++) before = before * 31u + (uint32_t)song.g[i];
                     nturn(EN_K1 + k, 3);
-                    after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt;
+                    after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt + 17u * na_wd[0] + 19u * na_wd[1] + 23u * na_wd[2] + 29u * na_wd[3];
                     for (i = 0; i < P_COUNT; i++) after = after * 31u + (uint32_t)TSEL->p[i];
                     for (i = 0; i < G_COUNT; i++) after = after * 31u + (uint32_t)song.g[i];
                     if (before == after) {                       /* (at its top: the other way) */
                         nturn(EN_K1 + k, -3);
-                        after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt;
+                        after = stephash() + na_pat + 100u * na_mxc + 1000u * na_mxr + 10000u * na_as[0] + 100000u * na_as[1] + 1000000u * na_as[2] + 10000000u * na_as[3] + 7u * nano_ch_amt + 13u * nano_imp_amt + 17u * na_wd[0] + 19u * na_wd[1] + 23u * na_wd[2] + 29u * na_wd[3];
                         for (i = 0; i < P_COUNT; i++) after = after * 31u + (uint32_t)TSEL->p[i];
                         for (i = 0; i < G_COUNT; i++) after = after * 31u + (uint32_t)song.g[i];
                     }
@@ -456,7 +456,7 @@ int main(int argc, char **argv)
         for (i = 0; i < 8; i++)
             nturn(EN_SELECT, 1);
         CHECK(na_grp == NG_FX, "FX left");
-        na_sub[NG_FX] = 6; na_dirty = 1; draw();
+        na_sub[NG_FX] = 7; na_dirty = 1; draw();
         CHECK(!strcmp(NK[NI_IMPRESS].lb, "IMP STR") && !strcmp(NK[NI_CHANCE].lb, "CH STR") && !strcmp(NK[NI_CHAMT].lb, "CH AMT") && !strcmp(NK[NI_IMPAMT].lb, "IMP AMT"), "knob names");
         CHECK(nf_ui_get(UI_P + 2) == na_get(NI_CHAMT) && nf_ui_get(UI_P + 3) == na_get(NI_IMPAMT), "the page does not show the AMT knobs");
         nturn(EN_K3, -1); nturn(EN_K4, -1);
@@ -488,6 +488,58 @@ int main(int argc, char **argv)
         fm_cc_rx[89] = 0; fm_cc_pend[2] |= 1u << 25; na_cc_apply();
         CHECK(na_rec == 0, "CC 89 REC off");
         CHECK(fm_cc_pend[0] == 0 && fm_cc_pend[2] == 0, "pending flags not consumed");
+    }
+    {   /* the stereo widener (2.5.73): the page, the settings, the flash record, the Haas delay */
+        uint32_t i;
+        int32_t nz = 0, firstr = 0, sumr = 0;
+        uint32_t blk;
+        npress(B_HOME); npress(B_FX);
+        na_sub[NG_FX] = 2; na_dirty = 1; draw();
+        CHECK(!strcmp(NGR[NG_FX].sub[2].name, "WIDENER") && NGR[NG_FX].sub[2].ui == 7, "the WIDENER page is not third in FX");
+        CHECK(!strcmp(NK[NI_WDWID].lb, "WIDTH") && !strcmp(NK[NI_WDSIDE].lb, "SIDE"), "widener knob names");
+        na_set(NI_WDWID, 70); na_set(NI_WDTIME, 40); na_set(NI_WDSIDE, 1); draw();
+        dump(dir, 900);
+        nturn(EN_K1, 40);                                   /* WIDTH up */
+        CHECK(na_get(NI_WDWID) > 0 && fx_wd_w > 0, "K1 WIDTH does not reach the effect");
+        na_set(NI_WDWID, 100); na_set(NI_WDTIME, 100); na_set(NI_WDSIDE, 1); na_set(NI_WDTONE, 0);
+        CHECK(fx_wd_n == 2205 && fx_wd_w == 128 && fx_wd_side == 1 && fx_wd_k == 4096, "50 ms = 2205 samples (%d)", (int)fx_wd_n);
+        na_set(NI_WDTIME, 0);
+        CHECK(fx_wd_n == 44, "1 ms (%d)", (int)fx_wd_n);
+        na_set(NI_WDTIME, 20);                                  /* 1 + 20 x 49 / 100 = 10 ms */
+        CHECK(fx_wd_n == 441, "10 ms (%d)", (int)fx_wd_n);
+        for (i = 0; i < 1500u && i < CTL; i++) { }
+        {
+            int32_t ref[CTL];
+            for (i = 0; i < CTL; i++) mix_l[i] = mix_r[i] = (int32_t)(i * 37u % 2001u) - 1000;
+            for (i = 0; i < CTL; i++) ref[i] = mix_l[i];
+            na_set(NI_WDWID, 0);
+            fx_widen(CTL);
+            for (i = 0; i < CTL; i++) nz += mix_l[i] != ref[i] || mix_r[i] != ref[i];
+            CHECK(nz == 0, "WIDTH 0 changed the mix (%d)", (int)nz);
+            na_set(NI_WDWID, 100); na_set(NI_WDSIDE, 1); na_set(NI_WDTONE, 0);
+            for (i = 0; i < CTL; i++) mix_l[i] = mix_r[i] = i < 8u ? 20000 : 0;     /* a click */
+            wd_on = 0;
+            for (blk = 0; blk < 20u; blk++) {                       /* (a block is CTL = 32 samples) */
+                for (i = 0; i < CTL; i++) mix_l[i] = mix_r[i] = blk == 0u && i < 8u ? 20000 : 0;
+                fx_widen(CTL);
+                for (i = 0; i < CTL; i++) {
+                    uint32_t at = blk * CTL + i;
+                    int32_t r = mix_r[i];
+                    if (at < 441u) sumr += r < 0 ? -r : r;
+                    if (at >= 441u && at < 470u) firstr += r;
+                    nz += mix_l[i] != (blk == 0u && i < 8u ? 20000 : 0);
+                }
+            }
+            CHECK(nz == 0, "the undelayed side changed");
+            CHECK(sumr == 0, "WIDTH 100: the right side is not silent before the delay (%d)", (int)sumr);
+            CHECK(firstr > 1000, "the delayed copy is not on the right at 10 ms (%d)", (int)firstr);
+        }
+        /* the flash record keeps them */
+        na_set(NI_WDWID, 55); na_set(NI_WDTIME, 77); na_set(NI_WDSIDE, 0); na_set(NI_WDTONE, 12);
+        na_wd[0] = na_wd[1] = na_wd[2] = na_wd[3] = 0;
+        na_g_load();
+        CHECK(na_wd[0] == 55 && na_wd[1] == 77 && na_wd[2] == 0 && na_wd[3] == 12, "the widener settings are not in the settings record");
+        na_set(NI_WDWID, 0);
     }
     return fails ? 1 : 0;
 }

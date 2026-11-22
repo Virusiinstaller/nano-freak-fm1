@@ -34,8 +34,10 @@ enum {
     NI_FMODEL,
     NI_L2SHAPE, NI_L2RATE, NI_L2SYNC, NI_L2MORPH,                  /* LFO 2 (2.5.66) */
     NI_CHAMT, NI_IMPAMT,                                           /* CH AMT, IMP AMT (2.5.72) */
+    NI_WDWID, NI_WDTIME, NI_WDSIDE, NI_WDTONE,                     /* the stereo widener (2.5.73): na_wd[] */
     NI_COUNT
 };
+static const char *const NT_WSIDE[] = {"LEFT", "RIGHT"};
 static const char *const NT_FTYPE[] = {"LPF", "BPF", "HPF"};
 static const char *const NT_SLOPE[] = {"12 DB", "24 DB"};
 static const char *const NT_FMODEL[] = {"SVF", "LADDER"};
@@ -73,7 +75,7 @@ static const nk_t NK[NI_COUNT] = {
     [NI_FSLOPE] = {"SLOPE", 2, NT_SLOPE}, [NI_FMODEL] = {"MODEL", 2, NT_FMODEL}, [NI_FDRIVE] = {"DRIVE", 0, 0}, [NI_FCLIP] = {"CLIP", 0, 0},
     [NI_RVBMIX] = {"MIX", 0, 0}, [NI_RVBSIZE] = {"SIZE", 0, 0}, [NI_RVBDAMP] = {"DAMP", 0, 0},
     [NI_RVBPRE] = {"PRE-DELAY", 0, 0}, [NI_DLYTONE] = {"TONE", 0, 0}, [NI_DLYMIX] = {"MIX", 0, 0}, [NI_DLYTIME] = {"TIME", 0, 0}, [NI_DLYFB] = {"FEEDBACK", 0, 0},
-    [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 3, NT_GLMODE}, [NI_IMPRESS] = {"IMP STR", 0, 0}, [NI_CHANCE] = {"CH STR", 0, 0}, [NI_CHAMT] = {"CH AMT", 0, 0}, [NI_IMPAMT] = {"IMP AMT", 0, 0},
+    [NI_GLIDE] = {"GLIDE", 0, 0}, [NI_GLMODE] = {"MODE", 3, NT_GLMODE}, [NI_IMPRESS] = {"IMP STR", 0, 0}, [NI_CHANCE] = {"CH STR", 0, 0}, [NI_CHAMT] = {"CH AMT", 0, 0}, [NI_WDWID] = {"WIDTH", 0, 0}, [NI_WDTIME] = {"TIME", 0, 0}, [NI_WDSIDE] = {"SIDE", 2, NT_WSIDE}, [NI_WDTONE] = {"TONE", 0, 0}, [NI_IMPAMT] = {"IMP AMT", 0, 0},
     [NI_ATTACK] = {"ATTACK", 0, 0}, [NI_DECAY] = {"DECAY", 0, 0}, [NI_SUSTAIN] = {"SUSTAIN", 0, 0},
     [NI_RISE] = {"RISE", 0, 0}, [NI_FALL] = {"FALL", 0, 0}, [NI_HOLD] = {"HOLD", 0, 0}, [NI_CAMT] = {"AMOUNT", 0, 0}, [NI_CMODE] = {"MODE", 3, NT_CMODE},
     [NI_LSHAPE] = {"SHAPE", 6, NT_LSHAPE}, [NI_LRATE] = {"RATE", 0, 0}, [NI_LMORPH] = {"MORPH", 0, 0}, [NI_UDETUNE] = {"DETUNE", 0, 0},
@@ -113,7 +115,7 @@ static const nsub_t NS_OSC[] = {{"OSCILLATOR", 0, {NI_WAVE, NI_TIMBRE, NI_SHAPE,
 static const nsub_t NS_ENV[] = {{"ENVELOPE", 0, {NI_ATTACK, NI_DECAY, NI_SUSTAIN, NI_FAMT}}, {"CYCLING ENV", 1, {NI_RISE, NI_FALL, NI_HOLD, NI_CAMT}},
                                 {"CYCLING MODE", 2, {NI_CMODE, NI_CDEST, NI_CDEPTH, NI_NONE}}, {"AMP ENVELOPE", 3, {NI_AMPMOD, NI_NONE, NI_NONE, NI_NONE}}};
 static const nsub_t NS_FX[] = {{"FILTER", 0, {NI_CUTOFF, NI_RESO, NI_FTYPE, NI_FAMT}}, {"FILTER 2", 1, {NI_FSLOPE, NI_FDRIVE, NI_FCLIP, NI_FMODEL}},
-                               {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE}},
+                               {"WIDENER", 7, {NI_WDWID, NI_WDTIME, NI_WDSIDE, NI_WDTONE}}, {"REVERB", 2, {NI_RVBMIX, NI_RVBSIZE, NI_RVBDAMP, NI_RVBPRE}}, {"DELAY", 3, {NI_DLYMIX, NI_DLYTIME, NI_DLYFB, NI_DLYTONE}},
                                {"GLIDE", 4, {NI_GLIDE, NI_GLMODE, NI_NONE, NI_NONE}}, {"PITCH BEND", 5, {NI_BENDRNG, NI_BENDSPD, NI_NONE, NI_NONE}}, {"IMPRESS / CHANCE", 6, {NI_IMPRESS, NI_CHANCE, NI_CHAMT, NI_IMPAMT}}};
 static const nsub_t NS_LFO[] = {{"LFO 1", 0, {NI_LSHAPE, NI_LRATE, NI_LSYNC, NI_LMORPH}}, {"LFO 1 DEST A1-A4", 1, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}},
                                 {"LFO 2", 2, {NI_L2SHAPE, NI_L2RATE, NI_L2SYNC, NI_L2MORPH}}, {"LFO 2 DEST A1-A4", 3, {NI_AS1, NI_AS2, NI_AS3, NI_AS4}}};   /* (page 2: the matrix's four ASSIGN columns, as on the MATRIX group's page 2) */
@@ -141,6 +143,16 @@ static int8_t na_ost = -1;
 #define NA_NG 20u
 #define GI(id) na_g[(id) - NI_GBT]
 static uint8_t na_g[NA_NG] = {0, 0, 0, 0, 1, 0, 3, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0};
+/* the stereo widener's settings (global, in the settings record: f[25..28], marker f[29]): WIDTH %, TIME % (1..50 ms), SIDE (0 L, 1 R), TONE % */
+static uint8_t na_wd[4] = {0, 40, 1, 30};
+static void na_wd_apply(void)
+{
+    uint32_t ms = 1u + (uint32_t)na_wd[1] * 49u / 100u;
+    fx_wd_n = (uint16_t)(ms * 441u / 10u);
+    fx_wd_k = (uint16_t)(4096 - (int32_t)na_wd[3] * (4096 - 500) / 100);
+    fx_wd_side = na_wd[2];
+    fx_wd_w = (uint8_t)((uint32_t)na_wd[0] * 128u / 100u);
+}
 static uint8_t na_bank = 1, na_sslot, na_scur, na_conf, na_gsel;
 static char na_name[16], na_chr[11];
 static const char NA_CHARS[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
@@ -356,6 +368,9 @@ static void na_g_save(void)
     f[1] = 1;
     for (i = 0; i < NA_NG; i++)
         f[2u + i] = na_g[i];
+    for (i = 0; i < 4u; i++)
+        f[25u + i] = na_wd[i];
+    f[29] = 0xA5;
     settings_later();                                      /* (written once the view is left or after a while: ui.c) */
 }
 static void na_g_apply(int32_t id)
@@ -384,6 +399,10 @@ static void na_g_load(void)
     if (f[0] == 0xB6 && f[1] == 1)
         for (i = 0; i < NA_NG; i++)
             na_g[i] = f[2u + i] <= MX[i] ? f[2u + i] : na_g[i];
+    if (f[0] == 0xB6 && f[1] == 1 && f[29] == 0xA5 && f[25] <= 100u && f[26] <= 100u && f[27] <= 1u && f[28] <= 100u)
+        for (i = 0; i < 4u; i++)
+            na_wd[i] = f[25u + i];
+    na_wd_apply();
     if (!GI(NI_SURADIO))
         GI(NI_GBT) = 0;                                    /* RADIO: OFF at power-on, or LAST */
     na_g_apply(-1);
@@ -417,6 +436,7 @@ static int32_t na_get(int32_t id)
     case NI_DLYFB: return na_cl(song.g[G_DFDBK], 0, 120) * 100 / 120;
     case NI_BENDRNG: return GI(NI_BENDRNG) ^ 12;               /* semitones 0..24 (stored xor 12: a settings record without it reads as 12) */
     case NI_BENDSPD: return na_f100(p[P_FM3_SUS]);
+    case NI_WDWID: case NI_WDTIME: case NI_WDSIDE: case NI_WDTONE: return na_wd[id - NI_WDWID];
     case NI_FOLD2: return na_f100(p[P_LN6]);
     case NI_LSYNC: return p[P_LSYNC] ? 1 : 0;
     case NI_CDEST: return na_cl(p[P_FM4_SUS], 0, 7);
@@ -516,6 +536,11 @@ static void na_set(int32_t id, int32_t v)
     case NI_DLYFB: song.g[G_DFDBK] = (int16_t)(v * 120 / 100); break;
     case NI_BENDRNG: GI(NI_BENDRNG) = (uint8_t)(v ^ 12); na_g_save(); break;
     case NI_BENDSPD: na_put(P_FM3_SUS, na_f127(v)); break;
+    case NI_WDWID: case NI_WDTIME: case NI_WDSIDE: case NI_WDTONE:
+        na_wd[id - NI_WDWID] = (uint8_t)na_cl(v, 0, id == NI_WDSIDE ? 1 : 100);
+        na_wd_apply();
+        na_g_save();
+        break;
     case NI_FOLD2: na_put(P_LN6, na_f127(v)); break;
     case NI_LSYNC: na_put(P_LSYNC, v ? 1 : 0); break;
     case NI_CDEST: na_put(P_FM4_SUS, v); na_cyc_route(); break;
@@ -688,6 +713,9 @@ static void na_text(int32_t id, char *out)
             na_str(out, "USER ");
             fmt_int(out + 5, v - 1);
         }
+    } else if (id == NI_WDTIME) {
+        fmt_int(out, 1 + v * 49 / 100);
+        na_cat(out, " MS");
     } else if (id == NI_BENDRNG) {
         fmt_int(out, v * 2);
         na_cat(out, " STEPS");
@@ -1083,6 +1111,8 @@ static void na_sync(void)
             nf_ui_set(UI_P, na_get(NI_GLIDE)), nf_ui_set(UI_P + 1, na_get(NI_GLMODE));
         else
             nf_ui_set(UI_P, na_get(NI_IMPRESS)), nf_ui_set(UI_P + 1, na_get(NI_CHANCE)), nf_ui_set(UI_P + 2, na_get(NI_CHAMT)), nf_ui_set(UI_P + 3, na_get(NI_IMPAMT));
+        if (sp->ui == 7u)
+            nf_ui_set(UI_P, na_get(NI_WDWID)), nf_ui_set(UI_P + 1, 1 + na_get(NI_WDTIME) * 49 / 100), nf_ui_set(UI_P + 2, na_get(NI_WDSIDE)), nf_ui_set(UI_P + 3, na_get(NI_WDTONE));
         break;
     case NG_LFO:
         if (sp->ui == 2u)                                    /* LFO 2's page (and its DEST page, which shows none of these) */

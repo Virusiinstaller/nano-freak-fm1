@@ -331,6 +331,20 @@ static void g_delay(uint16_t acc) {                        /* the echoes: spacin
   text_c(PX + PW / 2, PY + PH - 12, l, 1, C_DIM);
 }
 
+static void g_widen(uint16_t acc) {                        /* the Haas widener: the dry hit on the left, its delayed copy (the WIDTH's height, the TONE's softness) on the chosen side */
+  panel_frame("STEREO WIDENER", acc);
+  int wid = clampi(v[UI_P], 0, 100), ms = clampi(v[UI_P + 1], 1, 50), right = v[UI_P + 2] != 0, tone = clampi(v[UI_P + 3], 0, 100);
+  const int x0 = PX + 24, w = PW - 40, y0 = PY + 40, y1 = PY + 72, h = 22;
+  nf_gfx_text(PX + 8, y0 - 14, "L", 1, C_DIM); nf_gfx_text(PX + 8, y1 - 14, "R", 1, C_DIM);
+  nf_gfx_hline(x0, y0, w, C_LINE); nf_gfx_hline(x0, y1, w, C_LINE);
+  int xd = x0 + ms * (w - 12) / 50, dh = h * wid / 100, dry = h - dh;       /* the side that is delayed keeps (100 - WIDTH) % of the dry hit */
+  int ldry = right ? h : dry, rdry = right ? dry : h;
+  if (ldry) nf_gfx_fill(x0, y0 - ldry, 3, ldry, C_TEXT);
+  if (rdry) nf_gfx_fill(x0, y1 - rdry, 3, rdry, C_TEXT);
+  if (dh) nf_gfx_fill(xd, (right ? y1 : y0) - dh, 3 + tone / 20, dh, acc);
+  text_c(PX + PW / 2, PY + PH - 11, "HAAS: DELAYED COPY ON ONE SIDE", 1, C_DIM);
+}
+
 static void g_spice(uint16_t acc) {
   panel_frame("IMPRESS AND CHANCE", acc);
   const char *name[4] = { "IMP STR", "CH STR", "CH AMT", "IMP AMT" };
@@ -714,7 +728,7 @@ void nf_ui_paint_band(uint16_t *band, int y0, int rows) {
         else if (sub == 2) g_cycmode(acc);
         else g_toggle("AMP ENVELOPE", "ENVELOPE ON", "GATE ONLY", v[UI_P], acc);
         break;
-      case 2: if (sub == 0) g_filter(acc); else if (sub == 1) g_filter2(acc); else if (sub == 2) g_reverb(acc); else if (sub == 3) g_delay(acc); else if (sub == 4) g_glide(acc); else if (sub == 5) g_bend(acc); else g_spice(acc); break;
+      case 2: if (sub == 0) g_filter(acc); else if (sub == 1) g_filter2(acc); else if (sub == 2) g_reverb(acc); else if (sub == 3) g_delay(acc); else if (sub == 4) g_glide(acc); else if (sub == 5) g_bend(acc); else if (sub == 7) g_widen(acc); else g_spice(acc); break;
       case 3: g_lfo(acc); break;
       case 5: if (sub == 0) g_arp(acc); else if (sub == 1) g_arp2(acc); else g_arp3(acc); break;
       case 7: g_voice(acc); break;

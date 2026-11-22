@@ -1476,3 +1476,7 @@ The test bed's CCs that the firmware dropped now reach their controls (applied o
 ## 2.5.72 — Impress / Chance: the strip is bend only, the page has four knobs
 
 The touch strip's two right-most keys (+/-) are the pitch bend, always. F5 no longer cycles anything (it plays nothing either); the strip no longer steps Impress or Chance. FX > IMPRESS / CHANCE has four knobs: K1 IMP STR and K2 CH STR (the former IMPRESS and CHANCE: P_LN3 and P_LN4, CC 2 and 3, unchanged), K3 CH AMT and K4 IMP AMT (0..100 %, default 100, live: not stored, a load sets 100). The strength that reaches the ARP or the SEQ that plays is STRENGTH x AMT / 100 (a change of the effective Chance rolls). No stored value changes meaning; the AMT knobs have no CC.
+
+## 2.5.73 — stereo widener (Haas)
+
+A new FX page, WIDENER (third, between FILTER 2 and REVERB), a global effect on the dry stereo mix (the reverb, delay and chorus sends are not widened). K1 WIDTH 0..100 % (0 = bypassed, the sound is bit for bit as before), K2 TIME 1..50 ms, K3 SIDE (LEFT or RIGHT: the side that carries the delayed copy), K4 TONE (a low-pass on the delayed copy). The mono sum of the mix is delayed and replaces WIDTH of that side. The four values are saved in the flash settings record (factory[6][25..28], marker 0xA5 at [29]); not in a preset or a project. No CC. The FX pages after FILTER 2 move one place (IMPRESS / CHANCE is page 8). Memory: a 4.6 KB pool buffer.
