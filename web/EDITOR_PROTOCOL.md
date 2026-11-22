@@ -1460,3 +1460,7 @@ The SEQ group's MOD SMOOTH page (four toggles, bits 0..3 of `P_FM3_REL`) is gone
 ## 2.5.68 — pool: the SLICER / FX-layer buffer shrunk
 
 The Nano Freak never uses the SLICER or the FX hold layer, which share one 32 KB pool buffer (`sl_buf`). In the product build (`FELUCCA_FMINI_ONLY`) it is now 2 KB (`SL_LEN` 256): 30 KB of the pool freed (headroom about 40 KB). No stored value or protocol change; a SLICER or FX-layer command sent by the editor to a Nano build has no useful effect.
+
+## 2.5.69 — start-up screen
+
+The power-on splash (the BOOT SCR setting) is redrawn: the title in a panel under a strip of the page colours, over a lit 8 x 5 grid like the MATRIX screen's, with the firmware version at the bottom. No setting or protocol change.

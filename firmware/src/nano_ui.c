@@ -630,11 +630,24 @@ static void g_list(const char *title, uint16_t acc) {
 
 /* start-up splash, shown for a moment at power-on */
 static void g_boot(void) {
+  /* the title in a panel under a strip of the page colours, over a lit 8 x 5 grid like the MATRIX screen's (a made-up pattern) */
   nf_gfx_fill(0, 0, NF_W, NF_H, C_BG);
-  text_c(NF_W / 2, 84, "NANO FREAK", 3, C_TEXT);
-  nf_gfx_hline(40, 118, NF_W - 80, group_color[0]);
-  text_c(NF_W / 2, 132, "SYNTH FOR THE M-VAVE FM-1", 1, C_DIM);
-  text_c(NF_W / 2, 150, str[UIS_HINT], 1, group_color[2]);
+  for (int r = 0; r < 5; ++r)
+    for (int c = 0; c < 8; ++c) {
+      const int x = 22 + c * 27, y = 120 + r * 20, d = (c * 3 + r * 5) % 11;
+      const int rad = d < 4 ? 8 : d < 7 ? 5 : 2;
+      const uint16_t col = group_color[c];
+      nf_gfx_fill(x - 12, y - 8, 24, 16, C_DARK);
+      nf_gfx_rect(x - 12, y - 8, 24, 16, C_LINE);
+      nf_gfx_disc(x, y, rad, d < 7 ? col : nf_gfx_mix(C_DARK, col, 110));
+      if (d < 4) nf_gfx_ring(x, y, rad + 1, nf_gfx_mix(col, C_TEXT, 120));
+    }
+  nf_gfx_fill(20, 28, 200, 62, C_PANEL);
+  nf_gfx_rect(20, 28, 200, 62, C_LINE);
+  for (int c = 0; c < 8; ++c) nf_gfx_fill(20 + c * 25, 28, 25, 3, group_color[c]);
+  text_c(NF_W / 2, 44, "NANO FREAK", 3, C_TEXT);
+  text_c(NF_W / 2, 74, "SYNTH FOR THE M-VAVE FM-1", 1, C_DIM);
+  text_c(NF_W / 2, 226, str[UIS_HINT], 1, C_DIM);                    /* the firmware version */
 }
 
 static void g_seqedit(uint16_t acc) {                      /* one step: its number, pitch and length */
