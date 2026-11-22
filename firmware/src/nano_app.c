@@ -986,11 +986,16 @@ static int32_t na_wave_at(uint32_t ty, uint32_t ph, uint32_t i, const int16_t *p
         int32_t model = a >= 127 ? 4 : a * 5 / 127, env = nw_decay(i, d, 3000), n;
         y = 0;
         if (model == 3) {
-            y = nano_sin824(ph + (uint32_t)nano_sin824(ph * 2u) * (uint32_t)(b * 20861 / 40) + (uint32_t)nano_sin824(ph * 3u) * (uint32_t)(c * 20861 / 90));
+            int32_t fbp = ((int32_t)p[P_E7] * 258 - 16384) * 2, m1 = nano_sin824(ph * 2u);          /* POSITION: the feedback, -1..1 (Q15): above 0 the modulator feeds itself, below the carrier bends its pitch */
+            if (fbp > 0)
+                m1 = nano_sin824(ph * 2u + (uint32_t)((m1 >> 4) * (fbp >> 4) * 500));
+            y = nano_sin824(ph + (uint32_t)(fbp < 0 ? (nano_sin824(ph) >> 4) * (-fbp >> 4) * 250 : 0) + (uint32_t)m1 * (uint32_t)(b * 20861 / 40) + (uint32_t)nano_sin824(ph * 3u) * (uint32_t)(c * 20861 / 90));
         } else {
             for (n = 1; n <= 6; n++) {
                 uint32_t r = model == 0 ? (uint32_t)n * 256u + (uint32_t)(b * n * (n - 1) / 8) : model == 1 ? (uint32_t)SYM[n % 5] * (uint32_t)(1 + (n - 1) / 5) + (uint32_t)(b * (n & 1 ? 1 : 0) * 2) : model == 2 ? (uint32_t)n * 256u + (uint32_t)(b * n * (n - 1) / 14) : (uint32_t)QNT[n % 5] * (uint32_t)(1 + (n - 1) / 5);
-                int32_t wgt = 32768 * 64 / (64 + (n - 1) * (8 + (127 - c) * 3 / 2));
+                int32_t wgt = 32768 * 64 / (64 + (n - 1) * (8 + (127 - c) * 3 / 2)), pq = (int32_t)p[P_E7] * 258, dpq = pq > 16384 ? pq - 16384 : 16384 - pq,
+                        pos16 = (16384 - ((dpq * 32113) >> 15)) << 1, comb = nano_sin824((uint32_t)(n * pos16) << 15);       /* POSITION: where the string is picked up: the nth partial is weighed |sin(pi n x)|, x = 0.5 - 0.98 |position - 0.5| */
+                wgt = (wgt >> 4) * ((comb < 0 ? -comb : comb) >> 4) >> 7;
                 y += (nano_sin824(nw_mul(ph, r << 8)) >> 3) * wgt >> 12;
             }
         }
@@ -1008,6 +1013,8 @@ static void na_wave_sketch(void)
         v[i] = na_wave_at(ty, (uint32_t)i * (uint32_t)(0xFFFFFFFFu / (NW_LEN / 2)), (uint32_t)i, t->p);
         if (ty != 0u && ty != 8u && ty != 12u && ty != 14u && t->p[P_E4] > 0)        /* FOLD (K4 is SYNC, STRETCH, MORPH, DAMP on the others) */
             v[i] = nw_fold(v[i] * (1 + t->p[P_E4] / 20)) >> 0;
+        if (ty == 14u && t->p[P_LN6] > 0)                                            /* STRINGS: the FOLD of its second page */
+            v[i] = nw_fold(v[i] * (1 + t->p[P_LN6] / 20)) >> 0;
         pk = v[i] > pk ? v[i] : -v[i] > pk ? -v[i] : pk;
     }
     {                                                    /* centred on the zero line (the mean taken out), at a fixed scale per type: a knob that makes the sound louder or softer moves the peaks up or down */

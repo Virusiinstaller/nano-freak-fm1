@@ -550,5 +550,24 @@ int main(int argc, char **argv)
         na_mxset(0, 0, 0, 1); na_mxset(2, 2, 0, 1); na_mxset(3, 4, 0, 1); na_mxset(4, 3, 0, 1);
         na_grp = NG_OSC;
     }
+    {   /* the Strings preview follows POSITION and FOLD (2.5.75) */
+        int8_t ref[NW_LEN], *w;
+        uint32_t i, m, diff;
+        int16_t keep[4] = {TSEL->p[P_E0], TSEL->p[P_E1], TSEL->p[P_E7], TSEL->p[P_LN6]};
+        TSEL->p[P_E0] = 14; TSEL->p[P_E2] = 64; TSEL->p[P_E3] = 80; TSEL->p[P_E4] = 20;
+        for (m = 0; m < 4u; m++) {                      /* modal, sympathetic, string, FM */
+            TSEL->p[P_E1] = (int16_t)(m * 127 / 5 + 3); TSEL->p[P_LN6] = 0;
+            TSEL->p[P_E7] = 20; na_wave_sketch(); w = nf_ui_wave();
+            for (i = 0; i < NW_LEN; i++) ref[i] = w[i];
+            TSEL->p[P_E7] = 100; na_wave_sketch();
+            for (diff = i = 0; i < NW_LEN; i++) diff += ref[i] != w[i];
+            CHECK(diff > 8, "Strings model %u: POSITION does not change the picture (%u)", m, diff);
+            { int pk = 0; for (i = 0; i < NW_LEN; i++) pk = w[i] > pk ? w[i] : -w[i] > pk ? -w[i] : pk; CHECK(pk > 15 && pk <= 127, "Strings model %u at POSITION 100 is flat or too big (%d)", m, pk); }
+            TSEL->p[P_E7] = 20; TSEL->p[P_LN6] = 90; na_wave_sketch();
+            for (diff = i = 0; i < NW_LEN; i++) diff += ref[i] != w[i];
+            CHECK(diff > 8, "Strings model %u: FOLD does not change the picture (%u)", m, diff);
+        }
+        TSEL->p[P_E0] = keep[0]; TSEL->p[P_E1] = keep[1]; TSEL->p[P_E7] = keep[2]; TSEL->p[P_LN6] = keep[3];
+    }
     return fails ? 1 : 0;
 }

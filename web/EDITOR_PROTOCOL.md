@@ -1484,3 +1484,7 @@ A new FX page, WIDENER (third, between FILTER 2 and REVERB), a global effect on 
 ## 2.5.74 — Impress / Chance page layout
 
 The IMPRESS / CHANCE page's four bars (IMP STR, CH STR, CH AMT, IMP AMT) were drawn too low in 2.5.72 and 2.5.73 and ran into the footer. Screen layout only; no stored value or control changes.
+
+## 2.5.75 — Strings preview
+
+The waveform drawn on the Strings (Rings) oscillator page now follows the second page's POSITION and FOLD, as the test bed's does: POSITION weighs the partials by the pickup point (the modal, sympathetic, string and quantized models) or sets the FM model's feedback; FOLD runs the picture through the wavefolder. Screen only: the sound and every stored value are unchanged.
