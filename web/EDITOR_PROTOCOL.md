@@ -1464,3 +1464,7 @@ The Nano Freak never uses the SLICER or the FX hold layer, which share one 32 KB
 ## 2.5.69 — start-up screen
 
 The power-on splash (the BOOT SCR setting) is redrawn: the title in a panel under a strip of the page colours, over a lit 8 x 5 grid like the MATRIX screen's, with the firmware version at the bottom. No setting or protocol change.
+
+## 2.5.70 — SAW knob names
+
+The SAW oscillator's K2 and K3 were labelled PARAM 1 / PARAM 2. They now carry the name of what the chosen model does with them: SYNC: SLAVE (the slave saw's pitch) and BALANCE; COMB: COMB TUNE and FEEDBACK; CS80: NOTCH and OFFSET. Labels only; no stored value or sound change.

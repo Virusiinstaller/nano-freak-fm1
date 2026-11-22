@@ -101,7 +101,7 @@ static const nosc_t NOSC[15] = {
     {"HARMONIC", "CONTENT", "SCULPTING", "CHORUS", 8}, {"KARPLUSSTR", "BOW", "POSITION", "DECAY", 9}, {"V.ANALOG", "DETUNE", "SHAPE", "WAVE", 13},
     {"WAVESHAPER", "WAVE", "AMOUNT", "ASYM", 2}, {"TWO OP.FM", "RATIO", "AMOUNT", "SHAPE", 1}, {"FORMANT", "INTERVAL", "FORMANT", "SHAPE", 3},
     {"CHORDS", "CHORD", "INV/TRANSP", "WAVEFORM", 5}, {"MODAL", "INHARM", "TIMBRE", "DECAY", 6}, {"NOISE", "WAVE", "TIMBRE", "SHAPE", 4},
-    {"BASS", "MODEL", "SHAPE", "SUB", 10}, {"SAW", "MODEL", "PARAM 1", "PARAM 2", 11}, {"STRINGS", "MODEL", "STRUCTURE", "BRIGHT", 14},
+    {"BASS", "MODEL", "SHAPE", "SUB", 10}, {"SAW", "MODEL", "SLAVE", "BALANCE", 11}, {"STRINGS", "MODEL", "STRUCTURE", "BRIGHT", 14},
 };
 #define NA_RINGS 14u
 
@@ -1024,6 +1024,11 @@ static void na_sync(void)
         const char *lb = id == NI_NONE ? "" : NK[id].lb;
         if (na_grp == NG_OSC && sb == 0u && i < 3u)
             lb = i == 0u ? NOSC[ty].l1 : i == 1u ? NOSC[ty].l2 : NOSC[ty].l3;
+        if (na_grp == NG_OSC && sb == 0u && NOSC[ty].ty == 11u && (i == 1u || i == 2u)) {     /* SAW: K2 and K3 are what the model makes of them */
+            static const char *const SL[3][2] = {{"SLAVE", "BALANCE"}, {"COMB TUNE", "FEEDBACK"}, {"NOTCH", "OFFSET"}};
+            int32_t m = clamp(t->p[P_E1], 0, 127) * 3 / 127;
+            lb = SL[m > 2 ? 2 : m][i - 1u];
+        }
         if (na_grp == NG_OSC && sb == 0u && i == 3u)                          /* K4: SYNC, STRETCH, MORPH, DAMP, or FOLD (as the test bed) */
             lb = NOSC[ty].ty == 0u ? "SYNC" : NOSC[ty].ty == 8u ? "STRETCH" : NOSC[ty].ty == 12u ? "MORPH" : NOSC[ty].ty == 14u ? "DAMP" : "FOLD";
         na_str(nf_ui_str(UIS_L0 + (int)i), lb);

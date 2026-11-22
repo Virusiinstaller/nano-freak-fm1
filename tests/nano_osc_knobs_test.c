@@ -156,6 +156,16 @@ int main(void)
                 trk[0].p[P_E0 + k] = pass ? (NOSC[ty].ty == 13 && k == 2u ? 64 : 127) : 0;   /* (V.ANALOG SHAPE: the sync square fills the whole period above ~80, a flat line the sketch centres away) */
                 goto_page(B_HOME, 0); nframe(); nframe();
                 grab_sketch(pass ? skB : skA);
+                if (NOSC[ty].ty == 11u) {                          /* SAW: K2 and K3 are named for what the model does with them, never PARAM 1 / PARAM 2 */
+                    static const char *const SL[3][2] = {{"SLAVE", "BALANCE"}, {"COMB TUNE", "FEEDBACK"}, {"NOTCH", "OFFSET"}};
+                    uint32_t mm; int16_t e1 = trk[0].p[P_E1];
+                    for (mm = 0; mm < 3u; mm++) {
+                        trk[0].p[P_E1] = (int16_t)(mm * 127u / 3u + 8u);
+                        na_dirty = 1; na_draw();
+                        CHECK(!strcmp(nf_ui_str(UIS_L0 + 1), SL[mm][0]) && !strcmp(nf_ui_str(UIS_L0 + 2), SL[mm][1]), "SAW model %u: K2/K3 are %s / %s, not %s / %s", mm, nf_ui_str(UIS_L0 + 1), nf_ui_str(UIS_L0 + 2), SL[mm][0], SL[mm][1]);
+                    }
+                    trk[0].p[P_E1] = e1; na_dirty = 1; na_draw();
+                }
                 CHECK(!strcmp(nf_ui_str(UIS_L0 + 3), K4L[ty]), "%s: K4 is labelled %s, not %s", NOSC[ty].name, nf_ui_str(UIS_L0 + 3), K4L[ty]);
                 {                                                  /* the note as the engine test plays it (A3, velocity 100): the keys' own low note starves Strings */
                     static int32_t bb[CTL]; uint32_t q, z;
