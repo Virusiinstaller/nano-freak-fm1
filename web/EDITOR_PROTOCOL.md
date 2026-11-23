@@ -1488,3 +1488,7 @@ The IMPRESS / CHANCE page's four bars (IMP STR, CH STR, CH AMT, IMP AMT) were dr
 ## 2.5.75 — Strings preview
 
 The waveform drawn on the Strings (Rings) oscillator page now follows the second page's POSITION and FOLD, as the test bed's does: POSITION weighs the partials by the pickup point (the modal, sympathetic, string and quantized models) or sets the FM model's feedback; FOLD runs the picture through the wavefolder. Screen only: the sound and every stored value are unchanged.
+
+## 2.5.76 — Bluetooth pages hidden
+
+GLOBAL no longer lists BLUETOOTH and BLE DEVICES, and STARTUP no longer shows RADIO: there is no Bluetooth radio driver, so they did nothing. GLOBAL has four pages (MIDI OUT, MIDI ROUTING, MIDI IN, STARTUP). The ids, the stored values (settings record) and the page ids stay as they were, so nothing saved changes; CC 112, 113 and 114 (Bluetooth, BT audio, BLE role) are no longer mapped. CC 115 (clock source) stays.

@@ -127,9 +127,9 @@ static const nsub_t NS_MX[] = {{"MATRIX", 0, {NI_MXCOL, NI_MXROW, NI_MXON, NI_MX
 static const nsub_t NS_SEQ[] = {{"SEQUENCE", 0, {NI_ARPRATE, NI_SQPAT, NI_SQRND, NI_SQMUT}}, {"SEQ LENGTH", 1, {NI_SQLEN, NI_SQSCALE, NI_SQOCT, NI_SQSWING}},
                                 {"STEP EDIT", 2, {NI_SQSTEP, NI_SQNOTE, NI_SQDUR, NI_SQREST}}, {"RANDOM", 3, {NI_SQENT, NI_SQRESTS, NI_SQRND, NI_SQGATE}}};
 static const nsub_t NS_PRE[] = {{"BROWSE", 0, {NI_PBANK, NI_PSLOT, NI_NONE, NI_NONE}}, {"SAVE", 1, {NI_SSLOT, NI_PCUR, NI_PCHR, NI_NONE}}};
-static const nsub_t NS_GLO[] = {{"BLUETOOTH", 0, {NI_GBT, NI_GBTA, NI_GROLE, NI_GCLK}}, {"MIDI OUT", 1, {NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY}},
+static const nsub_t NS_GLO[] = {{"MIDI OUT", 1, {NI_MMODE, NI_MCH, NI_MPORT, NI_MKEY}},
                                 {"MIDI ROUTING", 2, {NI_MLOCAL, NI_MCLKO, NI_MTHI, NI_MTHO}}, {"MIDI IN", 3, {NI_MINCH, NI_GCLK, NI_NONE, NI_NONE}},
-                                {"BLE DEVICES", 4, {NI_BDEV, NI_BACT, NI_NONE, NI_NONE}}, {"STARTUP", 5, {NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_SURADIO}}};
+                                {"STARTUP", 5, {NI_SUPATCH, NI_SUBOOT, NI_SUPAGE, NI_NONE}}};   /* (the BLUETOOTH and BLE DEVICES pages and STARTUP's RADIO are hidden until there is a radio driver: their values and ids stay, as the flash record has them) */
 #define NGRP(t, u, a) {t, u, (uint8_t)(sizeof(a) / sizeof((a)[0])), a}
 static const ngrp_t NGR[NG_COUNT] = {
     [NG_OSC] = NGRP("OSCILLATOR", 0, NS_OSC), [NG_ENV] = NGRP("ENV", 1, NS_ENV), [NG_FX] = NGRP("FX", 2, NS_FX), [NG_LFO] = NGRP("LFO", 3, NS_LFO),
@@ -1189,9 +1189,8 @@ static void na_sync(void)
             r = nf_ui_str(UIS_ROW0), na_str(r, "POWER-ON  "), na_text(NI_SUPATCH, r + 10);
             r = nf_ui_str(UIS_ROW0 + 1), na_str(r, "BOOT SCREEN  "), na_cat(r, NT_ONOFF[GI(NI_SUBOOT)]);
             r = nf_ui_str(UIS_ROW0 + 2), na_str(r, "START PAGE  "), na_cat(r, NT_SUPAGE[GI(NI_SUPAGE)]);
-            r = nf_ui_str(UIS_ROW0 + 3), na_str(r, "RADIO  "), na_cat(r, NT_SURAD[GI(NI_SURADIO)]);
-            na_str(nf_ui_str(UIS_ROW0 + 4), "*SAVED AUTOMATICALLY");
-            nf_ui_set(UI_P, na_gsel < 4u ? na_gsel : 0), nf_ui_set(UI_P + 1, 5);
+            na_str(nf_ui_str(UIS_ROW0 + 3), "*SAVED AUTOMATICALLY");
+            nf_ui_set(UI_P, na_gsel < 3u ? na_gsel : 0), nf_ui_set(UI_P + 1, 4);
         }
         break;
     case NG_PRESET:
@@ -1546,13 +1545,13 @@ static void na_strip_ui(void)
 
 /* MIDI CCs the control tables carry but nano_ctl.c's table does not: midi_control.c notes the last value in fm_cc_rx[] and a bit in
  * fm_cc_pend[]; this applies them on the main loop through na_set (the same path as a knob). Not here: 78 and 92 (arp sync: the
- * firmware has no arp sync), they stay unhandled. cc 68 octave, 89 REC, 104 matrix amount (64 = 0) are special; the rest spread 0..127
+ * firmware has no arp sync), they stay unhandled; nor 112..114 (Bluetooth, BT audio, BLE role: hidden until there is a radio driver). cc 68 octave, 89 REC, 104 matrix amount (64 = 0) are special; the rest spread 0..127
  * over the control's n steps (n 0 = percent). */
 static const struct { uint8_t cc, id; } NA_CC[] = {
     {22, NI_CDEST}, {25, NI_CDEPTH}, {27, NI_AMPMOD}, {69, NI_GLMODE}, {70, NI_BENDRNG}, {80, NI_SQPAT}, {84, NI_SQENT},
     {85, NI_SQRND}, {86, NI_SQSCALE}, {87, NI_SQRESTS}, {88, NI_SQOCT}, {116, NI_SQMUT}, {111, NI_DLYTIME}, {117, NI_DLYFB},
     {118, NI_DLYTONE}, {95, NI_RVBSIZE}, {96, NI_RVBDAMP}, {98, NI_AS1}, {99, NI_AS2}, {100, NI_AS3}, {101, NI_AS4},
-    {104, NI_MXAMT}, {107, NI_MXROW}, {108, NI_MXCOL}, {109, NI_MXON}, {112, NI_GBT}, {113, NI_GBTA}, {114, NI_GROLE}, {115, NI_GCLK},
+    {104, NI_MXAMT}, {107, NI_MXROW}, {108, NI_MXCOL}, {109, NI_MXON}, {115, NI_GCLK},
     {68, NI_COUNT}, {89, NI_COUNT + 1},
 };
 static void na_cc_one(uint32_t i, int32_t cc)

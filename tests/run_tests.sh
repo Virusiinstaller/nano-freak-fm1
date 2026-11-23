@@ -307,6 +307,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "Nano Freak oscillator knobs K1..K4 change the sound and the waveform sketch on every type, K4 is labelled as the test bed" "$OUT/nano_osc_knobs_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_para_test" tests/nano_para_test.c -lm
     run "Nano Freak PARAPHONIC: one shared filter that follows the newest voice, levels as POLY" "$OUT/nano_para_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_midi_test" tests/nano_midi_test.c -lm
+    run "Nano Freak MIDI in: bend, RPN, sustain, USB clock, external-clock ARP, ring back-pressure, tempo" "$OUT/nano_midi_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/nano_lfo2_test" tests/nano_lfo2_test.c -lm
     run "Nano Freak LFO 2: runs, RATE / SHAPE / MORPH / SYNC, independent of LFO 1, the matrix row moves the sound" "$OUT/nano_lfo2_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/nano_test" tests/nano_test.c -lm

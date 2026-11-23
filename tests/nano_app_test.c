@@ -162,12 +162,13 @@ int main(int argc, char **argv)
         npress(B_HOME);
         npress(B_GLO);
         CHECK(na_grp == NG_GLOBAL, "GLO opens GLOBAL");
-        for (pg = 0; pg < 6u; pg++) {
+        CHECK(na_nsub() == 4u, "GLOBAL has four pages (the Bluetooth ones are hidden)");
+        for (pg = 0; pg < 4u; pg++) {
             na_sub[NG_GLOBAL] = (uint8_t)pg;
             draw();
             dump(dir, n++);
         }
-        na_sub[NG_GLOBAL] = 1;                             /* MIDI OUT */
+        na_sub[NG_GLOBAL] = 0;                             /* MIDI OUT */
         nturn(EN_K1, 1);
         CHECK(fm_seq_out == 2, "SEQ/ARP OUT: MIDI (%d)", fm_seq_out);
         nturn(EN_K1, -1);
@@ -179,7 +180,7 @@ int main(int argc, char **argv)
         nturn(EN_K4, -1);
         CHECK(!fm_key_out, "KEY OUT off");
         nturn(EN_K4, 1);
-        na_sub[NG_GLOBAL] = 2;                             /* ROUTING */
+        na_sub[NG_GLOBAL] = 1;                             /* ROUTING */
         nturn(EN_K1, -1);
         CHECK(!fm_local, "LOCAL off");
         nturn(EN_K1, 1);
@@ -190,7 +191,7 @@ int main(int argc, char **argv)
         for (i = 0; i < 5u; i++) nturn(EN_K4, 1);
         CHECK(fm_thru_out == 5, "THRU OUT %d", fm_thru_out);
         for (i = 0; i < 9u; i++) nturn(EN_K4, -1);
-        na_sub[NG_GLOBAL] = 3;                             /* MIDI IN */
+        na_sub[NG_GLOBAL] = 2;                             /* MIDI IN */
         for (i = 0; i < 4u; i++) nturn(EN_K1, 1);
         CHECK(fm_midi_ch == 5, "IN CH 5 (%d)", fm_midi_ch);
         nturn(EN_K2, 1);
@@ -215,7 +216,8 @@ int main(int argc, char **argv)
             fm_clk_out = 0; fm_out_mask = 7;
         }
         /* START-UP rows, BLE rows */
-        na_sub[NG_GLOBAL] = 5;
+        na_sub[NG_GLOBAL] = 3;
+        { uint32_t j; for (j = 0; j < 4u; j++) CHECK(strcmp(NGR[NG_GLOBAL].sub[j].name, "BLUETOOTH") && strcmp(NGR[NG_GLOBAL].sub[j].name, "BLE DEVICES"), "a Bluetooth page is still listed"); }
         for (i = 0; i < 3u; i++) nturn(EN_K1, 1);
         CHECK(GI(NI_SUPATCH) == 4 && favorites.factory[6][0] == 0xB6 && favorites.factory[6][2 + 15] == 4, "POWER-ON is saved in the settings row");
         for (i = 0; i < 9u; i++) nturn(EN_K1, -1);
@@ -471,7 +473,7 @@ int main(int argc, char **argv)
         static const struct { uint8_t cc, id, v; int32_t want; } C[] = {
             {22, NI_CDEST, 127, 7}, {25, NI_CDEPTH, 127, 100}, {27, NI_AMPMOD, 0, 0}, {27, NI_AMPMOD, 127, 1}, {69, NI_GLMODE, 127, 2},
             {70, NI_BENDRNG, 127, 24}, {85, NI_SQRND, 127, 99}, {88, NI_SQOCT, 127, 2}, {111, NI_DLYTIME, 127, 100}, {117, NI_DLYFB, 0, 0},
-            {95, NI_RVBSIZE, 127, 100}, {96, NI_RVBDAMP, 0, 0}, {98, NI_AS1, 127, 13}, {112, NI_GBT, 127, 1}, {115, NI_GCLK, 127, 1},
+            {95, NI_RVBSIZE, 127, 100}, {96, NI_RVBDAMP, 0, 0}, {98, NI_AS1, 127, 13}, {115, NI_GCLK, 127, 1},
             {107, NI_MXROW, 127, 4}, {108, NI_MXCOL, 127, 7} };
         unsigned k;
         for (k = 0; k < sizeof C / sizeof C[0]; k++) {
@@ -546,6 +548,7 @@ int main(int argc, char **argv)
         na_grp = NG_MATRIX; na_sub[NG_MATRIX] = 0; na_dirty = 1; na_sync(); draw(); dump(dir, 920);
         na_grp = NG_LFO; na_sub[NG_LFO] = 0; na_dirty = 1; na_sync(); draw(); dump(dir, 921);
         na_grp = NG_LFO; na_sub[NG_LFO] = 2; na_dirty = 1; na_sync(); draw(); dump(dir, 922);
+        na_grp = NG_GLOBAL; na_sub[NG_GLOBAL] = 0; na_dirty = 1; na_sync(); draw(); dump(dir, 923);
         na_grp = NG_FX; na_sub[NG_FX] = 7; na_dirty = 1; na_sync(); draw(); dump(dir, 901);
         na_mxset(0, 0, 0, 1); na_mxset(2, 2, 0, 1); na_mxset(3, 4, 0, 1); na_mxset(4, 3, 0, 1);
         na_grp = NG_OSC;
