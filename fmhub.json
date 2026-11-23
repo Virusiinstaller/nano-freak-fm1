@@ -1,6 +1,6 @@
 {
-  "what": "A MicroFreak-style paraphonic synth for the FM-1: digital oscillator engines, a ladder filter, two LFOs, a mod matrix, an arpeggiator and sequencer with Chance and Impress, FX and a stereo widener.",
-  "author": "Guilherme Ruppert",
+  "what": "A Freak-style paraphonic synth for the FM-1: digital oscillator engines, a ladder filter, two LFOs, a mod matrix, an arpeggiator and sequencer with Chance and Impress, FX and a stereo widener.",
+  "author": "Virus Installer",
   "kinds": ["synth"],
   "image": "assets/card.png",
   "color": "#FF7A00",
