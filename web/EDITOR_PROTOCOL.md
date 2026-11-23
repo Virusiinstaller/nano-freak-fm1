@@ -1496,3 +1496,7 @@ GLOBAL no longer lists BLUETOOTH and BLE DEVICES, and STARTUP no longer shows RA
 ## 2.5.77 — package names
 
 The packages are now `nano-freak-fm1-X.Y.Z.fwsc` and `nano-freak-smk37[-elite|-mke]-X.Y.Z.fwsc` (they were `fmini-1-...`), and the plain download on the site is `nano-freak-X.Y.Z.fwsc`. The firmware is the same as 2.5.76; nothing stored or sent changes.
+
+## 3.0.0 — the first Nano Freak release
+
+Tested on a real FM-1. The version moves from 2.5.77 to 3.0.0 (it continues the FMini-1 numbering, so it is higher than every earlier version and a device or the editor never reads it as a downgrade). The firmware is the same as 2.5.77; nothing stored or sent changes.

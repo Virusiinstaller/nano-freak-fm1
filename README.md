@@ -5,7 +5,7 @@
 chip. It is built on the FMini-1 firmware by Guilherme Ruppert, itself a fork of Felucca by Leo Kuroshita (all GPL-3.0-only). Their
 work is credited below and in [CREDITS.md](CREDITS.md).
 
-**Experimental, and not tested on a real FM-1.** Use it at your own risk.
+**Version 3.0.0: tested on a real FM-1.** The SMK-37 builds are beta and have not been tested on an SMK-37. This is custom firmware: use it at your own risk.
 
 <p align="center">
   <img src="assets/site/fm1.webp" alt="The M-Vave FM-1" width="40%">
