@@ -3,6 +3,6 @@
   "author": "Virus Installer",
   "kinds": ["synth"],
   "image": "assets/card.png",
-  "color": "#FF7A00",
+  "color": "#00C4CE",
   "sounds": "none – all synthesised"
 }
