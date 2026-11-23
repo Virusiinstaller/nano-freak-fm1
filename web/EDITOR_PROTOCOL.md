@@ -1500,3 +1500,7 @@ The packages are now `nano-freak-fm1-X.Y.Z.fwsc` and `nano-freak-smk37[-elite|-m
 ## 3.0.0 — the first Nano Freak release
 
 Tested on a real FM-1. The version moves from 2.5.77 to 3.0.0 (it continues the FMini-1 numbering, so it is higher than every earlier version and a device or the editor never reads it as a downgrade). The firmware is the same as 2.5.77; nothing stored or sent changes.
+
+## 3.0.1 — package identity FM-1_902
+
+The FM-1 package identity (and the update loader's `ota-` name) is now `FM-1_902` (was `FM-1_900`). The installer and the editor compare only the model before the `_`, so a unit running 3.0.0 updates as before. Nothing stored or sent changes.

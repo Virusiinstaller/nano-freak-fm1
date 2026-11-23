@@ -224,7 +224,7 @@ For example a tonewheel-organ instrument for the FM-1. A checklist, in the order
 
 1. **A new repository seeded from this one** (clone it, set a new `origin`, keep the history and `LICENSE`: the code is GPL-3.0-only
    and Felucca's authorship stays in the headers; add the new work to `CREDITS.md`). Use a product name without a trademark.
-2. **Identity**: `FELUCCA_ID` in `firmware/src/felucca.c` is the package identity the installer checks (`FM-1_900` here; the
+2. **Identity**: `FELUCCA_ID` in `firmware/src/felucca.c` is the package identity the installer checks (`FM-1_902` here; the
    installer page accepts `FM-1_9xx`, `web/make_fmini_installer.py`); give the new firmware its own, then the product name, version
    (`FMINI_VERSION` in `core.h`), splash (`tools/gen_splash.py`, `assets/`), `web/site_fmini.html`, README and the workflow's Pages URL.
 3. **The engine**: a new `eng_<name>.c` included in `engines.c`, a new entry **appended** to `ENGINES[]`, `NENGINES` and an `ENGI_`

@@ -17,7 +17,7 @@
 #if BOARD_SMK37
 #define FELUCCA_ID "ota-" SMK_MODEL "_900"
 #else
-#define FELUCCA_ID "ota-FM-1_900"
+#define FELUCCA_ID "ota-FM-1_902"
 #endif
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "fm1_time.h"
