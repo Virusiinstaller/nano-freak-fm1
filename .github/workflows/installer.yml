@@ -51,9 +51,9 @@ jobs:
         run: |
           VERSION=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)
           mkdir -p _site
-          python3 web/make_fmini_installer.py "build/fmini-1-fm1-$VERSION.fwsc" _site/index.html "$VERSION"
-          cp "build/fmini-1-fm1-$VERSION.fwsc" "_site/fmini-1-$VERSION.fwsc"
-          cp "build/fmini-1-fm1-$VERSION.fwsc" build/fmini-1-smk37*-"$VERSION".fwsc _site/
+          python3 web/make_fmini_installer.py "build/nano-freak-fm1-$VERSION.fwsc" _site/index.html "$VERSION"
+          cp "build/nano-freak-fm1-$VERSION.fwsc" "_site/nano-freak-$VERSION.fwsc"
+          cp "build/nano-freak-fm1-$VERSION.fwsc" build/nano-freak-smk37*-"$VERSION".fwsc _site/
           mkdir -p _site/editor && cp web/editor_fmini.html _site/editor/index.html   # the web editor
           cp -r docs/emu _site/emu                 # the browser emulators: FM-1 in docs/emu, SMK-37 in docs/emu/smk (web/emu/build_wasi.sh, SMK=1)
           echo "Nano Freak (FMini-1 base) v$VERSION (FM-1 and SMK-37)" >> "$GITHUB_STEP_SUMMARY"

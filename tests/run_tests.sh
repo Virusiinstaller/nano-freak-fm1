@@ -252,8 +252,8 @@ $CC -DT_CDC=0 -DT_UAC=1 -DT_LAYOUT=0 -DT_ON=0 -DT_48K=0 -DT_ASF=1 -DT_OUT=1 -o "
 run "USB descriptors + playback (FELUCCA_UAC_OUT): 44.1 kHz only" "$OUT/usb_desc_test"
 
 FMV=$(sed -n 's/^#define FMINI_VERSION "v\(.*\)"/\1/p' firmware/src/core.h)   # this version's files (build/ keeps older ones)
-PKG=build/fmini-1-fm1-$FMV.fwsc
-APP=build/fmini-1-fm1-$FMV.bin
+PKG=build/nano-freak-fm1-$FMV.fwsc
+APP=build/nano-freak-fm1-$FMV.bin
 [ -f "$PKG" ] || { echo "run ./build.sh first"; exit 1; }
 
 $CC -DOWN_PKG=1 -o "$OUT/ota_test" tests/ota_test.c
@@ -284,9 +284,9 @@ for m in 1 2; do                         # the MODEL=elite / mke builds of ota.c
     run "M-UPGRADE entry, SMK model $m build (MODEL=elite / mke: its own parm identity)" "$OUT/ota_test_smk_m$m" "$OUT/smk_new.fwsc"
 done
 for m in pro elite mke; do               # the packages build.sh made (BOARD=smk37 MODEL=...), when present
-    f=build/fmini-1-smk37-$FMV.fwsc; id="SMK-37 Pro_900"
-    [ $m = elite ] && f=build/fmini-1-smk37-elite-$FMV.fwsc && id="SMK-37 Elite_900"
-    [ $m = mke ] && f=build/fmini-1-smk37-mke-$FMV.fwsc && id="MKE-P37_900"
+    f=build/nano-freak-smk37-$FMV.fwsc; id="SMK-37 Pro_900"
+    [ $m = elite ] && f=build/nano-freak-smk37-elite-$FMV.fwsc && id="SMK-37 Elite_900"
+    [ $m = mke ] && f=build/nano-freak-smk37-mke-$FMV.fwsc && id="MKE-P37_900"
     [ -f $f ] && run "SMK package $f: identity $id, stock region table" python3 tests/smk_pkg_test.py $f "$id"
 done
 $CC -DBOARD_SMK37=1 -o "$OUT/ldr_test_smk" tests/ldr_test.c

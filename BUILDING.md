@@ -4,9 +4,9 @@ The build makes three files in `build/`:
 
 | File | What |
 | --- | --- |
-| `fmini-1-fm1-<version>.bin` | the firmware app |
+| `nano-freak-fm1-<version>.bin` | the firmware app |
 | `loader/ota.bin` | the update loader |
-| `fmini-1-fm1-<version>.fwsc` | the installable package (app + loader) |
+| `nano-freak-fm1-<version>.fwsc` | the installable package (app + loader) |
 
 ## Get the source
 
@@ -85,8 +85,8 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `c
 Target board: `BOARD=smk37 ./build.sh` (or `./build.sh --board smk37`) builds FMini-1 for the
 M-Vave SMK-37 (beta): `-DBOARD_SMK37=1` for the app and the update loader, identity `SMK-37 Pro_900` (release
 `SMK-37 Pro_9XY`), the SMK flash layout (PRCT 0x9D000, the stock region table with USRTRIM / USRFLASH) and the
-package `build/fmini-1-smk37-<version>.fwsc`. `MODEL=elite` or `MODEL=mke` builds the same firmware under the SMK-37
-Elite's or the MKE-P37's model name (`build/fmini-1-smk37-elite-<version>.fwsc`, `build/fmini-1-smk37-mke-<version>.fwsc`),
+package `build/nano-freak-smk37-<version>.fwsc`. `MODEL=elite` or `MODEL=mke` builds the same firmware under the SMK-37
+Elite's or the MKE-P37's model name (`build/nano-freak-smk37-elite-<version>.fwsc`, `build/nano-freak-smk37-mke-<version>.fwsc`),
 so the stock updater still takes that unit's factory package. Controls: [SMK37.md](SMK37.md). The intermediate files
 (`build/loader/ota.bin`, `build/felucca.dis`, `build/gen`) are shared: build the FM-1 again before `tests/run_tests.sh`.
 The default stays the FM-1, byte for byte.
@@ -141,7 +141,7 @@ Use the web installer in Chrome or Edge:
 From the command line (needs `pip3 install mido python-rtmidi`):
 
 ```
-python3 tools/fm1_install.py build/fmini-1-fm1-<version>.fwsc
+python3 tools/fm1_install.py build/nano-freak-fm1-<version>.fwsc
 python3 tools/fm1_install.py --info          # identity of the connected FM-1
 ```
 
@@ -149,8 +149,8 @@ Or, to install your own build from the web installer, make a local copy of the s
 (Web MIDI needs a secure context):
 
 ```
-python3 web/make_site.py build/fmini-1-fm1-<version>.fwsc dev /tmp/fmini-1-fm1-site
-cd /tmp/fmini-1-fm1-site && python3 -m http.server 8000
+python3 web/make_site.py build/nano-freak-fm1-<version>.fwsc dev /tmp/nano-freak-fm1-site
+cd /tmp/nano-freak-fm1-site && python3 -m http.server 8000
 # open http://localhost:8000/webapp/installer/
 ```
 

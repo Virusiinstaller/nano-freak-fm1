@@ -6,7 +6,7 @@ The fake device is the one in web/test_web.mjs: identity on the handshake,
 then "device asks, host answers" reads of the logical image. Run from the repo root:
   python3 tests/install_test.py
 Also checks logical_image/product_of against web/fm1pkg.js (needs node and
-build/fmini-1-fm1-<version>.fwsc, skipped otherwise), and (BOARD_SMK37) the SMK-37 Pro identities and port names and the
+build/nano-freak-fm1-<version>.fwsc, skipped otherwise), and (BOARD_SMK37) the SMK-37 Pro identities and port names and the
 20 / 36 block deinterleave (the stock SMK-37 Pro V016 from a directory named by SMK_STOCK_DIR, skipped when unset)."""
 import io
 import queue
@@ -297,9 +297,9 @@ def errors():
 
 
 def against_js():
-    clean = next(iter(sorted((ROOT / "build").glob("fmini-1-fm1-*.fwsc"))), ROOT / "build/none.fwsc")
+    clean = next(iter(sorted((ROOT / "build").glob("nano-freak-fm1-*.fwsc"))), ROOT / "build/none.fwsc")
     if not shutil.which("node") or not clean.exists():
-        print("logical image vs fm1pkg.js: skipped (needs node and build/fmini-1-fm1-*.fwsc)")
+        print("logical image vs fm1pkg.js: skipped (needs node and build/nano-freak-fm1-*.fwsc)")
         return
     js = ("import { logicalImage, productOf } from %r; import { readFileSync } from 'node:fs';"
           "const p = readFileSync(process.argv[1]); process.stderr.write(productOf(p));"

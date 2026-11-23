@@ -196,7 +196,7 @@ first (a test with the number to hit), then the code.
 - The browser emulator: `web/emu/felucca_web.c` compiles the firmware's sources against a simulated FM-1;
   `web/emu/build_wasi.sh` (wasi-sdk 25, no Emscripten) writes `docs/emu/`. The preset lab uses the same wasm.
 - On a push to `main` that touches `firmware/`, `web/`, `tools/`, `assets/`, `docs/emu/`, `docs/fmini-ad*`, `build.sh` or the workflow,
-  `.github/workflows/installer.yml` builds the firmware and publishes the page, the package (`fmini-1-X.Y.Z.fwsc`), the editor and the
+  `.github/workflows/installer.yml` builds the firmware and publishes the page, the package (`nano-freak-X.Y.Z.fwsc`), the editor and the
   emulator to <https://ruppert.github.io/fmini-1/> (a few minutes). Documents at the root do not trigger it.
 - **Release checklist:** bump `FMINI_VER_MAJ/MIN/PATCH` in `core.h` and `FW_LATEST` in `web/editor_fmini.html`; build; run the tests; regenerate `docs/emu` and `docs/index.html`; refresh the
   screenshots if screens changed (`tools/readme_shots.c`, then `tools/gen_readme_art.py` and the `assets/site/*.webp` it implies);

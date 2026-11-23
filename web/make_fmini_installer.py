@@ -3,8 +3,8 @@
 # FMini-1: the official site, one self-contained page (site_fmini.html: the Minimoog-styled site with the screens, the presets,
 # MIDI and the Felucca installer's logic; the firmware packages and every picture are embedded). The installer carries the
 # FM-1's package and the SMK-37's three (Pro, Elite, MKE-P37), each for exactly its model; the device found picks it.
-#   web/make_fmini_installer.py build/fmini-1-fm1-<version>.fwsc OUT.html [VERSION [SMK_VERSION]]
-# The SMK-37 packages are build/fmini-1-smk37[-elite|-mke]-<SMK_VERSION>.fwsc (BOARD=smk37 [MODEL=...] ./build.sh);
+#   web/make_fmini_installer.py build/nano-freak-fm1-<version>.fwsc OUT.html [VERSION [SMK_VERSION]]
+# The SMK-37 packages are build/nano-freak-smk37[-elite|-mke]-<SMK_VERSION>.fwsc (BOARD=smk37 [MODEL=...] ./build.sh);
 # SMK_VERSION defaults to VERSION (one version for both boards, FMINI_VERSION in firmware/src/core.h).
 # Serve it over https or http://localhost (Web MIDI with SysEx needs a secure context), in Chrome / Edge.
 import base64
@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_site import HERE, strip_module, product_of  # noqa: E402
 
-SMK_STEMS = (("fmini-1-smk37", "SMK-37 Pro"), ("fmini-1-smk37-elite", "SMK-37 Elite"), ("fmini-1-smk37-mke", "MKE-P37"))
+SMK_STEMS = (("nano-freak-smk37", "SMK-37 Pro"), ("nano-freak-smk37-elite", "SMK-37 Elite"), ("nano-freak-smk37-mke", "MKE-P37"))
 
 
 def package(path, want, label, version):

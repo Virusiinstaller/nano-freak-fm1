@@ -1492,3 +1492,7 @@ The waveform drawn on the Strings (Rings) oscillator page now follows the second
 ## 2.5.76 — Bluetooth pages hidden
 
 GLOBAL no longer lists BLUETOOTH and BLE DEVICES, and STARTUP no longer shows RADIO: there is no Bluetooth radio driver, so they did nothing. GLOBAL has four pages (MIDI OUT, MIDI ROUTING, MIDI IN, STARTUP). The ids, the stored values (settings record) and the page ids stay as they were, so nothing saved changes; CC 112, 113 and 114 (Bluetooth, BT audio, BLE role) are no longer mapped. CC 115 (clock source) stays.
+
+## 2.5.77 — package names
+
+The packages are now `nano-freak-fm1-X.Y.Z.fwsc` and `nano-freak-smk37[-elite|-mke]-X.Y.Z.fwsc` (they were `fmini-1-...`), and the plain download on the site is `nano-freak-X.Y.Z.fwsc`. The firmware is the same as 2.5.76; nothing stored or sent changes.

@@ -25,15 +25,15 @@ toolchain setup.
 
 ```
 export JIELI_TOOLCHAIN=<dir with pi32v2/bin/clang>   AC79_SDK=<AC79 SDK checkout with cpu/wl82/tools/uboot.boot>
-./build.sh                                  # build/fmini-1-fm1-<version>.bin, build/loader/ota.bin, build/fmini-1-fm1-<version>.fwsc (~30 s)
+./build.sh                                  # build/nano-freak-fm1-<version>.bin, build/loader/ota.bin, build/nano-freak-fm1-<version>.fwsc (~30 s)
 sh tests/run_tests.sh > /tmp/tests.log 2>&1 # the whole host suite, 20-30 minutes; run it in the background
 python3 tools/fmini_filter.py                # regenerate firmware/src/eng_fmini_filter.h (filter laws and tables)
 python3 tools/gen_fmini_presets.py           # regenerate firmware/src/eng_fmini_presets.h from tools/fmini_bank.py
 python3 tools/preset_lab.py --wasm docs/emu/felucca.wasm --out DIR     # render and measure the 200 factory patches
-BOARD=smk37 [MODEL=elite|mke] ./build.sh   # build/fmini-1-smk37[-elite|-mke]-<version>.fwsc (the SMK-37's three models)
+BOARD=smk37 [MODEL=elite|mke] ./build.sh   # build/nano-freak-smk37[-elite|-mke]-<version>.fwsc (the SMK-37's three models)
 WASI_SDK=<wasi-sdk-25.0 dir> sh web/emu/build_wasi.sh                    # docs/emu (the FM-1 browser emulator)
 SMK=1 WASI_SDK=<wasi-sdk-25.0 dir> sh web/emu/build_wasi.sh              # docs/emu/smk (the SMK-37 browser emulator)
-python3 web/make_fmini_installer.py build/fmini-1-fm1-<version>.fwsc docs/index.html X.Y.Z  # the site and installer (docs/index.html);
+python3 web/make_fmini_installer.py build/nano-freak-fm1-<version>.fwsc docs/index.html X.Y.Z  # the site and installer (docs/index.html);
                                              # it embeds the FM-1 package and the three SMK-37 ones of the same version from build/
 ```
 

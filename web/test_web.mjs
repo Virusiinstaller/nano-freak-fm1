@@ -1633,7 +1633,7 @@ function samplesMatch() {
 
 /* ------------------------------------------------------- packages: JS == Python --- */
 async function packages() {
-  const pkg = readdirSync(join(FW_ROOT, "build")).filter(f => /^fmini-1-fm1-.*\.fwsc$/.test(f)).map(f => join(FW_ROOT, "build", f))[0];
+  const pkg = readdirSync(join(FW_ROOT, "build")).filter(f => /^nano-freak-fm1-.*\.fwsc$/.test(f)).map(f => join(FW_ROOT, "build", f))[0];
   if (!existsSync(pkg)) {
     console.log("packages: skipped (run ./build.sh first)");
     return;

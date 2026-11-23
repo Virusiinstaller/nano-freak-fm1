@@ -22,7 +22,7 @@ delivery:
   mode: own                 # the owner's firmware: builds in this repository, no upstream pull request
   pr: ""
   fork: ""                  # branch fmini-smk37 of ruppert/fmini-1
-  package: "fmini-1-smk37-<version>.fwsc, fmini-1-smk37-elite-<version>.fwsc, fmini-1-smk37-mke-<version>.fwsc"
+  package: "nano-freak-smk37-<version>.fwsc, nano-freak-smk37-elite-<version>.fwsc, nano-freak-smk37-mke-<version>.fwsc"
   usb_name: FMini-1's own (unchanged); every installer's filter includes it
   data_family: FMINI        # its own store family: other firmwares' data is cleared on a switch
   copyright: "Guilherme Ruppert"   # in the new SMK files' headers (the layer's own files keep genkigenki's line)

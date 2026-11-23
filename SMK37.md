@@ -9,9 +9,9 @@ Nothing here has been tested on a real SMK-37 yet.
 
 ## Supported models
 
-- **SMK-37 Pro**: the default build, `fmini-1-smk37-<version>.fwsc` (identity `SMK-37 Pro_900`). Also the Starrykey 37 Play.
-- **SMK-37 Elite**: `fmini-1-smk37-elite-<version>.fwsc` (identity `SMK-37 Elite_900`).
-- **MKE-P37**: `fmini-1-smk37-mke-<version>.fwsc` (identity `MKE-P37_900`).
+- **SMK-37 Pro**: the default build, `nano-freak-smk37-<version>.fwsc` (identity `SMK-37 Pro_900`). Also the Starrykey 37 Play.
+- **SMK-37 Elite**: `nano-freak-smk37-elite-<version>.fwsc` (identity `SMK-37 Elite_900`).
+- **MKE-P37**: `nano-freak-smk37-mke-<version>.fwsc` (identity `MKE-P37_900`).
 
 They are the same hardware. Each package carries its model's name, so the manufacturer's updater still takes that
 unit's own stock package later: install the package for your model. The installers take a package only for exactly
@@ -78,9 +78,9 @@ jack is said to be type A; if a synth does not answer, try a type B adapter.
 See [BUILDING.md](BUILDING.md) for the toolchain.
 
 ```sh
-BOARD=smk37 ./build.sh                 # build/fmini-1-smk37-<version>.fwsc (SMK-37 Pro)
-BOARD=smk37 MODEL=elite ./build.sh     # build/fmini-1-smk37-elite-<version>.fwsc
-BOARD=smk37 MODEL=mke ./build.sh       # build/fmini-1-smk37-mke-<version>.fwsc
+BOARD=smk37 ./build.sh                 # build/nano-freak-smk37-<version>.fwsc (SMK-37 Pro)
+BOARD=smk37 MODEL=elite ./build.sh     # build/nano-freak-smk37-elite-<version>.fwsc
+BOARD=smk37 MODEL=mke ./build.sh       # build/nano-freak-smk37-mke-<version>.fwsc
 ./build.sh                             # the FM-1 build again before tests/run_tests.sh (the tests use its files)
 ```
 
@@ -91,7 +91,7 @@ manufacturer's package for your model and its updater ready. Then connect the ke
 package for your model:
 
 ```sh
-python3 tools/fm1_install.py build/fmini-1-smk37-<version>.fwsc
+python3 tools/fm1_install.py build/nano-freak-smk37-<version>.fwsc
 ```
 
 `fm1_install.py` needs `mido` and `python-rtmidi` (`pip3 install mido python-rtmidi`). It checks that the package is

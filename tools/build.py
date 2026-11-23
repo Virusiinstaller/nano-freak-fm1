@@ -60,11 +60,11 @@ PRODUCT = "FM-1_900"                # package identity; release builds are FM-1_
 BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board
 BOARD_PREFIX = {"fm1": "FM-1_9", "smk37": "SMK-37 Pro_9"}   # identity of a release build: prefix + X + Y
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}       # the FM-1 build gets no new flag (byte-identical)
-BOARD_STEM = {"fm1": "fmini-1-fm1", "smk37": "fmini-1-smk37"}   # package name: <stem>[-elite|-mke]-<version>.fwsc
+BOARD_STEM = {"fm1": "nano-freak-fm1", "smk37": "nano-freak-smk37"}   # package name: <stem>[-elite|-mke]-<version>.fwsc
 # smk37: the keyboard's model name (MODEL env or --model); one hardware, three names. pro adds no flag
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}
 VERSION = None                      # FELUCCA_VERSION for release builds (default: firmware/src/felucca.c)
-STEM = "fmini-1-fm1"                # output stem: fmini-1-fm1-<version> (set by main)
+STEM = "nano-freak-fm1"                # output stem: nano-freak-fm1-<version> (set by main)
 # FELUCCA_CPU2 (firmware/src/felucca.c), unset or 1, the default (1.6.1): the second core is built in, its entry and
 # stacks (firmware/hal/fm1_cpu1.S) linked and its waiting loop (.c1_text) checked; MENU > SYSTEM > 2ND CORE starts it
 # (OFF by default: one core, as 1.6). FELUCCA_CPU2=0: none of it is built (1.6's one-core code and RAM)
@@ -419,7 +419,7 @@ def main():
         stem += "-" + model
     core_h = (FW / "src" / "core.h").read_text()
     m0 = re.search(r'#define FMINI_VERSION "v(\d+\.\d+\.\d+)"', core_h)   # (one version for the FM-1 and the SMK-37)
-    STEM = f"{stem}-" + (m0[1] if m0 else "dev")   # fmini-1-fm1-<version>, fmini-1-smk37[-elite|-mke]-<version>
+    STEM = f"{stem}-" + (m0[1] if m0 else "dev")   # nano-freak-fm1-<version>, nano-freak-smk37[-elite|-mke]-<version>
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)
         if not m:
