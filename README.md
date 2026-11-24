@@ -25,8 +25,7 @@ work is credited below and in [CREDITS.md](CREDITS.md).
 | Presets | 58 factory presets, user slots, a browser and a Save page with names |
 | MIDI | USB MIDI with about 70 CC numbers, clock, routing and thru |
 
-Not done yet: Bluetooth (there is no radio driver, so its pages are hidden). A web editor and browser emulators for the Nano Freak do not exist yet (the FMini-1 ones are not linked from the page).
-The SMK-37 builds are beta.
+The SMK-37 builds are beta and have not been tested on an SMK-37. Every page, knob and range is listed in the **Reference** section of the [site](https://virusiinstaller.github.io/nano-freak-fm1/#ref).
 
 ## 2. The screens
 
